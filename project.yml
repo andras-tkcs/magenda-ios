@@ -1,0 +1,96 @@
+# The Xcode project, as a specification. `xcodegen generate` writes Magenda.xcodeproj from this
+# file; the .xcodeproj is git-ignored and never committed (ADR 0003). Change targets and build
+# settings here, then regenerate.
+name: Magenda
+
+options:
+  minimumXcodeGenVersion: 2.42.0
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    # The version and build number every local build carries. Release builds override both from the
+    # git tag and the commit count (docs/releasing.md, ADR 0004); never edit these to cut a release.
+    MARKETING_VERSION: "0.0.0"
+    CURRENT_PROJECT_VERSION: "0"
+    SWIFT_VERSION: "6.0"
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  AppCore:
+    path: AppCore
+
+targets:
+  Magenda:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: AppCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: name.felhasznalo.magenda
+        PRODUCT_NAME: Magenda
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "Magenda"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        # The app uses no encryption beyond what iOS provides, so App Store Connect does not ask the
+        # export-compliance question for every upload. Revisit before adding any other encryption.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+  # Hosted unit tests: run inside the app, for what only the built app can show (its bundle, its
+  # entitlements). Logic is tested in AppCore with `swift test` instead (ADR 0007).
+  MagendaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - AppTests
+    dependencies:
+      - target: Magenda
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: name.felhasznalo.magenda.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+  MagendaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - AppUITests
+    dependencies:
+      - target: Magenda
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: name.felhasznalo.magenda.uitests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Magenda:
+    build:
+      targets:
+        Magenda: all
+    test:
+      config: Debug
+      gatherCoverageData: true
+      coverageTargets:
+        - Magenda
+      targets:
+        - MagendaTests
+        - MagendaUITests
+    archive:
+      config: Release

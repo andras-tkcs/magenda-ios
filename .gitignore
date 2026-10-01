@@ -1,0 +1,31 @@
+# Generated from project.yml by XcodeGen; never committed (ADR 0003)
+*.xcodeproj/
+*.xcworkspace/
+
+# Build output
+build/
+DerivedData/
+.build/
+*.xcresult/
+*.ipa
+*.dSYM.zip
+*.dSYM/
+
+# Swift Package Manager
+.swiftpm/
+
+# Python (scripts/)
+__pycache__/
+*.py[cod]
+
+# Tooling
+xcuserdata/
+.idea/
+.vscode/
+.DS_Store
+
+# Local credentials: never committed (ADR 0009)
+.env
+*.p8
+*.p12
+*.mobileprovision

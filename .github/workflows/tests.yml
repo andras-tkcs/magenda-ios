@@ -1,0 +1,96 @@
+name: Tests
+
+# Layers 1-3 of docs/testing-policy.md, on every PR. A 100% pass rate is required to merge. Job
+# names here are what scripts/update_branch_protection.py's REQUIRED_STATUS_CHECKS lists; rename
+# one and update that list in the same PR.
+on:
+  push:
+    branches: [main, "releases/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # AppCore on Linux: the toolchain a cloud session has, so a green `core` here means the same
+  # command passes there (ADR 0007). Also the coverage ratchet.
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Show the toolchain
+        run: swift --version
+      - name: Test AppCore (100% pass rate required)
+        run: swift test --package-path AppCore --enable-code-coverage
+      - name: Enforce coverage floor
+        run: python3 scripts/check_coverage_floor.py "$(swift test --package-path AppCore --show-codecov-path)"
+
+  # Its own job so a formatting failure is reported on its own line in the checks list.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Format and lint (swift format, warnings are errors)
+        run: |
+          swift format lint --strict --parallel --recursive \
+            App AppTests AppUITests AppCore/Package.swift AppCore/Sources AppCore/Tests
+
+  # The release, coverage and simulator scripts, and the no-project-history guard (ADR 0008).
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test scripts/
+        run: python3 -m unittest discover -s scripts/tests -v
+
+  # The app itself, on simulators: its hosted unit tests (layer 1) and its UI tests (layer 2), on
+  # the newest and the oldest supported iOS and on an iPad (layer 3). Three points, not a product
+  # of every device and every runtime (docs/testing-policy.md).
+  app:
+    name: app (${{ matrix.family }}, ${{ matrix.runtime }})
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { family: iphone, runtime: newest }
+          - { family: iphone, runtime: oldest }
+          - { family: ipad, runtime: newest }
+    env:
+      FAMILY: ${{ matrix.family }}
+      RUNTIME: ${{ matrix.runtime }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Show Xcode
+        run: xcodebuild -version
+      # project.yml's minimumXcodeGenVersion refuses anything older than the spec needs (ADR 0003).
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Pick a simulator
+        run: echo "DESTINATION=$(python3 scripts/simulator.py --family "$FAMILY" --runtime "$RUNTIME")" >> "$GITHUB_ENV"
+      - name: Build for testing
+        run: |
+          xcodebuild build-for-testing -project Magenda.xcodeproj -scheme Magenda \
+            -destination "$DESTINATION" -derivedDataPath build/DerivedData -quiet
+      - name: App tests (100% pass rate required)
+        run: |
+          xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
+            -destination "$DESTINATION" -derivedDataPath build/DerivedData \
+            -only-testing:MagendaTests -resultBundlePath build/app-tests.xcresult
+      - name: UI tests (100% pass rate required)
+        run: |
+          xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
+            -destination "$DESTINATION" -derivedDataPath build/DerivedData \
+            -only-testing:MagendaUITests -resultBundlePath build/ui-tests.xcresult
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: xcresult-${{ matrix.family }}-${{ matrix.runtime }}
+          path: build/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 14

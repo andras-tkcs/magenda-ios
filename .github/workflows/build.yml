@@ -1,0 +1,155 @@
+name: Build and upload
+
+# Layer 6 of docs/testing-policy.md, and the release pipeline of docs/releasing.md.
+#
+# A v* tag push archives the Release build, uploads a signed copy to App Store Connect (where it
+# appears in TestFlight) and creates the GitHub Release. A workflow_dispatch archives the chosen
+# commit unsigned and uploads NOTHING: every signing and upload job is gated on a tag ref. That
+# dispatched run is the pre-flight /cut-release runs before tagging (ADR 0006).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The version and build number come from the tag and the commit count, never from the source
+  # tree (ADR 0004). Off a tag there is no channel and nothing will be uploaded.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.v.outputs.channel }}
+      marketing: ${{ steps.v.outputs.marketing }}
+      build: ${{ steps.v.outputs.build }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the build number is the commit count
+      - id: v
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "channel=$(python3 scripts/release_channel.py "${GITHUB_REF_NAME}")" >> "$GITHUB_OUTPUT"
+            echo "marketing=$(python3 scripts/release_channel.py --marketing "${GITHUB_REF_NAME}")" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=none" >> "$GITHUB_OUTPUT"
+            echo "marketing=0.0.0" >> "$GITHUB_OUTPUT"
+          fi
+          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+  # The Release configuration archives, and the archive carries the version and build number it
+  # was given. Unsigned, so it needs no credential and runs for any commit.
+  archive:
+    needs: version
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      MARKETING: ${{ needs.version.outputs.marketing }}
+      BUILD: ${{ needs.version.outputs.build }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Archive (Release, unsigned)
+        run: |
+          xcodebuild archive -project Magenda.xcodeproj -scheme Magenda -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/Magenda.xcarchive \
+            CODE_SIGNING_ALLOWED=NO MARKETING_VERSION="$MARKETING" CURRENT_PROJECT_VERSION="$BUILD" -quiet
+      # A build that silently kept project.yml's placeholder version would upload as 0.0.0.
+      - name: Check the archive carries the version
+        run: |
+          plist=build/Magenda.xcarchive/Products/Applications/Magenda.app/Info.plist
+          got_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
+          got_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
+          echo "Archived $got_version ($got_build)"
+          if [ "$got_version" != "$MARKETING" ] || [ "$got_build" != "$BUILD" ]; then
+            echo "::error::Archive is $got_version ($got_build), expected $MARKETING ($BUILD)."
+            exit 1
+          fi
+
+  # Signed with Xcode's automatic signing through an App Store Connect API key, and uploaded by
+  # xcodebuild itself. The key exists only in the app-store environment (ADR 0009).
+  testflight:
+    needs: [version, archive]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    timeout-minutes: 60
+    environment: app-store
+    env:
+      MARKETING: ${{ needs.version.outputs.marketing }}
+      BUILD: ${{ needs.version.outputs.build }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Write the App Store Connect API key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$ASC_KEY_P8" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ]; then
+            echo "::error::ASC_KEY_P8, ASC_KEY_ID and ASC_ISSUER_ID must be set in the app-store environment. See docs/releasing.md."
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Archive (Release, signed)
+        run: |
+          xcodebuild archive -project Magenda.xcodeproj -scheme Magenda -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/Magenda.xcarchive \
+            -allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            MARKETING_VERSION="$MARKETING" CURRENT_PROJECT_VERSION="$BUILD" -quiet
+      - name: Export and upload to App Store Connect
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath build/Magenda.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/export \
+            -allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: Remove the API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
+
+  # All-or-nothing: runs only once the upload succeeded.
+  github-release:
+    needs: [version, testflight]
+    if: startsWith(github.ref, 'refs/tags/v') && needs.testflight.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Stable: the body is CHANGELOG.md's section, and a missing/duplicated section or a populated
+      # [Unreleased] fails here rather than shipping wrong notes (ADR 0005).
+      - name: Render release notes
+        if: needs.version.outputs.channel == 'stable'
+        run: python3 scripts/changelog_section.py "${GITHUB_REF_NAME}" > release-notes.md
+      - name: Pre-release notes
+        if: needs.version.outputs.channel != 'stable'
+        env:
+          BUILD: ${{ needs.version.outputs.build }}
+        run: echo "Pre-release ${GITHUB_REF_NAME}, TestFlight build ${BUILD}. Changes are listed under [Unreleased] in CHANGELOG.md." > release-notes.md
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          body_path: release-notes.md
+          prerelease: ${{ needs.version.outputs.channel != 'stable' }}

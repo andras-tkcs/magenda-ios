@@ -1,0 +1,21 @@
+version: 2
+
+# Two ecosystems, matching the two places this repo declares a version: AppCore/Package.swift, and
+# the SHA-pinned `uses:` lines in .github/workflows/*.yml. Each bumps in one grouped weekly PR. A
+# dependency bump is a supply-chain decision: a person reviews it (.claude/skills/steward/SKILL.md).
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "swift"
+    directory: "/AppCore"
+    schedule:
+      interval: "weekly"
+    groups:
+      swift-packages:
+        patterns: ["*"]
