@@ -1,0 +1,270 @@
+<title>Magenda iOS Setup Steps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: one reading column styled like the printed agenda — a ruled header band, section labels in the template's burnt orange, steps as ruled to-do rows with checkboxes. */
+:root {
+  --paper: #fbfbf8;
+  --ink: #1d2733;
+  --muted: #5d6874;
+  --rule: #d8dde2;
+  --band: #e9ecee;
+  --navy: #083050;
+  --heading: #215e99;
+  --label: #bf4e14;
+  --accent: #3a7c22;
+  --code-bg: #eef1f3;
+  --done: #8a949d;
+  --warn-bg: #fff4e5;
+  --warn-ink: #7a3e00;
+  --display: "Outfit", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12171c; --ink: #e3e8ec; --muted: #9aa5af; --rule: #2a333c; --band: #1b232b;
+    --navy: #7fb2dc; --heading: #7fb2dc; --label: #f08a52; --accent: #8fcf72; --code-bg: #1d262e;
+    --done: #6b7680; --warn-bg: #2e2214; --warn-ink: #f3c48a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12171c; --ink: #e3e8ec; --muted: #9aa5af; --rule: #2a333c; --band: #1b232b;
+  --navy: #7fb2dc; --heading: #7fb2dc; --label: #f08a52; --accent: #8fcf72; --code-bg: #1d262e;
+  --done: #6b7680; --warn-bg: #2e2214; --warn-ink: #f3c48a; color-scheme: dark;
+}
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 46rem; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; }
+header.band { border-top: 3px solid var(--navy); border-bottom: 3px solid var(--navy); background: var(--band); padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 6px 24px; align-items: baseline; justify-content: space-between; }
+header.band h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: 1.6rem; color: var(--heading); letter-spacing: 0.02em; text-wrap: balance; }
+header.band .meta { font-family: var(--display); font-weight: 300; color: var(--muted); font-size: 0.95rem; }
+.intro { margin-block: 20px 8px; color: var(--ink); max-width: 65ch; }
+.intro p { margin: 0 0 10px; }
+.part { margin-top: 40px; }
+.part > h2 { font-family: var(--display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; font-size: 1.15rem; color: var(--label); background: var(--band); padding: 8px 12px; margin: 0; text-align: center; }
+.part > .when { color: var(--muted); font-size: 0.95rem; margin: 10px 0 0; text-align: center; }
+section.item { margin-top: 28px; }
+.item-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; border-bottom: 1.2px solid var(--navy); padding-bottom: 6px; }
+.item-head h3 { margin: 0; font-family: var(--display); font-weight: 500; font-size: 1.2rem; color: var(--accent); flex: 1 1 18rem; min-width: 0; text-wrap: balance; }
+.item-head .id { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); }
+.item-head .time { font-family: var(--display); font-weight: 300; font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.why { color: var(--muted); font-size: 0.95rem; margin: 8px 0 4px; }
+ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 1.6rem 1.8rem minmax(0, 1fr); gap: 0 6px; align-items: start; padding: 10px 0; border-bottom: 0.75px solid var(--rule); }
+ol.steps > li::before { content: counter(step); font-family: var(--display); font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+ol.steps input[type="checkbox"] { width: 1.05rem; height: 1.05rem; margin: 4px 0 0; accent-color: var(--navy); cursor: pointer; }
+ol.steps input[type="checkbox"]:focus-visible { outline: 2px solid var(--heading); outline-offset: 2px; }
+ol.steps label { min-width: 0; cursor: pointer; }
+ol.steps li.is-done label { color: var(--done); }
+ol.steps li.is-done label .see { color: var(--done); }
+.see { display: block; color: var(--muted); font-size: 0.93rem; margin-top: 2px; }
+a { color: var(--heading); text-underline-offset: 2px; overflow-wrap: anywhere; }
+a:focus-visible { outline: 2px solid var(--heading); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+pre { font-family: var(--mono); font-size: 0.85rem; background: var(--code-bg); padding: 10px 12px; border-radius: 4px; overflow-x: auto; margin: 8px 0 0; white-space: pre; }
+.done-when, .report { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--band); font-size: 0.95rem; }
+.report { border-left-color: var(--label); }
+.done-when strong, .report strong { font-family: var(--display); font-weight: 500; letter-spacing: 0.03em; }
+.note { margin-top: 12px; padding: 10px 12px; background: var(--warn-bg); color: var(--warn-ink); border-radius: 4px; font-size: 0.95rem; }
+.progress { font-family: var(--display); font-weight: 300; color: var(--muted); font-size: 0.95rem; margin-top: 6px; text-align: right; font-variant-numeric: tabular-nums; }
+.reset { font-family: var(--display); font-size: 0.85rem; background: none; border: 1px solid var(--rule); color: var(--muted); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+.reset:focus-visible { outline: 2px solid var(--heading); outline-offset: 2px; }
+footer { margin-top: 48px; color: var(--muted); font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+@media (prefers-reduced-motion: no-preference) { ol.steps li label { transition: color 0.15s ease; } }
+</style>
+
+<div class="wrap">
+  <header class="band">
+    <h1>Magenda iOS setup</h1>
+    <span class="meta">plan/google-agenda-pdf · manual steps</span>
+  </header>
+
+  <div class="intro">
+    <p>The iOS port of Magenda reads your Google Calendar and Google Tasks. A few things only you can do: create the Google Cloud project and sign-in client before the work starts, and check the finished app on a real iPhone before the pull request merges.</p>
+    <p>Tick each step as you go. Ticks are kept in this browser only.</p>
+    <p class="progress" id="progress">0 of 0 steps done</p>
+  </div>
+
+  <div class="part" id="before">
+    <h2>Before implementation</h2>
+    <p class="when">Do these before you run <code>/implement</code>. About 25 minutes.</p>
+
+    <section class="item" id="mb1">
+      <div class="item-head">
+        <h3>1. Create a Google Cloud project with the Calendar and Tasks APIs</h3>
+        <span class="id">mb1-google-cloud-project</span>
+        <span class="time">~10 min</span>
+      </div>
+      <p class="why">Every request the app makes to Google fails with “Google refused the request” until both APIs are enabled.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="mb1-1"><label for="mb1-1">Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud → New project</a>. Project name: <code>Magenda iOS</code>. Leave Location as it is. Click <strong>Create</strong>.<span class="see">You see a notification “Create project: Magenda iOS” with a green check.</span></label></li>
+        <li><input type="checkbox" id="mb1-2"><label for="mb1-2">In the project picker at the top of the console, select <strong>Magenda iOS</strong>.<span class="see">The picker shows “Magenda iOS”. Every step below happens in this project.</span></label></li>
+        <li><input type="checkbox" id="mb1-3"><label for="mb1-3">Open <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">Google Calendar API</a> and click <strong>Enable</strong>.<span class="see">The page changes to the API's overview with “API enabled”.</span></label></li>
+        <li><input type="checkbox" id="mb1-4"><label for="mb1-4">Open <a href="https://console.cloud.google.com/apis/library/tasks.googleapis.com" target="_blank" rel="noopener">Google Tasks API</a> and click <strong>Enable</strong>.<span class="see">“API enabled” again.</span></label></li>
+      </ol>
+      <div class="done-when"><strong>Done when</strong> both APIs show “API enabled” on their console pages for the Magenda iOS project.</div>
+    </section>
+
+    <section class="item" id="mb2">
+      <div class="item-head">
+        <h3>2. Configure the OAuth consent screen in Testing mode</h3>
+        <span class="id">mb2-oauth-consent-screen</span>
+        <span class="time">~10 min</span>
+      </div>
+      <p class="why">Google refuses sign-in until the consent screen exists and your account is listed as a test user.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="mb2-1"><label for="mb2-1">Open <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">Google Auth Platform → Overview</a>. If it shows <strong>Get started</strong>, click it.<span class="see">A four-part form: App information, Audience, Contact information, Finish.</span></label></li>
+        <li><input type="checkbox" id="mb2-2"><label for="mb2-2">App information: App name <code>Magenda</code>, User support email: your address. Audience: <strong>External</strong>. Contact information: your address. Tick the policy agreement and click <strong>Create</strong>.<span class="see">The Overview page now shows metrics instead of “Get started”.</span></label></li>
+        <li><input type="checkbox" id="mb2-3"><label for="mb2-3">Open <a href="https://console.cloud.google.com/auth/audience" target="_blank" rel="noopener">Audience</a>. Leave Publishing status at <strong>Testing</strong>. Under <strong>Test users</strong> click <strong>Add users</strong>, enter the Google address whose calendar you will use, and <strong>Save</strong>.<span class="see">Your address is listed under Test users.</span></label></li>
+        <li><input type="checkbox" id="mb2-4"><label for="mb2-4">Open <a href="https://console.cloud.google.com/auth/scopes" target="_blank" rel="noopener">Data access</a>, click <strong>Add or remove scopes</strong>, and tick <code>…/auth/calendar.readonly</code> and <code>…/auth/tasks.readonly</code> (use the filter box). Click <strong>Update</strong>, then <strong>Save</strong>.<span class="see">Both scopes appear under “Your sensitive scopes”. Nothing else is needed: both are read-only.</span></label></li>
+      </ol>
+      <div class="note">In Testing mode Google ends a sign-in after 7 days. The app then says “Your Google sign-in expired. Sign in again.” That is expected until the app is published and verified by Google, which is outside this work.</div>
+      <div class="done-when"><strong>Done when</strong> the Audience page shows Publishing status “Testing” with your address under Test users, and Data access lists both read-only scopes.</div>
+    </section>
+
+    <section class="item" id="mb3">
+      <div class="item-head">
+        <h3>3. Create an iOS OAuth client and commit its client ID</h3>
+        <span class="id">mb3-ios-client-id</span>
+        <span class="time">~5 min</span>
+      </div>
+      <p class="why">The app's sign-in uses this client ID. A check in <code>scripts/tests</code> fails until the file holds a real one.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="mb3-1"><label for="mb3-1">Open <a href="https://console.cloud.google.com/auth/clients/create" target="_blank" rel="noopener">Clients → Create client</a>. Application type: <strong>iOS</strong>. Name: <code>Magenda iOS</code>. Bundle ID: <code>name.felhasznalo.magenda</code>. Leave App Store ID and Team ID empty. Click <strong>Create</strong>.<span class="see">A dialog shows the Client ID, which looks like <code>123456789012-abcdef….apps.googleusercontent.com</code>. iOS clients have no client secret.</span></label></li>
+        <li><input type="checkbox" id="mb3-2"><label for="mb3-2">Copy the Client ID. It is a public identifier that Google ships inside every iOS app, so it may be committed. It is not a secret.<span class="see">You can find it again later on the <a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener">Clients</a> page.</span></label></li>
+        <li><input type="checkbox" id="mb3-3"><label for="mb3-3">Open <a href="https://github.com/andras-tkcs/magenda-ios/edit/plan/google-agenda-pdf/App/GoogleOAuthClientID.txt" target="_blank" rel="noopener">App/GoogleOAuthClientID.txt on plan/google-agenda-pdf</a> in GitHub's editor. Replace the whole placeholder line with your Client ID: one line, nothing else.<span class="see">The file shows exactly one line ending in <code>.apps.googleusercontent.com</code>.</span></label></li>
+        <li><input type="checkbox" id="mb3-4"><label for="mb3-4">Click <strong>Commit changes…</strong>, choose <strong>Commit directly to the plan/google-agenda-pdf branch</strong>, and confirm.<span class="see">The branch's latest commit is yours. Now run <code>/implement</code> with the plan URL; it asks you to confirm these three steps first.</span></label></li>
+      </ol>
+      <div class="done-when"><strong>Done when</strong> <code>git show origin/plan/google-agenda-pdf:App/GoogleOAuthClientID.txt</code> prints one line matching <code>^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$</code>.</div>
+    </section>
+  </div>
+
+  <div class="part" id="after">
+    <h2>After implementation</h2>
+    <p class="when">Do these when the pull request for <code>feature/google-agenda-pdf</code> is open and CI is green. About 50 minutes. Paste each report line into the PR's “Manual verification” section.</p>
+
+    <section class="item" id="ma1">
+      <div class="item-head">
+        <h3>1. Sign in, render, preview and share on a real iPhone</h3>
+        <span class="id">ma1-device-sign-in-render-share</span>
+        <span class="time">~20 min</span>
+      </div>
+      <p class="why">Google's sign-in page, the Keychain on a device and the share sheet cannot run in CI.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma1-1"><label for="ma1-1">On your Mac, in the repository, check out the branch and generate the project:<pre>git fetch origin feature/google-agenda-pdf
+git checkout feature/google-agenda-pdf
+brew install xcodegen   # once
+xcodegen generate
+open Magenda.xcodeproj</pre><span class="see">Xcode opens the Magenda project.</span></label></li>
+        <li><input type="checkbox" id="ma1-2"><label for="ma1-2">In Xcode select the <strong>Magenda</strong> target → <strong>Signing &amp; Capabilities</strong> and pick your team (a Personal Team works). Connect your iPhone, choose it as the run destination, and press <strong>Run</strong>.<span class="see">The app opens on the phone with “Sign in with Google”. If iOS asks you to trust the developer, go to Settings → General → VPN &amp; Device Management.</span></label></li>
+        <li><input type="checkbox" id="ma1-3"><label for="ma1-3">Tap <strong>Sign in with Google</strong> and choose the test-user account. On “Google hasn't verified this app” tap <strong>Continue</strong>. Tick both access boxes (calendar and tasks) and tap <strong>Continue</strong>.<span class="see">You are back in Magenda, with today's events under “Schedule and meetings” and open tasks under “To-do list”.</span></label></li>
+        <li><input type="checkbox" id="ma1-4"><label for="ma1-4">Open <strong>Settings</strong> (gear). Pick the calendars to include and the to-do list. Go back.<span class="see">The lists reload with the chosen sources.</span></label></li>
+        <li><input type="checkbox" id="ma1-5"><label for="ma1-5">Tap <strong>Render</strong>.<span class="see">The preview shows the agenda: overview page, one notes page per meeting, and the closing “Further notes from today” page.</span></label></li>
+        <li><input type="checkbox" id="ma1-6"><label for="ma1-6">In the preview tap “Notes &gt;&gt;” in the header, then “&lt;&lt; Overview”, then a schedule entry that has a meeting page.<span class="see">Each jumps to the right page.</span></label></li>
+        <li><input type="checkbox" id="ma1-7"><label for="ma1-7">Tap <strong>Share PDF</strong> and choose <strong>Save to Files</strong>. Repeat with AirDrop to your Mac or <strong>Print</strong>.<span class="see">The file is named “Agenda YYYY-MM-DD.pdf” and opens normally in Files.</span></label></li>
+        <li><input type="checkbox" id="ma1-8"><label for="ma1-8">Force-quit the app and open it again.<span class="see">You are still signed in. Settings → <strong>Sign out</strong> returns you to “Sign in with Google”.</span></label></li>
+      </ol>
+      <div class="report"><strong>Report</strong> <code>ma1: pass</code> or <code>ma1: fail — &lt;which step, what you saw&gt;</code></div>
+    </section>
+
+    <section class="item" id="ma2">
+      <div class="item-head">
+        <h3>2. Long titles with real data and the largest text size</h3>
+        <span class="id">ma2-long-text-real-data</span>
+        <span class="time">~15 min</span>
+      </div>
+      <p class="why">Confirms the automated layout checks against real Google data and real fonts, as a person sees them.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma2-1"><label for="ma2-1">In <a href="https://calendar.google.com/" target="_blank" rel="noopener">Google Calendar</a>, create three events today: at 10:00 titled <code>Quarterly business review with the extended leadership team, finance, legal and the regional sales directors to agree next year's targets</code>; at 11:00 titled <code>SupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilistic</code>; at 12:00 titled <code>🎉🚀 Launch party 👩‍👩‍👧‍👦 with the whole team 👩🏽‍💻</code>.<span class="see">All three appear in your calendar today.</span></label></li>
+        <li><input type="checkbox" id="ma2-2"><label for="ma2-2">In <a href="https://tasks.google.com/" target="_blank" rel="noopener">Google Tasks</a>, in your to-do list, add a task with the same long sentence and one with the same long single word, both due today.<span class="see">Both show in the list.</span></label></li>
+        <li><input type="checkbox" id="ma2-3"><label for="ma2-3">In Magenda pull down on the agenda to refresh.<span class="see">Each long row shows at most two lines ending in “…”, and every “Notes page” or “Include” switch is fully visible.</span></label></li>
+        <li><input type="checkbox" id="ma2-4"><label for="ma2-4">On the iPhone open Settings → Accessibility → Display &amp; Text Size → Larger Text, turn on Larger Accessibility Sizes and drag to the largest size. Return to Magenda.<span class="see">Rows are taller, nothing runs off the screen, and the switches and the Render button can still be tapped.</span></label></li>
+        <li><input type="checkbox" id="ma2-5"><label for="ma2-5">Tap <strong>Render</strong> and zoom into the preview's overview and meeting pages.<span class="see">No text overlaps a line, a checkbox or other text. Cut titles end with “…”. The long word wraps inside the to-do cell. If to-dos did not fit, a banner lists them above the PDF.</span></label></li>
+        <li><input type="checkbox" id="ma2-6"><label for="ma2-6">Set the text size back and delete the test events and tasks.<span class="see">Your calendar is as before.</span></label></li>
+      </ol>
+      <div class="report"><strong>Report</strong> <code>ma2: pass</code> or <code>ma2: fail — &lt;screen or page, what overlapped&gt;</code></div>
+    </section>
+
+    <section class="item" id="ma3">
+      <div class="item-head">
+        <h3>3. Delegated tasks from a Google Tasks list</h3>
+        <span class="id">ma3-delegated-list</span>
+        <span class="time">~10 min</span>
+      </div>
+      <p class="why">Confirms the notes format works when typed into the real Google Tasks app.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma3-1"><label for="ma3-1">In <a href="https://tasks.google.com/" target="_blank" rel="noopener">Google Tasks</a> create a list named <code>Delegated</code>.<span class="see">An empty list appears.</span></label></li>
+        <li><input type="checkbox" id="ma3-2"><label for="ma3-2">Add a task <code>Hire a designer</code> with these notes:<pre>Owner: Anna
+Cadence: weekly
+Marked: yes
+Interviews scheduled
+Two candidates left</pre>and a task <code>Renew the office lease</code> with notes:<pre>Owner: Ben
+Cadence: monthly
+Waiting for the landlord</pre><span class="see">Both tasks show their notes.</span></label></li>
+        <li><input type="checkbox" id="ma3-3"><label for="ma3-3">In Magenda open Settings → <strong>Delegated tasks</strong> and pick <strong>Delegated</strong>. Go back.<span class="see">A “Delegated” section lists both tasks with cadence and owner.</span></label></li>
+        <li><input type="checkbox" id="ma3-4"><label for="ma3-4">Tap <strong>Render</strong>.<span class="see">Page 2 is the delegated page: row 1 “Hire a designer” on a green background with “Weekly” above it, owner Anna and two status bullets; row 2 “Renew the office lease”, “Monthly”, owner Ben.</span></label></li>
+      </ol>
+      <div class="report"><strong>Report</strong> <code>ma3: pass</code> or <code>ma3: fail — &lt;what differed&gt;</code></div>
+    </section>
+
+    <section class="item" id="ma4">
+      <div class="item-head">
+        <h3>4. App Store Connect privacy answers</h3>
+        <span class="id">ma4-app-store-privacy</span>
+        <span class="time">~5 min</span>
+      </div>
+      <p class="why">The app reads Google data only on the device and sends nothing to you, so it collects no data. App Store Connect needs that answer before review.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma4-1"><label for="ma4-1">Open <a href="https://appstoreconnect.apple.com/apps" target="_blank" rel="noopener">App Store Connect → Apps</a>, choose <strong>Magenda</strong>, then <strong>App Privacy</strong> in the sidebar.<span class="see">The App Privacy page for Magenda.</span></label></li>
+        <li><input type="checkbox" id="ma4-2"><label for="ma4-2">Click <strong>Get Started</strong> (or <strong>Edit</strong> next to Data Types), choose <strong>No, we do not collect data from this app</strong>, and <strong>Save</strong>.<span class="see">Data Types reads “Data Not Collected”.</span></label></li>
+        <li><input type="checkbox" id="ma4-3"><label for="ma4-3">Click <strong>Publish</strong> at the top right of the App Privacy page.<span class="see">The answers are published with the next version.</span></label></li>
+      </ol>
+      <div class="note">Before a public App Store release, Google must verify the OAuth app because it uses sensitive scopes. That is a separate step, not part of this work; until then only test users can sign in.</div>
+      <div class="report"><strong>Report</strong> <code>ma4: done</code></div>
+    </section>
+  </div>
+
+  <footer>
+    <span>Plan: <a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/google-agenda-pdf/docs/google-agenda-pdf-plan.md" target="_blank" rel="noopener">docs/google-agenda-pdf-plan.md</a></span>
+    <button type="button" class="reset" id="reset">Clear all ticks</button>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var KEY = "magenda-ios-setup-steps";
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('ol.steps input[type="checkbox"]'));
+  var progress = document.getElementById("progress");
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
+  }
+  function paint() {
+    var done = 0;
+    boxes.forEach(function (b) {
+      b.closest("li").classList.toggle("is-done", b.checked);
+      if (b.checked) done++;
+    });
+    progress.textContent = done + " of " + boxes.length + " steps done";
+  }
+  var state = load();
+  boxes.forEach(function (b) {
+    b.checked = !!state[b.id];
+    b.addEventListener("change", function () {
+      state[b.id] = b.checked;
+      save(state);
+      paint();
+    });
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    state = {};
+    save(state);
+    boxes.forEach(function (b) { b.checked = false; });
+    paint();
+  });
+  paint();
+})();
+</script>
