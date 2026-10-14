@@ -36,7 +36,7 @@ struct SetupView: View {
                 Text("Connect Google")
                     .font(.largeTitle.bold())
                 Text(
-                    "Magenda reads your calendar and tasks through your own Google Cloud OAuth client. Create an iOS client for the bundle ID name.felhasznalo.magenda, then enter it here."
+                    "Magenda reads your calendar and tasks through your own Google Cloud OAuth client. Create an iOS client for the bundle ID name.tkcs.magenda, then enter it here."
                 )
                 if let help = Self.helpURL {
                     Link("How to create a client", destination: help)

@@ -5,7 +5,7 @@ import Foundation
 struct KeychainTokenStore: TokenStore {
     private let item: KeychainItem
 
-    init(service: String = "name.felhasznalo.magenda.google") {
+    init(service: String = "name.tkcs.magenda.google") {
         item = KeychainItem(service: service, account: "oauth-tokens")
     }
 

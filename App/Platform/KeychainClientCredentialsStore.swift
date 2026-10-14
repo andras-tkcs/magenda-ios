@@ -5,7 +5,7 @@ import Foundation
 struct KeychainClientCredentialsStore: ClientCredentialsStore {
     private let item: KeychainItem
 
-    init(service: String = "name.felhasznalo.magenda.google-client") {
+    init(service: String = "name.tkcs.magenda.google-client") {
         item = KeychainItem(service: service, account: "client")
     }
 
