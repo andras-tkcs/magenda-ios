@@ -179,8 +179,7 @@ struct AgendaView: View {
     @ViewBuilder
     private var detail: some View {
         if let rendered = controller.rendered {
-            Text(rendered.url.lastPathComponent)
-                .accessibilityIdentifier(ID.pdfPreview)
+            PreviewView(rendered: rendered)
         } else {
             ContentUnavailableView(
                 "No PDF yet", systemImage: "doc.richtext",
