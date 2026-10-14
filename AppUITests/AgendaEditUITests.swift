@@ -59,7 +59,8 @@ final class AgendaEditUITests: XCTestCase {
     /// Replaces the field's text with `text`.
     @MainActor
     private func replaceText(_ field: XCUIElement, with text: String) {
-        field.tap()
+        // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         let current = field.value as? String ?? ""
         let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
         field.typeText(deletes + text)
