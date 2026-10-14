@@ -62,7 +62,7 @@ struct AgendaView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showsSettings) {
-            Text("Settings")
+            SettingsView(appInfo: appInfo)
         }
         .sheet(item: $editing) { target in
             editSheet(for: target)
