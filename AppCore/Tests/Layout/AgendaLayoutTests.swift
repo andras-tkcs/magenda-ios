@@ -121,8 +121,8 @@ struct AgendaLayoutTests {
         #expect(overview.first { $0.text == "SAT" }?.color == colors.weekend)
         #expect(overview.first { $0.text == "MON" }?.color == RGBColor.black)
         #expect(runs(plan.pages[1]).first { $0.text == "Meeting title:" }?.color == colors.accent)
-        #expect(runs(plan.pages[2]).first { $0.text == "Further notes from today" }?.color
-            == colors.notes)
+        let notesRun = runs(plan.pages[2]).first { $0.text == "Further notes from today" }
+        #expect(notesRun?.color == colors.notes)
     }
 
     @Test("JetBrains Mono runs use 0.9 × the nominal size")
