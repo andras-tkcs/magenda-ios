@@ -52,7 +52,7 @@ struct EventRow: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .hoverEffect()
+                .probeHover()
                 .accessibilityLabel(event.originalTitle)
                 .accessibilityIdentifier(RowID.eventRow(index))
                 Toggle("Include", isOn: included)
@@ -74,7 +74,7 @@ struct EventRow: View {
                     .accessibilityIdentifier(RowID.eventPageToggle(index))
             }
         }
-        .contextMenu {
+        .probeContextMenu {
             Button("Edit…", action: onEdit)
             Button(event.isIncluded ? "Leave out" : "Include") {
                 included.wrappedValue.toggle()
@@ -213,6 +213,25 @@ struct DelegatedRow: View {
             Button(task.isIncluded ? "Leave out" : "Include") {
                 included.wrappedValue.toggle()
             }
+        }
+    }
+}
+
+// PROBE: temporary switches for diagnosing iPad toggle taps; removed before the phase ends.
+private let probeArguments = ProcessInfo.processInfo.arguments
+
+extension View {
+    @ViewBuilder
+    fileprivate func probeHover() -> some View {
+        if probeArguments.contains("-ProbeNoHover") { self } else { self.hoverEffect() }
+    }
+
+    @ViewBuilder
+    fileprivate func probeContextMenu<M: View>(@ViewBuilder _ items: () -> M) -> some View {
+        if probeArguments.contains("-ProbeNoContextMenu") {
+            self
+        } else {
+            self.contextMenu(menuItems: items)
         }
     }
 }

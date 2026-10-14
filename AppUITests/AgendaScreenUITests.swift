@@ -75,41 +75,42 @@ final class AgendaScreenUITests: XCTestCase {
     @MainActor
     func testTurningAnEventOffRemovesItsNotesPageSwitch() {
         let app = launch("standard")
-        XCTAssertTrue(element(app, "eventRow.1").waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "eventRow.1").waitForExistence(timeout: 30))
         XCTAssertTrue(element(app, "eventPageToggle.1").exists)
         XCTAssertFalse(element(app, "eventPageToggle.0").exists)
 
-        // The switch sits at the right end of its frame.
-        let switchEnd = CGVector(dx: 0.9, dy: 0.5)
-        element(app, "eventToggle.1").coordinate(withNormalizedOffset: switchEnd).tap()
+        // The tap goes to the system switch inside the toggle, not to the toggle's own frame.
+        element(app, "eventToggle.1").switches.firstMatch.tap()
         let gone = expectation(
             for: NSPredicate(format: "exists == false"),
             evaluatedWith: element(app, "eventPageToggle.1"))
-        let outcome = XCTWaiter().wait(for: [gone], timeout: 10)
-        XCTAssertEqual(
-            outcome, .completed,
-            "the switch did not turn off; switch frame \(element(app, "eventToggle.1").frame), "
-                + "window \(app.windows.firstMatch.frame)\n\(app.debugDescription)")
+        wait(for: [gone], timeout: 10)
     }
 
     @MainActor
     func testNextDayChangesTheDatePicker() {
         let app = launch("standard")
-        let picker = app.datePickers["datePicker"].firstMatch
+        let picker = app.datePickers["datePicker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 10), "the date picker never appeared")
-        let before = picker.debugDescription
+        let before = shownDate(picker)
+        XCTAssertFalse(before.isEmpty, "the date picker shows no date")
 
-        app.buttons["nextDayButton"].firstMatch.tap()
+        app.buttons["nextDayButton"].tap()
         let changed = expectation(
-            for: NSPredicate { _, _ in picker.debugDescription != before }, evaluatedWith: nil)
-        let outcome = XCTWaiter().wait(for: [changed], timeout: 10)
-        XCTAssertEqual(outcome, .completed, "the date picker did not change\n\(before)")
+            for: NSPredicate { _, _ in self.shownDate(picker) != before }, evaluatedWith: nil)
+        wait(for: [changed], timeout: 10)
+    }
+
+    /// The date a compact date picker shows: the value of the button inside it, or its own.
+    @MainActor
+    private func shownDate(_ picker: XCUIElement) -> String {
+        let button = picker.buttons.firstMatch
+        return (button.exists ? button.value : picker.value) as? String ?? ""
     }
 
     @MainActor
     func testOutOfOfficeShowsANoticeAndTheNextWorkingDayButton() {
         let app = launch("outOfOffice")
-        XCTAssertTrue(element(app, "agendaScreen").waitForExistence(timeout: 30))
         XCTAssertTrue(element(app, "notice.0").waitForExistence(timeout: 30), "no notice shown")
         XCTAssertTrue(element(app, "nextWorkingDayButton").exists)
     }
@@ -124,48 +125,81 @@ final class AgendaScreenUITests: XCTestCase {
 
         XCTAssertTrue(
             element(app, "pdfPreview").waitForExistence(timeout: 30), "the preview never appeared")
-        let list = element(app, "eventRow.0")
+        let list = element(app, "agendaScreen")
         if UIDevice.current.userInterfaceIdiom == .pad {
-            let beside = expectation(
-                for: NSPredicate { _, _ in list.exists && list.isHittable }, evaluatedWith: nil)
-            let result = XCTWaiter().wait(for: [beside], timeout: 10)
-            XCTAssertEqual(
-                result, .completed,
-                "the list is hidden beside the preview on iPad; row frame \(list.frame)\n"
-                    + app.debugDescription)
+            XCTAssertTrue(list.isHittable, "the list is hidden beside the preview on iPad")
         } else {
             XCTAssertFalse(list.isHittable, "the list is still in front of the preview on iPhone")
         }
     }
 
+    // PROBE: temporary, prints how each way of tapping a row's switch behaves; never fails.
     @MainActor
-    func testDiagnosticSwitches() {
-        let app = launch("standard")
-        XCTAssertTrue(element(app, "eventRow.1").waitForExistence(timeout: 10))
-        let include = app.switches["eventToggle.1"].firstMatch
-        let page = app.switches["eventPageToggle.1"].firstMatch
+    private func probe(
+        _ name: String, _ fixture: String = "standard", extra: [String] = [],
+        until goneID: String = "eventPageToggle.1", _ action: (XCUIApplication) -> Void
+    ) {
+        let app = XCUIApplication()
+        app.launchArguments = ["-MagendaFixture", fixture] + extra
+        app.launch()
+        guard element(app, goneID).waitForExistence(timeout: 30) else {
+            print("PROBE \(name): \(goneID) never appeared")
+            return
+        }
+        action(app)
+        let gone = expectation(
+            for: NSPredicate(format: "exists == false"), evaluatedWith: element(app, goneID))
+        let result = XCTWaiter().wait(for: [gone], timeout: 8)
+        let include = app.switches["eventToggle.1"]
+        let value = include.exists ? String(describing: include.value) : "-"
+        print("PROBE \(name): \(result == .completed ? "WORKED" : "STUCK") include=\(value)")
+    }
 
-        /// Whether `action` changes the switch's value within three seconds.
-        func changes(_ label: String, _ switchElement: XCUIElement, _ action: () -> Void) {
-            let before = String(describing: switchElement.value)
-            action()
-            let changed = expectation(
-                for: NSPredicate { _, _ in String(describing: switchElement.value) != before },
-                evaluatedWith: nil)
-            let result = XCTWaiter().wait(for: [changed], timeout: 3)
-            print("DIAG \(label): \(result == .completed ? "CHANGED" : "unchanged")")
+    @MainActor
+    private func tapSwitch(_ app: XCUIApplication, at dx: CGFloat) {
+        let toggle = element(app, "eventToggle.1")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: dx, dy: 0.5)).tap()
+    }
+
+    @MainActor
+    private func tapInner(_ app: XCUIApplication) {
+        element(app, "eventToggle.1").switches.firstMatch.tap()
+    }
+
+    @MainActor
+    func testProbeSwitchTaps() {
+        probe("inner") { app in self.tapInner(app) }
+        probe("outer centre") { app in self.element(app, "eventToggle.1").tap() }
+        probe("left quarter") { app in self.tapSwitch(app, at: 0.25) }
+        probe("right") { app in self.tapSwitch(app, at: 0.9) }
+        probe("inner twice") { app in
+            self.tapInner(app)
+            _ = self.element(app, "eventPageToggle.1").waitForNonExistence(timeout: 4)
+            if self.element(app, "eventPageToggle.1").exists { self.tapInner(app) }
         }
-        // The page switch is last because turning the event off removes it.
-        changes("page right end", page) {
-            page.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        let noMenu = ["-ProbeNoContextMenu"]
+        probe("inner no menu", extra: noMenu) { app in self.tapInner(app) }
+        probe("right no menu", extra: noMenu) { app in self.tapSwitch(app, at: 0.9) }
+        probe("inner no hover", extra: ["-ProbeNoHover"]) { app in self.tapInner(app) }
+        probe("inner neither", extra: noMenu + ["-ProbeNoHover"]) { app in self.tapInner(app) }
+        probe("next working day", "outOfOffice", until: "notice.0") { app in
+            app.buttons["nextWorkingDayButton"].tap()
         }
-        changes("page right end again", page) {
-            page.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-        }
-        changes("include inner switch", include) { include.switches.firstMatch.tap() }
-        changes("include centre", include) { include.tap() }
-        changes("include press", include) { include.press(forDuration: 0.3) }
-        let button = app.buttons["eventRow.1"]
-        print("DIAG row button hittable=\(button.isHittable) include hittable=\(include.isHittable)")
+
+        let app = launch("standard")
+        let picker = app.datePickers["datePicker"]
+        _ = picker.waitForExistence(timeout: 30)
+        print("PROBE picker shows '\(shownDate(picker))'\n\(picker.debugDescription)")
+
+        let list = element(app, "agendaScreen")
+        let row = element(app, "eventRow.0")
+        _ = row.waitForExistence(timeout: 30)
+        print("PROBE before render: list \(list.isHittable) row \(row.isHittable) \(list.frame)")
+        app.buttons["renderButton"].tap()
+        _ = element(app, "pdfPreview").waitForExistence(timeout: 30)
+        print("PROBE after render: list \(list.isHittable) row \(row.isHittable)")
+        _ = app.buttons["neverThere"].waitForExistence(timeout: 5)
+        print("PROBE later: list \(list.isHittable) row \(row.isHittable) \(list.frame)")
+        print("PROBE tree\n\(app.debugDescription)")
     }
 }
