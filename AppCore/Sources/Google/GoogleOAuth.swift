@@ -119,11 +119,7 @@ public enum GoogleOAuth {
     ) -> AuthorizationRequest {
         let verifier = randomString(length: 64, using: &random)
         let state = randomString(length: 32, using: &random)
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "accounts.google.com"
-        components.path = "/o/oauth2/v2/auth"
-        components.queryItems = [
+        let query = [
             URLQueryItem(name: "client_id", value: configuration.clientID),
             URLQueryItem(name: "redirect_uri", value: configuration.redirectURI),
             URLQueryItem(name: "response_type", value: "code"),
@@ -135,7 +131,7 @@ public enum GoogleOAuth {
             URLQueryItem(name: "state", value: state),
         ]
         return AuthorizationRequest(
-            url: components.url ?? fixedURL("https://accounts.google.com/o/oauth2/v2/auth"),
+            url: httpsURL(host: "accounts.google.com", path: "/o/oauth2/v2/auth", query: query),
             state: state, verifier: verifier)
     }
 
@@ -177,7 +173,7 @@ public enum GoogleOAuth {
         code: String, verifier: String, configuration: GoogleOAuthConfiguration
     ) -> HTTPRequest {
         formRequest(
-            "https://oauth2.googleapis.com/token",
+            "/token",
             [("code", code)] + clientFields(configuration) + [
                 ("redirect_uri", configuration.redirectURI),
                 ("code_verifier", verifier),
@@ -190,7 +186,7 @@ public enum GoogleOAuth {
         refreshToken: String, configuration: GoogleOAuthConfiguration
     ) -> HTTPRequest {
         formRequest(
-            "https://oauth2.googleapis.com/token",
+            "/token",
             clientFields(configuration) + [
                 ("refresh_token", refreshToken),
                 ("grant_type", "refresh_token"),
@@ -199,7 +195,7 @@ public enum GoogleOAuth {
 
     /// Revokes a token, which ends the grant it belongs to.
     public static func revokeRequest(token: String) -> HTTPRequest {
-        formRequest("https://oauth2.googleapis.com/revoke", [("token", token)])
+        formRequest("/revoke", [("token", token)])
     }
 
     /// Reads the token endpoint's answer.
@@ -283,10 +279,10 @@ public enum GoogleOAuth {
             + (configuration.clientSecret.map { [("client_secret", $0)] } ?? [])
     }
 
-    private static func formRequest(_ url: String, _ fields: [(String, String)]) -> HTTPRequest {
+    private static func formRequest(_ path: String, _ fields: [(String, String)]) -> HTTPRequest {
         let body = fields.map { "\(formEncoded($0.0))=\(formEncoded($0.1))" }.joined(separator: "&")
         return HTTPRequest(
-            method: .post, url: fixedURL(url),
+            method: .post, url: httpsURL(host: "oauth2.googleapis.com", path: path),
             headers: ["Content-Type": "application/x-www-form-urlencoded"], body: Data(body.utf8))
     }
 
@@ -305,8 +301,20 @@ public enum GoogleOAuth {
         return encoded
     }
 
-    // The endpoints are literals that always parse; the fallback only satisfies the type checker.
-    private static func fixedURL(_ string: String) -> URL {
-        URL(string: string) ?? URL(fileURLWithPath: "/")
+    // A fixed host and absolute path always form a URL, but `URLComponents.url` is optional.
+    // Replacing a placeholder, rather than falling back to one, leaves no branch that never runs.
+    private static func httpsURL(
+        host: String, path: String, query: [URLQueryItem]? = nil
+    ) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = host
+        components.path = path
+        components.queryItems = query
+        var url = URL(fileURLWithPath: "/")
+        if let built = components.url {
+            url = built
+        }
+        return url
     }
 }
