@@ -28,6 +28,9 @@ screens: the PDF fits text with fixed rules (shrink, wrap, cut with "…", cap l
 not fit to a warning), and every rendered plan is checked by an automated layout audit, on Linux
 with a deterministic fake font and on simulators with the real fonts.
 
+Every tagged release also attaches a signed Ad Hoc `.ipa` to its GitHub Release (Design,
+"Release"), the iPad counterpart of the signed DMG privacyfence publishes.
+
 There is no tracking issue. The skill text the rules come from was pasted by the user into the
 planning session on 2026-10-14; the rules it contains are restated in full under "Binder rules", so
 no phase needs the skill itself.
@@ -1235,6 +1238,51 @@ window shows the same agenda; there is no per-window state, and all mutation is 
 No Pencil or drag-and-drop support: the app edits text and hands the PDF to the share sheet,
 where Noteshelf takes over.
 
+### Release: a signed Ad Hoc `.ipa` on every GitHub Release (`.github/workflows/build.yml`)
+
+Like the signed DMG on each [privacyfence](https://github.com/privacyfence/privacyfence) release,
+every Magenda GitHub Release carries a signed build: `Magenda-<tag>.ipa` (e.g.
+`Magenda-v1.2.0-rc.1.ipa`) and its `Magenda-<tag>.ipa.sha256`. It is **Ad Hoc** signed, the only
+way Apple allows a signed iOS build to be installed outside the App Store and TestFlight: it
+installs only on devices registered under **Certificates, Identifiers & Profiles → Devices** in the
+developer account, through Finder or Apple Configurator on a Mac. The built app never goes into the
+git tree; `.gitignore` gains `*.ipa` and `*.xcarchive`.
+
+Changes to `build.yml`, nothing else in it moves:
+
+1. **`testflight` job**, between "Archive (Release, signed)" and "Export and upload to App Store
+   Connect", a new step **"Export the Ad Hoc .ipa"**: writes `$RUNNER_TEMP/AdHocExportOptions.plist`
+   with `method` = `release-testing` (Xcode's current name for Ad Hoc), `destination` = `export`,
+   `signingStyle` = `automatic`, `thinning` = `<none>`, `manageAppVersionAndBuildNumber` = false,
+   and runs `xcodebuild -exportArchive` on the same signed archive with `-exportPath build/adhoc`
+   and the same `-allowProvisioningUpdates -authenticationKey*` options (so Xcode creates or
+   refreshes the Ad Hoc profile with every registered device; ADR 0009's key, no new secret).
+   Then `mv build/adhoc/Magenda.ipa "build/adhoc/Magenda-${GITHUB_REF_NAME}.ipa"` and
+   `(cd build/adhoc && shasum -a 256 "Magenda-${GITHUB_REF_NAME}.ipa" > "Magenda-${GITHUB_REF_NAME}.ipa.sha256")`.
+   It runs **before** the upload, so a failed Ad Hoc export (for example no registered device)
+   stops the release before anything reaches App Store Connect: all or nothing, as today.
+2. Right after it, **"Keep the .ipa for the release"**: `actions/upload-artifact` pinned exactly as
+   in `tests.yml` (`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1`) with `name: magenda-ipa`,
+   `path: build/adhoc/Magenda-*.ipa*`, `if-no-files-found: error`, `retention-days: 7`.
+3. **`github-release` job**, before the release step: `actions/download-artifact` pinned to
+   `37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0` with `name: magenda-ipa`, `path:
+   release-assets`. The `softprops/action-gh-release` step gains `files: release-assets/*` and
+   `fail_on_unmatched_files: true`.
+4. The header comment gains one sentence: a tag also exports an Ad Hoc `.ipa` from the signed
+   archive and attaches it to the GitHub Release.
+
+The pre-release body sentence becomes `Pre-release ${GITHUB_REF_NAME}, TestFlight build ${BUILD}.
+The attached .ipa installs on registered devices only. Changes are listed under [Unreleased] in
+CHANGELOG.md.` The stable body stays exactly the changelog section (ADR 0005); installing the
+`.ipa` is documented in `docs/releasing.md` instead.
+
+Rejected: **a separate `adhoc` job** (a second signed archive on a second macOS runner, and the key
+written twice, for the same bits); **a development-signed build** (needs a development certificate
+per machine and expires after a week of profiles); **an over-the-air `itms-services` install page**
+(needs a `manifest.plist` served over HTTPS next to the `.ipa`; GitHub release asset redirects are
+not a supported host); **committing the `.ipa` to the repository** (a binary per release in git
+history, and it would be stale the moment it lands).
+
 ### Rejected alternatives
 
 - **Render on a server with the Python Magenda.** Needs hosting, sends the user's calendar off the
@@ -1312,6 +1360,10 @@ The last phase writes these (next free number is 0011):
   (`BinderRules`: personal-block prefixes, title prefixes, out-of-office words, saved short names,
   person aliases, look-ahead days) and never by a language model, on or off the device; every
   left-out item is shown with its reason instead of a summary.
+- **0017** — Every tagged release attaches an Ad Hoc signed `Magenda-<tag>.ipa` (and its SHA-256),
+  exported in `build.yml`'s `testflight` job from the same signed archive with ADR 0009's App Store
+  Connect key, before the TestFlight upload. It installs only on registered devices. Rejected: a
+  separate job, development signing, an over-the-air install page, committing builds to git.
 
 ## Manual steps
 
@@ -1326,7 +1378,9 @@ Step-by-step page: https://claude.ai/artifact/DZxBnKphSDuV8PDN5XCo6t (source
   client for `name.felhasznalo.magenda`; on a real iPad, enter the client ID in the app, sign in,
   render, preview and share into Noteshelf 3; compare the app's agenda with a binder the Claude
   workflow built for the same date; check long titles and the largest text size in a narrow and a
-  full-screen window; check the delegated page; set the App Store Connect privacy answers. The
+  full-screen window; check the delegated page; set the App Store Connect privacy answers; register
+  the iPad's UDID in the developer account so the Ad Hoc .ipa attached to the first release after
+  merge installs on it. The
   client ID is typed into the app only; it never goes into the repository, the PR or the
   checklist.
 
@@ -1361,6 +1415,11 @@ Step-by-step page: https://claude.ai/artifact/DZxBnKphSDuV8PDN5XCo6t (source
   memory; `-MagendaNeedsSetup` exercises the setup screen. Live sign-in is only checked by hand in
   manual_after. A phase that finds itself needing a real client ID stops blocked; it never commits
   one.
+- **The Ad Hoc export only runs on a tag.** A `workflow_dispatch` of `build.yml` stops after the
+  unsigned `archive` job, so CI on the phase branch proves the YAML and the unsigned archive, not
+  the signed export. The first pre-release tag after merge proves it; until a device is registered
+  (ma7) that tag fails at "Export the Ad Hoc .ipa", before any upload. If the runner's Xcode rejects
+  `release-testing` as a method, the fix is `ad-hoc` (its older name), in a follow-up PR.
 - **Coverage at 100%.** A phase that cannot reach a line from a test restructures the code so the
   failing input can be injected; it never lowers a floor.
 
@@ -1392,12 +1451,16 @@ manual_after:
   - id: ma6-app-store-privacy
     title: Set App Store Connect's App Privacy answers to "Data Not Collected"
     why: The app reads Google data only on the device and sends nothing to the developer; App Store Connect needs the answer before review.
+  - id: ma7-register-ipad-for-adhoc
+    title: Register your iPad's UDID under Certificates, Identifiers & Profiles → Devices, and check the release prerequisites in docs/releasing.md (team ID, App Store Connect key, app-store environment)
+    why: The Ad Hoc .ipa installs only on registered devices, and build.yml's export fails while none is registered; the first pre-release tag after merge then attaches an .ipa you can install.
 verify_after_merge:
   - swift test --package-path AppCore --enable-code-coverage && python3 scripts/check_coverage_floor.py "$(swift test --package-path AppCore --show-codecov-path)"
   - dispatch tests.yml on feature/google-agenda-pdf
+  - dispatch build.yml on feature/google-agenda-pdf
 final_checks:
   - docs/google-agenda-pdf-plan.md and docs/google-agenda-pdf-plan-manual-steps.html are deleted and nothing links to them
-  - ADRs 0011, 0012, 0013, 0014, 0015 and 0016 exist, are Accepted, and are in docs/adr/README.md's index
+  - ADRs 0011, 0012, 0013, 0014, 0015, 0016 and 0017 exist, are Accepted, and are in docs/adr/README.md's index
   - CHANGELOG.md has [Unreleased] entries and no version heading
   - AppCore/Sources/Greeting.swift, App/ContentView.swift and AppUITests/MainScreenUITests.swift are gone
   - no real Google client ID, client secret or organization name is in the repository (the only client IDs are the made-up ones in tests and fixtures)
@@ -2337,9 +2400,39 @@ phases:
     acceptance:
       - tests.yml's three app jobs pass on the phase branch with RulesUITests
       - the core (coverage floor 100%), lint and scripts jobs pass
+  - id: p17-adhoc-ipa-release
+    title: Export a signed Ad Hoc .ipa from the tagged build and attach it to the GitHub Release
+    depends_on: []
+    complexity: S
+    touches:
+      - .github/workflows/build.yml
+      - .gitignore
+    brief: |
+      Read the Design section "Release: a signed Ad Hoc .ipa on every GitHub Release", ADR 0009,
+      docs/releasing.md "Build and upload", and the pr-steward skill's note that build.yml runs
+      only its unsigned archive job when dispatched.
+      1. .github/workflows/build.yml: the four changes listed in the Design, with the exact step
+         names, plist keys, file names and pinned action SHAs given there; the pre-release body
+         sentence as given. Pass `${GITHUB_REF_NAME}` and the key variables through `env`, never
+         `${{ }}` inside `run:`, as the existing steps do. Change nothing else.
+      2. .gitignore: add `*.ipa` and `*.xcarchive` lines next to the existing signing entries.
+      3. Check the YAML parses: python3 -c "import yaml,sys;yaml.safe_load(open('.github/workflows/build.yml'))"
+         (install PyYAML with pip if missing).
+      4. Push and dispatch build.yml on the phase branch; the version and archive jobs must be
+         green and testflight and github-release skipped (not a tag). A red archive job is a stop
+         condition: stop blocked with the log.
+      5. Do not touch docs, CHANGELOG.md or the ADRs; p16 documents this.
+    acceptance:
+      - python3 -c "import yaml;yaml.safe_load(open('.github/workflows/build.yml'))" exits 0
+      - grep -n "Export the Ad Hoc .ipa" .github/workflows/build.yml prints one line, above the line printed by grep -n "Export and upload to App Store Connect"
+      - grep -c "release-testing" .github/workflows/build.yml prints 1
+      - grep -n "37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0" .github/workflows/build.yml prints one line
+      - grep -n "fail_on_unmatched_files: true" .github/workflows/build.yml prints one line
+      - grep -nx "\*.ipa" .gitignore prints one line
+      - build.yml dispatched on the phase branch is green (version and archive succeed; testflight and github-release are skipped)
   - id: p16-retire-plan
-    title: ADRs 0011–0016, standing docs, coverage floors, changelog, and plan removal
-    depends_on: [p15c-app-rules-editor]
+    title: ADRs 0011–0017, standing docs, coverage floors, changelog, and plan removal
+    depends_on: [p15c-app-rules-editor, p17-adhoc-ipa-release]
     complexity: M
     touches:
       - docs/adr/0011-the-agenda-pdf-is-drawn-on-device-from-the-vendored-magenda-template.md
@@ -2348,6 +2441,8 @@ phases:
       - docs/adr/0014-agenda-inputs-come-live-from-google-calendar-and-google-tasks.md
       - docs/adr/0015-appcore-may-import-observation.md
       - docs/adr/0016-agenda-selection-uses-editable-rules-not-a-language-model.md
+      - docs/adr/0017-each-release-attaches-an-ad-hoc-signed-ipa.md
+      - docs/releasing.md
       - docs/adr/README.md
       - AppCore/Package.swift
       - README.md
@@ -2361,7 +2456,7 @@ phases:
     brief: |
       Read CONTRIBUTING.md "Decisions, plans and ADRs", docs/adr/README.md (template and rules),
       and this plan's "ADRs" and "Rejected alternatives".
-      1. Write ADRs 0011–0016 with the file names in `touches`, Status "Accepted — <today's
+      1. Write ADRs 0011–0017 with the file names in `touches`, Status "Accepted — <today's
          date>.", using the plan's Design and Rejected alternatives for Context, Decision and
          Alternatives considered. They link to source files and commits, never to this plan.
          Add them to the index in docs/adr/README.md.
@@ -2383,6 +2478,13 @@ phases:
          AppCore/Tests/Google/Fixtures and that no live contract check runs; the layout audit
          runs in AppCore (fake font) and in AppTests (real fonts); the binder rules are tested in
          AppCore against the `standard` fixture.
+         docs/releasing.md: "Build and upload" step 3 says the job also exports the Ad Hoc
+         .ipa before uploading; a new section "Installing the Ad Hoc build" after it: register a
+         device's UDID (Finder → the connected iPad → click the line under its name until the
+         UDID shows; then Certificates, Identifiers & Profiles → Devices → +), the next tag's
+         .ipa includes it, install by dragging `Magenda-<tag>.ipa` onto the iPad in Finder or with
+         Apple Configurator, check it with `shasum -a 256 -c Magenda-<tag>.ipa.sha256`, and an
+         export with no registered device fails the release before upload (ADR 0017).
          docs/release-testing.md "What stays manual": real Google sign-in, real account data, and
          the comparison with a binder built by the old Claude workflow while it still runs.
          docs/coding-and-testing-guidelines.md: "Where code goes" gets a row for the vendored
@@ -2408,7 +2510,8 @@ phases:
          edit items before rendering; your own Google client entered on first launch and kept in
          the Keychain; PDF preview beside the list on iPad and sharing; keyboard
          shortcuts; font and color settings; long titles are shortened with "…" and to-dos that
-         don't fit are listed.
+         don't fit are listed; every GitHub Release attaches a signed .ipa for registered
+         devices.
       6. Delete docs/google-agenda-pdf-plan.md and docs/google-agenda-pdf-plan-manual-steps.html;
          grep the repo for "google-agenda-pdf-plan" and remove any remaining link.
       7. Run python3 -m unittest discover -s scripts/tests (the no-project-history guard covers
@@ -2416,8 +2519,9 @@ phases:
     acceptance:
       - test ! -e docs/google-agenda-pdf-plan.md && test ! -e docs/google-agenda-pdf-plan-manual-steps.html
       - grep -rn "google-agenda-pdf-plan" --exclude-dir=.git . prints nothing
-      - ls docs/adr/001[1-6]-*.md lists six files, each containing "Accepted"
-      - grep -c "^| \[001[1-6]\]" docs/adr/README.md prints 6
+      - ls docs/adr/001[1-7]-*.md lists seven files, each containing "Accepted"
+      - grep -c "^| \[001[1-7]\]" docs/adr/README.md prints 7
+      - grep -n "^## Installing the Ad Hoc build" docs/releasing.md prints one line
       - grep -rn "Greeting\|ContentView" docs README.md CONTRIBUTING.md prints nothing
       - python3 -m unittest discover -s scripts/tests passes
       - grep -n "^## \[[0-9]" CHANGELOG.md prints nothing

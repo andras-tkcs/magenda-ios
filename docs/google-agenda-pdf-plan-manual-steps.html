@@ -94,7 +94,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 0.9rem; display: flex
 
   <div class="part" id="after">
     <h2>After implementation</h2>
-    <p class="when">Do these when the pull request for <code>feature/google-agenda-pdf</code> is open and CI is green. About 100 minutes. Paste each report line into the PR's “Manual verification” section.</p>
+    <p class="when">Do these when the pull request for <code>feature/google-agenda-pdf</code> is open and CI is green. About 115 minutes, plus the first pre-release after merge. Paste each report line into the PR's “Manual verification” section.</p>
 
     <section class="item" id="ma1a">
       <div class="item-head">
@@ -223,6 +223,22 @@ open Magenda.xcodeproj</pre><span class="see">Xcode opens the Magenda project.</
         <li><input type="checkbox" id="ma6-3"><label for="ma6-3">Click <strong>Publish</strong> at the top right of the App Privacy page.<span class="see">The answers are published with the next version.</span></label></li>
       </ol>
       <div class="report"><strong>Report</strong> <code>ma6: done</code></div>
+    </section>
+    <section class="item" id="ma7">
+      <div class="item-head">
+        <h3>7. Register your iPad for the signed .ipa</h3>
+        <span class="id">ma7-register-ipad-for-adhoc</span>
+        <span class="time">~15 min</span>
+      </div>
+      <p class="why">Each release attaches an Ad Hoc signed <code>Magenda-&lt;tag&gt;.ipa</code>. Apple lets it install only on devices registered in your developer account, and the release build fails while none is registered.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma7-1"><label for="ma7-1">Connect the iPad to your Mac and open it in <strong>Finder</strong>. Click the grey line under the iPad's name until it shows the <strong>UDID</strong>, then right-click it and <strong>Copy UDID</strong>.<span class="see">A 25- or 40-character identifier is on the clipboard.</span></label></li>
+        <li><input type="checkbox" id="ma7-2"><label for="ma7-2">Open <a href="https://developer.apple.com/account/resources/devices/add" target="_blank" rel="noopener">Certificates, Identifiers &amp; Profiles → Devices → Register a New Device</a>. Platform <strong>iOS, iPadOS…</strong>, Device Name <code>My iPad</code>, paste the UDID, <strong>Continue</strong>, <strong>Register</strong>.<span class="see">The iPad is listed under Devices as Enabled.</span></label></li>
+        <li><input type="checkbox" id="ma7-3"><label for="ma7-3">Check the release prerequisites in <a href="https://github.com/andras-tkcs/magenda-ios/blob/main/docs/releasing.md#signing-and-app-store-connect" target="_blank" rel="noopener">docs/releasing.md, “Signing and App Store Connect”</a>: the app record, the Team ID in <code>project.yml</code>, the App Store Connect API key and the <code>app-store</code> environment's three secrets.<span class="see">All five items are in place. The key's contents go only into the environment's secrets, never into the PR or this page.</span></label></li>
+        <li><input type="checkbox" id="ma7-4"><label for="ma7-4">After the pull request merges, cut a pre-release with <code>/cut-release 0.1.0-beta.1</code> (dry run first). When <code>build.yml</code> finishes, open the GitHub Release.<span class="see">It lists <code>Magenda-v0.1.0-beta.1.ipa</code> and its <code>.sha256</code>.</span></label></li>
+        <li><input type="checkbox" id="ma7-5"><label for="ma7-5">Download the <code>.ipa</code>, connect the iPad, and drag the file onto the iPad in Finder (or use Apple Configurator → Add → Apps).<span class="see">Magenda installs and opens on the iPad.</span></label></li>
+      </ol>
+      <div class="report"><strong>Report</strong> <code>ma7: device registered</code> in the PR; after the first pre-release, <code>ma7: ipa installs</code> or <code>ma7: fail — &lt;step, error&gt;</code></div>
     </section>
   </div>
 
