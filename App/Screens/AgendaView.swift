@@ -104,8 +104,13 @@ struct AgendaView: View {
                 if !draft.notices.isEmpty {
                     Section("Notices") {
                         ForEach(Array(draft.notices.enumerated()), id: \.offset) { index, notice in
-                            Text(notice)
-                                .accessibilityIdentifier(ID.notice(index))
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundStyle(.orange)
+                                    .accessibilityHidden(true)
+                                Text(notice)
+                                    .accessibilityIdentifier(ID.notice(index))
+                            }
                         }
                         if controller.showsNextWorkingDay {
                             Button("Go to next working day") {

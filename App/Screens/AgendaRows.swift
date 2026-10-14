@@ -57,6 +57,7 @@ struct EventRow: View {
                 .accessibilityIdentifier(RowID.eventRow(index))
                 Toggle("Include", isOn: included)
                     .labelsHidden()
+                    .fixedSize()
                     .accessibilityLabel("Include \(event.originalTitle)")
                     .accessibilityIdentifier(RowID.eventToggle(index))
             }
@@ -124,6 +125,7 @@ struct TaskRow: View {
                 .accessibilityIdentifier(RowID.taskRow(index))
                 Toggle("Include", isOn: included)
                     .labelsHidden()
+                    .fixedSize()
                     .accessibilityLabel("Include \(task.text)")
                     .accessibilityIdentifier(RowID.taskToggle(index))
             }
@@ -183,6 +185,7 @@ struct DelegatedRow: View {
                 .accessibilityIdentifier(RowID.delegatedRow(index))
                 Toggle("Include", isOn: included)
                     .labelsHidden()
+                    .fixedSize()
                     .accessibilityLabel("Include \(task.text)")
                     .accessibilityIdentifier(RowID.delegatedToggle(index))
             }

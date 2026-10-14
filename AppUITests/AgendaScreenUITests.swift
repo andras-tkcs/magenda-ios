@@ -79,7 +79,9 @@ final class AgendaScreenUITests: XCTestCase {
         XCTAssertTrue(element(app, "eventPageToggle.1").exists)
         XCTAssertFalse(element(app, "eventPageToggle.0").exists)
 
-        element(app, "eventToggle.1").tap()
+        // The switch sits at the right end of its frame.
+        let switchEnd = CGVector(dx: 0.9, dy: 0.5)
+        element(app, "eventToggle.1").coordinate(withNormalizedOffset: switchEnd).tap()
         let gone = expectation(
             for: NSPredicate(format: "exists == false"),
             evaluatedWith: element(app, "eventPageToggle.1"))
@@ -89,7 +91,7 @@ final class AgendaScreenUITests: XCTestCase {
     @MainActor
     func testNextDayChangesTheDatePicker() {
         let app = launch("standard")
-        let picker = element(app, "datePicker")
+        let picker = element(app, "datePicker").firstMatch
         XCTAssertTrue(picker.waitForExistence(timeout: 10), "the date picker never appeared")
         let before = "\(picker.label)|\(String(describing: picker.value))"
 
@@ -120,7 +122,10 @@ final class AgendaScreenUITests: XCTestCase {
             element(app, "pdfPreview").waitForExistence(timeout: 30), "the preview never appeared")
         let list = element(app, "agendaScreen")
         if UIDevice.current.userInterfaceIdiom == .pad {
-            XCTAssertTrue(list.isHittable, "the list is hidden beside the preview on iPad")
+            let beside = expectation(
+                for: NSPredicate { _, _ in list.exists && list.isHittable }, evaluatedWith: nil)
+            let result = XCTWaiter().wait(for: [beside], timeout: 10)
+            XCTAssertEqual(result, .completed, "the list is hidden beside the preview on iPad")
         } else {
             XCTAssertFalse(list.isHittable, "the list is still in front of the preview on iPhone")
         }
