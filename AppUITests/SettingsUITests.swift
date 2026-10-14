@@ -72,7 +72,8 @@ final class SettingsUITests: XCTestCase {
         let predicate = NSPredicate(format: "value == %@", expected)
         let result = XCTWaiter().wait(
             for: [XCTNSPredicateExpectation(predicate: predicate, object: field)], timeout: 30)
-        XCTAssertEqual(result, .completed, "the field never showed \(expected): \(field.value ?? "")")
+        let shown = field.value as? String ?? ""
+        XCTAssertEqual(result, .completed, "the field never showed \(expected): \(shown)")
     }
 
     /// Replaces the text of a color field and presses return.

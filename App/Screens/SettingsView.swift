@@ -111,13 +111,12 @@ struct SettingsView: View {
                         Text(calendar.title)
                             .foregroundStyle(.primary)
                         Spacer()
-                        if controller.settings.calendarIDs.contains(calendar.id) {
+                        if isSelected(calendar) {
                             Image(systemName: "checkmark")
                         }
                     }
                 }
-                .accessibilityAddTraits(
-                    controller.settings.calendarIDs.contains(calendar.id) ? .isSelected : [])
+                .accessibilityAddTraits(isSelected(calendar) ? .isSelected : [])
                 .accessibilityIdentifier(ID.calendarRow(index))
             }
         } header: {
@@ -125,6 +124,10 @@ struct SettingsView: View {
         } footer: {
             Text("None selected uses your primary calendar.")
         }
+    }
+
+    private func isSelected(_ calendar: GoogleCalendar) -> Bool {
+        controller.settings.calendarIDs.contains(calendar.id)
     }
 
     private func toggleCalendar(_ id: String) {
@@ -231,8 +234,7 @@ struct SettingsView: View {
             HStack {
                 let color = controller.settings.colors[keyPath: role.keyPath]
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(red: Double(color.red) / 255, green: Double(color.green) / 255,
-                        blue: Double(color.blue) / 255))
+                    .fill(Self.swatch(color))
                     .frame(width: 24, height: 24)
                     .accessibilityHidden(true)
                 Text(role.title)
@@ -254,6 +256,12 @@ struct SettingsView: View {
                     .accessibilityIdentifier(ID.colorError)
             }
         }
+    }
+
+    private static func swatch(_ color: RGBColor) -> Color {
+        Color(
+            red: Double(color.red) / 255, green: Double(color.green) / 255,
+            blue: Double(color.blue) / 255)
     }
 
     private func hexBinding(_ role: ColorRole) -> Binding<String> {
