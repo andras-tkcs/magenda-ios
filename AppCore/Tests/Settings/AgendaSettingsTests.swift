@@ -70,6 +70,7 @@ struct AgendaSettingsTests {
         var expected = BinderRules.default
         expected.lookAheadDays = 3
         #expect(settings.rules == expected)
+        #expect(try decode(#"{"rules":{}}"#).rules == BinderRules.default)
     }
 
     @Test("The theme mirrors the font pack and colors")
