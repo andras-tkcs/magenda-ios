@@ -40,8 +40,11 @@ final class AgendaEditUITests: XCTestCase {
         let list = element(app, "agendaScreen")
         XCTAssertTrue(list.waitForExistence(timeout: 30), "the list never appeared")
         let row = app.buttons[identifier]
-        _ = row.waitForExistence(timeout: 30)
+        // Rows are created lazily, so a row further down only exists once it is scrolled to.
+        XCTAssertTrue(
+            app.buttons["eventRow.0"].waitForExistence(timeout: 30), "the first row never appeared")
         scrollToHittable(row, in: list)
+        XCTAssertTrue(row.exists && row.isHittable, "\(identifier) was never scrolled into view")
         let field = element(app, "editField")
         var taps = 0
         while !field.exists && taps < 5 {
