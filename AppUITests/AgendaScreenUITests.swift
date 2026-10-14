@@ -130,11 +130,13 @@ final class AgendaScreenUITests: XCTestCase {
 
         XCTAssertTrue(
             element(app, "pdfPreview").waitForExistence(timeout: 30), "the preview never appeared")
-        let list = element(app, "agendaScreen")
+        // The list's first row stands for the list: XCUITest never reports a List itself as
+        // hittable once the centre of its frame lands on one of its rows, on any device.
+        let row = element(app, "eventRow.0")
         if UIDevice.current.userInterfaceIdiom == .pad {
-            XCTAssertTrue(list.isHittable, "the list is hidden beside the preview on iPad")
+            XCTAssertTrue(row.isHittable, "the list is hidden beside the preview on iPad")
         } else {
-            XCTAssertFalse(list.isHittable, "the list is still in front of the preview on iPhone")
+            XCTAssertFalse(row.isHittable, "the list is still in front of the preview on iPhone")
         }
     }
 }
