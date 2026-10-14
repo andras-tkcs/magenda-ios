@@ -64,7 +64,7 @@ final class RulesUITests: XCTestCase {
         let done = app.buttons["settingsDone"].firstMatch
         var taps = 0
         while !done.exists && taps < 5 {
-            app.navigationBars.buttons.firstMatch.tap()
+            app.navigationBars["Binder rules"].buttons.firstMatch.tap()
             taps += 1
             _ = done.waitForExistence(timeout: 10)
         }
@@ -81,41 +81,56 @@ final class RulesUITests: XCTestCase {
         XCTAssertFalse(done.exists, "the settings sheet never closed")
     }
 
+    /// The bar the form scrolls under: the settings sheet's own, never the agenda's behind it.
+    @MainActor
+    private func formTop(_ app: XCUIApplication) -> XCUIElement {
+        let done = app.buttons["settingsDone"].firstMatch
+        return done.exists ? done : app.navigationBars["Binder rules"].firstMatch
+    }
+
     /// Drags the form by `distance` points (positive scrolls further down). The drag starts below
-    /// the navigation bar, so it lands in the form on a phone and in an iPad's form sheet alike,
+    /// the sheet's top bar, so it lands in the form on a phone and in an iPad's form sheet alike,
     /// and it holds at the end so the form does not fling past a row.
     @MainActor
     private func drag(_ app: XCUIApplication, by distance: CGFloat) {
-        let bar = app.navigationBars.firstMatch
-        let center = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let anchor = center.withOffset(CGVector(dx: 0, dy: 275))
+        let top = formTop(app)
+        let center = top.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let sideways: CGFloat = top.identifier == "settingsDone" ? -150 : 0
+        let anchor = center.withOffset(CGVector(dx: sideways, dy: 275))
         let start = anchor.withOffset(CGVector(dx: 0, dy: distance / 2))
         let end = anchor.withOffset(CGVector(dx: 0, dy: -distance / 2))
         start.press(forDuration: 0.05, thenDragTo: end, withVelocity: 300, thenHoldForDuration: 0.3)
     }
 
-    /// Scrolls in short drags until `target` can be tapped. A lazy row does not exist until it is
+    /// Scrolls in held drags until `target` can be tapped. A lazy row does not exist until it is
     /// scrolled near, so a missing target is looked for further down first and then back up. With
-    /// `upperHalf`, the target also has to sit in the top half of the screen, clear of the keyboard
-    /// that tapping a text field brings up.
+    /// `upperHalf`, the target should also sit in the top half of the screen, clear of the keyboard
+    /// that tapping a text field brings up, unless the form cannot scroll any further.
     @MainActor
     private func reveal(_ app: XCUIApplication, _ target: XCUIElement, upperHalf: Bool = false) {
-        let bar = app.navigationBars.firstMatch
         let bottom = upperHalf ? app.windows.firstMatch.frame.height / 2 : .greatestFiniteMagnitude
         var drags = 0
+        var lastMid: CGFloat?
+        var stalled = 0
         while drags < 40 {
-            if target.waitForExistence(timeout: 2) {
-                let top = bar.frame.maxY + 40
-                let mid = target.frame.midY
-                if mid < top {
-                    drag(app, by: -150)
-                } else if target.isHittable && mid <= bottom {
-                    break
-                } else {
-                    drag(app, by: 150)
-                }
+            guard target.waitForExistence(timeout: 1) else {
+                lastMid = nil
+                drag(app, by: drags < 12 ? 300 : -300)
+                drags += 1
+                continue
+            }
+            let top = formTop(app).frame.maxY + 40
+            let mid = target.frame.midY
+            stalled = lastMid.map { abs($0 - mid) < 2 ? stalled + 1 : 0 } ?? 0
+            lastMid = mid
+            if mid < top {
+                drag(app, by: -min(max(top - mid + 40, 100), 300))
+            } else if target.isHittable && (mid <= bottom || stalled >= 1) {
+                break
+            } else if stalled >= 3 {
+                break
             } else {
-                drag(app, by: drags < 20 ? 150 : -150)
+                drag(app, by: min(max(mid - bottom + 40, 100), 300))
             }
             drags += 1
         }
@@ -202,9 +217,8 @@ final class RulesUITests: XCTestCase {
 
         let stepper = element(app, "lookAheadStepper")
         reveal(app, stepper)
-        let increment = app.buttons["Increment"].firstMatch
-        XCTAssertTrue(increment.waitForExistence(timeout: 30), "no increment button")
-        increment.tap()
+        // The stepper's plus half is at the trailing edge of its row.
+        stepper.coordinate(withNormalizedOffset: CGVector(dx: 0.96, dy: 0.5)).tap()
         let expected = "Upcoming tasks: 6 days"
         waitUntil(stepper, "label == %@ OR value == %@", expected)
     }
