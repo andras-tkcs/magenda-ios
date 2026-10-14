@@ -48,18 +48,15 @@ public struct BinderRules: Equatable, Codable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = BinderRules.default
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) throws -> T {
+            try container.decodeIfPresent(T.self, forKey: key) ?? fallback
+        }
         self.init(
-            personalBlocks: try container.decodeIfPresent([String].self, forKey: .personalBlocks)
-                ?? defaults.personalBlocks,
-            titlePrefixes: try container.decodeIfPresent([String].self, forKey: .titlePrefixes)
-                ?? defaults.titlePrefixes,
-            outOfOfficeWords: try container.decodeIfPresent(
-                [String].self, forKey: .outOfOfficeWords) ?? defaults.outOfOfficeWords,
-            shortNames: try container.decodeIfPresent([String: String].self, forKey: .shortNames)
-                ?? defaults.shortNames,
-            personAliases: try container.decodeIfPresent(
-                [String: String].self, forKey: .personAliases) ?? defaults.personAliases,
-            lookAheadDays: try container.decodeIfPresent(Int.self, forKey: .lookAheadDays)
-                ?? defaults.lookAheadDays)
+            personalBlocks: try value(.personalBlocks, defaults.personalBlocks),
+            titlePrefixes: try value(.titlePrefixes, defaults.titlePrefixes),
+            outOfOfficeWords: try value(.outOfOfficeWords, defaults.outOfOfficeWords),
+            shortNames: try value(.shortNames, defaults.shortNames),
+            personAliases: try value(.personAliases, defaults.personAliases),
+            lookAheadDays: try value(.lookAheadDays, defaults.lookAheadDays))
     }
 }

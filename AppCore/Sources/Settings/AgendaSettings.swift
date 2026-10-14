@@ -39,19 +39,17 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = AgendaSettings()
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) throws -> T {
+            try container.decodeIfPresent(T.self, forKey: key) ?? fallback
+        }
+        let fontPackName = try value(.fontPack, defaults.fontPack.rawValue)
         self.init(
-            fontPack: try container.decodeIfPresent(String.self, forKey: .fontPack)
-                .flatMap { FontPack(rawValue: $0) } ?? defaults.fontPack,
-            colors: try container.decodeIfPresent(ThemeColors.self, forKey: .colors)
-                ?? defaults.colors,
-            calendarIDs: try container.decodeIfPresent([String].self, forKey: .calendarIDs)
-                ?? defaults.calendarIDs,
-            todoListTitle: try container.decodeIfPresent(String.self, forKey: .todoListTitle)
-                ?? defaults.todoListTitle,
-            delegatedListTitle: try container.decodeIfPresent(
-                String.self, forKey: .delegatedListTitle) ?? defaults.delegatedListTitle,
-            rules: try container.decodeIfPresent(BinderRules.self, forKey: .rules)
-                ?? defaults.rules)
+            fontPack: FontPack(rawValue: fontPackName) ?? defaults.fontPack,
+            colors: try value(.colors, defaults.colors),
+            calendarIDs: try value(.calendarIDs, defaults.calendarIDs),
+            todoListTitle: try value(.todoListTitle, defaults.todoListTitle),
+            delegatedListTitle: try value(.delegatedListTitle, defaults.delegatedListTitle),
+            rules: try value(.rules, defaults.rules))
     }
 
     private enum CodingKeys: String, CodingKey {
