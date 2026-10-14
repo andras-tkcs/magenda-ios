@@ -19,7 +19,7 @@
             exec 2>&1
             TC=$(dirname "$(readlink -f "$(command -v swift)")")
             echo "PROBE-TC $TC exe=\(exe)"; ls -la /tmp/p5probe.profraw
-            OBJS=""; for o in $(awk '{print $6}' /proc/$PPID/maps | grep '/\.build/' | sort -u); do OBJS="$OBJS -object $o"; done
+            OBJS=""; for o in $(awk '{print $6}' /proc/$PPID/maps | grep '/[.]build/' | sort -u); do OBJS="$OBJS -object $o"; done
             echo "PROBE-OBJS $OBJS"
             "$TC/llvm-profdata" merge -sparse /tmp/p5probe.profraw -o /tmp/p5probe.profdata
             "$TC/llvm-cov" show '\(exe)' $OBJS -instr-profile /tmp/p5probe.profdata -show-line-counts \
