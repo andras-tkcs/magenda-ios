@@ -1,0 +1,82 @@
+# Project profile for the devflow commands (/make-plan, /implement, /dod, /review).
+# Every value here restates a rule from the docs listed under docs.must_read; when one of those
+# changes, change this file in the same PR.
+
+project:
+  name: Magenda
+
+docs:
+  must_read:
+    - CLAUDE.md
+    - CONTRIBUTING.md
+    - docs/coding-and-testing-guidelines.md
+    - docs/testing-policy.md
+    - docs/releasing.md
+  plan_dir: docs
+  adr_dir: docs/adr
+  adr_index: docs/adr/README.md
+  adr_bar: docs/adr/README.md#when-a-decision-needs-an-adr
+  changelog:
+    file: CHANGELOG.md
+    section: "## [Unreleased]"
+
+git:
+  main_branch: main
+  branch_pattern: "<type>/<kebab-case-description>"
+  branch_types: [feature, fix, chore, docs, tests]
+  merge_style: merge-commit
+
+verify:
+  fast:
+    - swift test --package-path AppCore
+    - swift format lint --strict --parallel --recursive App AppTests AppUITests AppCore/Package.swift AppCore/Sources AppCore/Tests
+    - python3 -m unittest discover -s scripts/tests
+  dod:
+    - run: swift test --package-path AppCore --enable-code-coverage
+      narrow: swift test --package-path AppCore --enable-code-coverage --filter {args}
+    - run: python3 scripts/check_coverage_floor.py "$(swift test --package-path AppCore --show-codecov-path)"
+      skip_when_narrowed: true
+    - swift format lint --strict --parallel --recursive App AppTests AppUITests AppCore/Package.swift AppCore/Sources AppCore/Tests
+    - python3 -m unittest discover -s scripts/tests
+    - run: python3 scripts/pre_release_check.py   # on macOS, also the app and UI tests; elsewhere their rows SKIP and come from tests.yml
+      skip_when_narrowed: true
+  dod_conditional:
+    - when: [project.yml]
+      do: "`xcodegen generate` succeeds and the app builds (an `app` job of tests.yml is green on this commit); a new target is in the scheme's build and test lists; a changed build setting has a comment saying why."
+    - when: ["App/PrivacyInfo.xcprivacy", "**/*.entitlements", project.yml]
+      do: "If permissions, entitlements, an INFOPLIST_KEY_NS*UsageDescription or the privacy manifest changed: the purpose string is written for the user, and the changed App Store Connect privacy answers are listed as a manual_after item / in the PR's Manual verification."
+    - when: [AppCore/Package.swift]
+      do: "A dependency change is deliberate with a bounded version range, a new third-party package has an ADR, and build.yml has been dispatched against the branch (link the run)."
+    - when: [".github/workflows/**"]
+      do: "A workflow that must be dispatchable is already on main, or the PR description says it becomes dispatchable only after merge."
+  dod_manual:
+    - "A user-visible change has a line under CHANGELOG.md's `## [Unreleased]`, never under a concrete version heading."
+    - "A decision that is hard to reverse, moves a trust boundary, changes the build/release/distribution path, or rejects a non-obvious alternative has an ADR in docs/adr/; a deleted plan document has its decisions extracted first, or the PR says it made none."
+    - "New logic is in AppCore with tests; views hold layout and state only."
+    - "Every new element a UI test touches has an identifier in the view's ID enum; every new interactive element has an accessibility label."
+    - "No log line or error message carries a credential, a token or the user's content."
+    - "Comments only where the why is non-obvious; no restated-what comments; no project history (ADR 0008)."
+    - "Standing docs (README.md, docs/) describe the new behavior."
+  dod_doc: docs/coding-and-testing-guidelines.md#definition-of-done
+
+ci:
+  dispatchable:
+    - workflow: tests.yml
+      use_when: "swift test, the coverage floor or swift format with no Swift toolchain in the container (read the core and lint jobs); the app build, hosted app tests and UI tests on iPhone and iPad simulators (read the three app (...) jobs)."
+      notes: "Must be on main to be dispatchable; push the branch first. The macOS app jobs take 10-20 minutes."
+    - workflow: build.yml
+      use_when: "A Release archive with a version stamped in, e.g. after changing AppCore/Package.swift dependencies or as the release pre-flight."
+      notes: "No inputs. Off a tag it archives unsigned and uploads nothing."
+    - workflow: release.yml
+      use_when: "Cutting a release tag, only through /cut-release."
+      notes: "Inputs version and dry_run; dry_run defaults to true and must be dispatched that way first. Cut for real only when the maintainer says so."
+
+stacks: [swift, ipados]
+
+models:
+  planner: opus
+  orchestrator: sonnet
+  worker: sonnet
+  reviewer: opus
+
+project_steward: .claude/skills/steward/SKILL.md
