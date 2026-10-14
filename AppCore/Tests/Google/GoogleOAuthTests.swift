@@ -254,13 +254,13 @@ struct GoogleOAuthTokenRequestTests {
     @Test("A client secret follows client_id in the code exchange")
     func exchangeWithSecret() throws {
         let request = GoogleOAuth.tokenRequest(
-            code: "abc", verifier: "v", configuration: try configuration(secret: "s&e=c r+t"))
+            code: "abc", verifier: "v", configuration: try configuration(secret: "s&e=c/r+t"))
         #expect(
             try Array(formFields(request).prefix(3)) == [
-                "code=abc", "client_id=\(clientID)", "client_secret=s&e=c r+t",
+                "code=abc", "client_id=\(clientID)", "client_secret=s&e=c/r+t",
             ])
         let body = String(decoding: try #require(request.body), as: UTF8.self)
-        #expect(body.contains("&client_secret=s%26e%3Dc%20r%2Bt&"))
+        #expect(body.contains("&client_secret=s%26e%3Dc%2Fr%2Bt&"))
     }
 
     @Test("The refresh posts the exact form fields, with the secret right after client_id")
