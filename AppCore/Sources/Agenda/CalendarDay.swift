@@ -98,8 +98,8 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
     public func startDate(in timeZone: TimeZone) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        return calendar.date(from: DateComponents(year: year, month: month, day: day))
-            ?? utcDate
+        let parts = DateComponents(year: year, month: month, day: day)
+        return calendar.date(from: parts) ?? utcDate
     }
 
     /// Whether this day comes before `other`.
@@ -125,7 +125,7 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
     }
 
     private var utcDate: Date {
-        Self.utcCalendar.date(from: DateComponents(year: year, month: month, day: day))
-            ?? Date(timeIntervalSince1970: 0)
+        let parts = DateComponents(year: year, month: month, day: day)
+        return Self.utcCalendar.date(from: parts) ?? Date(timeIntervalSince1970: 0)
     }
 }
