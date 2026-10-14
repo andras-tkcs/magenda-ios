@@ -158,7 +158,8 @@ struct AgendaLayoutDelegatedTests {
         let items = (0..<40).map {
             item(
                 "Task \($0)", owner: "Owner \($0)", cadence: Cadence.allCases[$0 % 3],
-                marked: $0 % 4 == 0, status: Array(repeating: String(repeating: "word ", count: 40), count: 3))
+                marked: $0 % 4 == 0,
+                status: Array(repeating: String(repeating: "word ", count: 40), count: 3))
         }
         let pages = try delegatedPages(plan(items))
         #expect(pages.count > 1)

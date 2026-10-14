@@ -103,9 +103,12 @@ struct AgendaLayoutLinksTests {
         let plan = try plan()
         for page in plan.pages {
             let operations = page.operations
-            let firstLink = operations.firstIndex { if case .link = $0 { true } else { false } }
+            let isLink: (DrawOperation) -> Bool = {
+                if case .link = $0 { true } else { false }
+            }
+            let firstLink = operations.firstIndex(where: isLink)
             #expect(firstLink != nil)
-            #expect(operations[(firstLink ?? 0)...].allSatisfy { if case .link = $0 { true } else { false } })
+            #expect(operations[(firstLink ?? 0)...].allSatisfy(isLink))
         }
     }
 }
