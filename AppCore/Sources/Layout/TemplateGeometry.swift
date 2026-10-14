@@ -57,6 +57,23 @@ enum TemplateGeometry {
     /// The widest a schedule entry may be.
     static let scheduleTextWidth = 201.8
 
+    /// The widths of the delegated table's columns, left to right.
+    static let delegatedColumns = (number: 30.75, task: 173.2, owner: 84.45, status: 229.0)
+    /// The space between a delegated cell's edge and its text.
+    static let delegatedCellInset = 5.4
+    /// The lowest a delegated row may end.
+    static let delegatedMaxY = 628.2
+    /// The area that hides the line the template draws under the delegated table's header.
+    static let delegatedErase = PlanRect(x0: 56.2, y0: 178.3, x1: 574.6, y1: 179.8)
+    /// The fill of a delegated row whose check-in is due.
+    static let markedFill = RGBColor(red: 0xD6, green: 0xFC, blue: 0xEC)
+    /// The width of the border above a delegated page's first row.
+    static let delegatedThickBorder = 3.0
+    /// The width of the other delegated borders.
+    static let delegatedThinBorder = 0.5
+    /// How many lines a delegated status may take.
+    static let delegatedStatusLines = 10
+
     /// The padding of a slot's box in which its text is placed: left, top, right, bottom.
     static let slotPadding = (left: 1.5, top: 3.0, right: 1.5, bottom: 4.0)
 }

@@ -11,16 +11,20 @@ public struct AgendaLayout: Sendable {
         self.theme = theme
     }
 
-    /// The plan for `content`: the overview, one page per meeting and the further-notes page.
+    /// The plan for `content`: the overview, the delegated pages, one page per meeting and the
+    /// further-notes page.
     public func plan(for content: AgendaContent) -> RenderPlan {
         let overview = overviewPage(for: content)
-        var pages = [overview.page]
+        let delegated = delegatedPages(for: content)
+        var pages = [overview.page] + delegated
         pages += meetingTitles(of: content).map { meetingPage(title: $0) }
         pages.append(furtherNotesPage())
         let header = headerOperations(for: content.date)
         return RenderPlan(
             pageWidth: manifest.pageWidth, pageHeight: manifest.pageHeight,
-            pages: pages.map { PagePlan(chrome: $0.chrome, operations: $0.operations + header) },
+            pages: addingLinks(
+                to: pages.map { PagePlan(chrome: $0.chrome, operations: $0.operations + header) },
+                schedule: content.schedule, delegatedPageCount: delegated.count),
             omittedTodoItems: overview.omitted)
     }
 
