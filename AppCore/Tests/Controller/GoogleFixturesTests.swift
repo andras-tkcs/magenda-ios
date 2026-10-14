@@ -40,7 +40,8 @@ private func startDate(_ event: GoogleEvent) -> Date {
 struct GoogleFixturesTests {
     @Test("launch arguments name a fixture after -MagendaFixture")
     func parsing() {
-        #expect(GoogleFixture(launchArguments: ["app", "-MagendaFixture", "standard"]) == .standard)
+        let standard = GoogleFixture(launchArguments: ["app", "-MagendaFixture", "standard"])
+        #expect(standard == .standard)
         #expect(GoogleFixture(launchArguments: ["-MagendaFixture", "overflow", "-x"]) == .overflow)
         #expect(GoogleFixture(launchArguments: ["app", "-MagendaFixture"]) == nil)
         #expect(GoogleFixture(launchArguments: ["app", "-MagendaFixture", "bogus"]) == nil)

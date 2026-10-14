@@ -154,7 +154,8 @@ public struct FixtureGoogleDataSource: GoogleDataSource {
         EventSpec(title: "Home", time: nil, people: []),
         EventSpec(title: "Start the day", time: Time(8, 0), people: []),
         EventSpec(title: "Team sync", time: Time(9, 0), people: [me, person("anna"), room]),
-        EventSpec(title: "1:1 with Peter", time: Time(10, 30), people: [me, person("peter.brown")]),
+        EventSpec(
+            title: "1:1 with Peter", time: Time(10, 30), people: [me, person("peter.brown")]),
         EventSpec(title: "Lunch", time: Time(12, 0), people: []),
         EventSpec(
             title: "REMINDER // Decision about the office move", time: Time(13, 0),
