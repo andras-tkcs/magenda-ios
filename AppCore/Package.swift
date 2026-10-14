@@ -9,7 +9,7 @@ let package = Package(
     platforms: [.iOS(.v18), .macOS(.v15)],
     products: [.library(name: "AppCore", targets: ["AppCore"])],
     targets: [
-        .target(name: "AppCore", path: "Sources"),
+        .target(name: "AppCore", path: "Sources", resources: [.copy("Resources/slots.json")]),
         .testTarget(name: "AppCoreTests", dependencies: ["AppCore"], path: "Tests"),
     ]
 )
