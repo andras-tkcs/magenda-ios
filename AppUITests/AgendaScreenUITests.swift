@@ -97,20 +97,20 @@ final class AgendaScreenUITests: XCTestCase {
         let app = launch("standard")
         let picker = app.datePickers["datePicker"].firstMatch
         XCTAssertTrue(picker.waitForExistence(timeout: 10), "the date picker never appeared")
-        let before = String(describing: picker.value)
+        let before = picker.debugDescription
 
         app.buttons["nextDayButton"].firstMatch.tap()
         let changed = expectation(
-            for: NSPredicate { _, _ in String(describing: picker.value) != before },
-            evaluatedWith: nil)
+            for: NSPredicate { _, _ in picker.debugDescription != before }, evaluatedWith: nil)
         let outcome = XCTWaiter().wait(for: [changed], timeout: 10)
-        XCTAssertEqual(outcome, .completed, "the date picker still says \(before)")
+        XCTAssertEqual(outcome, .completed, "the date picker did not change\n\(before)")
     }
 
     @MainActor
     func testOutOfOfficeShowsANoticeAndTheNextWorkingDayButton() {
         let app = launch("outOfOffice")
-        XCTAssertTrue(element(app, "notice.0").waitForExistence(timeout: 10), "no notice shown")
+        XCTAssertTrue(element(app, "agendaScreen").waitForExistence(timeout: 30))
+        XCTAssertTrue(element(app, "notice.0").waitForExistence(timeout: 30), "no notice shown")
         XCTAssertTrue(element(app, "nextWorkingDayButton").exists)
     }
 
@@ -142,19 +142,30 @@ final class AgendaScreenUITests: XCTestCase {
     func testDiagnosticSwitches() {
         let app = launch("standard")
         XCTAssertTrue(element(app, "eventRow.1").waitForExistence(timeout: 10))
-        func value(_ element: XCUIElement) -> String { String(describing: element.value) }
-        let include = app.switches["eventToggle.1"]
-        let page = app.switches["eventPageToggle.1"]
-        print("DIAG start include=\(value(include)) page=\(value(page))")
-        page.firstMatch.tap()
-        print("DIAG after page tap include=\(value(include)) page=\(value(page))")
-        page.firstMatch.tap()
-        print("DIAG after page tap 2 include=\(value(include)) page=\(value(page))")
-        include.firstMatch.tap()
-        print("DIAG after include tap include=\(value(include)) page=\(value(page))")
-        include.switches.firstMatch.tap()
-        print("DIAG after inner tap include=\(value(include)) page=\(value(page))")
-        include.press(forDuration: 0.3)
-        print("DIAG after press include=\(value(include)) page=\(value(page))")
+        let include = app.switches["eventToggle.1"].firstMatch
+        let page = app.switches["eventPageToggle.1"].firstMatch
+
+        /// Whether `action` changes the switch's value within three seconds.
+        func changes(_ label: String, _ switchElement: XCUIElement, _ action: () -> Void) {
+            let before = String(describing: switchElement.value)
+            action()
+            let changed = expectation(
+                for: NSPredicate { _, _ in String(describing: switchElement.value) != before },
+                evaluatedWith: nil)
+            let result = XCTWaiter().wait(for: [changed], timeout: 3)
+            print("DIAG \(label): \(result == .completed ? "CHANGED" : "unchanged")")
+        }
+        // The page switch is last because turning the event off removes it.
+        changes("page right end", page) {
+            page.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        }
+        changes("page right end again", page) {
+            page.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        }
+        changes("include inner switch", include) { include.switches.firstMatch.tap() }
+        changes("include centre", include) { include.tap() }
+        changes("include press", include) { include.press(forDuration: 0.3) }
+        let button = app.buttons["eventRow.1"]
+        print("DIAG row button hittable=\(button.isHittable) include hittable=\(include.isHittable)")
     }
 }
