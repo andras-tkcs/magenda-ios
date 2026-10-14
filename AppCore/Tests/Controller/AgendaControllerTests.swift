@@ -516,7 +516,8 @@ struct AgendaControllerTests {
     func rulesChangeDraft() async throws {
         let context = try await started(.standard)
         await context.controller.updateSettings { $0.rules.lookAheadDays = 0 }
-        #expect(context.controller.draft?.tasks.map(\.text) == ["Send the slides", "Call the bank"])
+        let texts = context.controller.draft?.tasks.map(\.text)
+        #expect(texts == ["Send the slides", "Call the bank"])
     }
 
     @Test("a short name retitles every event sharing the key, without reloading")
