@@ -19,18 +19,20 @@
             exec 2>&1
             TC=$(dirname "$(readlink -f "$(command -v swift)")")
             echo "PROBE-TC $TC exe=\(exe)"; ls -la /tmp/p5probe.profraw
+            OBJS=""; for o in $(awk '{print $6}' /proc/$PPID/maps | grep '/\.build/' | sort -u); do OBJS="$OBJS -object $o"; done
+            echo "PROBE-OBJS $OBJS"
             "$TC/llvm-profdata" merge -sparse /tmp/p5probe.profraw -o /tmp/p5probe.profdata
-            "$TC/llvm-cov" show '\(exe)' -instr-profile /tmp/p5probe.profdata -show-line-counts \
+            "$TC/llvm-cov" show '\(exe)' $OBJS -instr-profile /tmp/p5probe.profdata -show-line-counts \
               | awk '/^\\/.*\\.swift:$/ { f = $0; next } \
                      f ~ /AppCore\\/Sources\\// && $2 ~ /^ *0$/ { print "PROBE-LINE", f, $0 }' FS='|'
-            "$TC/llvm-cov" export '\(exe)' -instr-profile /tmp/p5probe.profdata \
+            "$TC/llvm-cov" export '\(exe)' $OBJS -instr-profile /tmp/p5probe.profdata \
               | python3 -c 'import json,sys
             for e in json.load(sys.stdin)["data"][0]["files"]:
                 if "AppCore/Sources/" in e["filename"]:
                     for s in e["segments"]:
                         if s[3] and s[2] == 0 and not s[5]:
                             print("PROBE-SEG", e["filename"].split("AppCore/Sources/")[-1], s[0], s[1], s[4])'
-            "$TC/llvm-cov" report '\(exe)' -instr-profile /tmp/p5probe.profdata \
+            "$TC/llvm-cov" report '\(exe)' $OBJS -instr-profile /tmp/p5probe.profdata \
               | grep -E 'Sources/|TOTAL' | sed 's/^/PROBE-REPORT /'
             echo PROBE-DONE
             """
