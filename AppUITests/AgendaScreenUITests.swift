@@ -168,38 +168,17 @@ final class AgendaScreenUITests: XCTestCase {
 
     @MainActor
     func testProbeSwitchTaps() {
-        probe("inner") { app in self.tapInner(app) }
-        probe("outer centre") { app in self.element(app, "eventToggle.1").tap() }
-        probe("left quarter") { app in self.tapSwitch(app, at: 0.25) }
-        probe("right") { app in self.tapSwitch(app, at: 0.9) }
-        probe("inner twice") { app in
-            self.tapInner(app)
-            _ = self.element(app, "eventPageToggle.1").waitForNonExistence(timeout: 4)
-            if self.element(app, "eventPageToggle.1").exists { self.tapInner(app) }
+        let variants = [
+            "label", "-ProbeHoverButton", "-ProbeHoverHighlight", "-ProbeHoverLift",
+            "-ProbeHoverNone",
+        ]
+        for variant in variants {
+            for attempt in 1...2 {
+                let extra = variant.hasPrefix("-") ? [variant] : []
+                probe("\(variant) inner \(attempt)", extra: extra) { app in self.tapInner(app) }
+            }
         }
-        let noMenu = ["-ProbeNoContextMenu"]
-        probe("inner no menu", extra: noMenu) { app in self.tapInner(app) }
-        probe("right no menu", extra: noMenu) { app in self.tapSwitch(app, at: 0.9) }
-        probe("inner no hover", extra: ["-ProbeNoHover"]) { app in self.tapInner(app) }
-        probe("inner neither", extra: noMenu + ["-ProbeNoHover"]) { app in self.tapInner(app) }
-        probe("next working day", "outOfOffice", until: "notice.0") { app in
-            app.buttons["nextWorkingDayButton"].tap()
-        }
-
-        let app = launch("standard")
-        let picker = app.datePickers["datePicker"]
-        _ = picker.waitForExistence(timeout: 30)
-        print("PROBE picker shows '\(shownDate(picker))'\n\(picker.debugDescription)")
-
-        let list = element(app, "agendaScreen")
-        let row = element(app, "eventRow.0")
-        _ = row.waitForExistence(timeout: 30)
-        print("PROBE before render: list \(list.isHittable) row \(row.isHittable) \(list.frame)")
-        app.buttons["renderButton"].tap()
-        _ = element(app, "pdfPreview").waitForExistence(timeout: 30)
-        print("PROBE after render: list \(list.isHittable) row \(row.isHittable)")
-        _ = app.buttons["neverThere"].waitForExistence(timeout: 5)
-        print("PROBE later: list \(list.isHittable) row \(row.isHittable) \(list.frame)")
-        print("PROBE tree\n\(app.debugDescription)")
+        probe("label centre", extra: []) { app in self.element(app, "eventToggle.1").tap() }
+        probe("label right", extra: []) { app in self.tapSwitch(app, at: 0.9) }
     }
 }

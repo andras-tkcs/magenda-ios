@@ -50,9 +50,10 @@ struct EventRow: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
+                    .probeHover(onLabel: true)
                 }
                 .buttonStyle(.plain)
-                .probeHover()
+                .probeHover(onLabel: false)
                 .accessibilityLabel(event.originalTitle)
                 .accessibilityIdentifier(RowID.eventRow(index))
                 Toggle("Include", isOn: included)
@@ -74,7 +75,7 @@ struct EventRow: View {
                     .accessibilityIdentifier(RowID.eventPageToggle(index))
             }
         }
-        .probeContextMenu {
+        .contextMenu {
             Button("Edit…", action: onEdit)
             Button(event.isIncluded ? "Leave out" : "Include") {
                 included.wrappedValue.toggle()
@@ -118,9 +119,9 @@ struct TaskRow: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
+                    .hoverEffect()
                 }
                 .buttonStyle(.plain)
-                .hoverEffect()
                 .accessibilityLabel(task.text)
                 .accessibilityIdentifier(RowID.taskRow(index))
                 Toggle("Include", isOn: included)
@@ -178,9 +179,9 @@ struct DelegatedRow: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
+                    .hoverEffect()
                 }
                 .buttonStyle(.plain)
-                .hoverEffect()
                 .accessibilityLabel(task.text)
                 .accessibilityIdentifier(RowID.delegatedRow(index))
                 Toggle("Include", isOn: included)
@@ -217,21 +218,21 @@ struct DelegatedRow: View {
     }
 }
 
-// PROBE: temporary switches for diagnosing iPad toggle taps; removed before the phase ends.
-private let probeArguments = ProcessInfo.processInfo.arguments
+// PROBE: temporary hover-effect variants for diagnosing iPad switch taps; removed before the
+// phase ends.
+private let probeHoverVariant = ProcessInfo.processInfo.arguments.first {
+    $0.hasPrefix("-ProbeHover")
+}
 
 extension View {
     @ViewBuilder
-    fileprivate func probeHover() -> some View {
-        if probeArguments.contains("-ProbeNoHover") { self } else { self.hoverEffect() }
-    }
-
-    @ViewBuilder
-    fileprivate func probeContextMenu<M: View>(@ViewBuilder _ items: () -> M) -> some View {
-        if probeArguments.contains("-ProbeNoContextMenu") {
-            self
-        } else {
-            self.contextMenu(menuItems: items)
+    fileprivate func probeHover(onLabel: Bool) -> some View {
+        switch (probeHoverVariant, onLabel) {
+        case (nil, true): self.hoverEffect()
+        case ("-ProbeHoverButton"?, false): self.hoverEffect()
+        case ("-ProbeHoverHighlight"?, false): self.hoverEffect(.highlight)
+        case ("-ProbeHoverLift"?, false): self.hoverEffect(.lift)
+        default: self
         }
     }
 }
