@@ -85,7 +85,11 @@ final class AgendaScreenUITests: XCTestCase {
         let gone = expectation(
             for: NSPredicate(format: "exists == false"),
             evaluatedWith: element(app, "eventPageToggle.1"))
-        wait(for: [gone], timeout: 10)
+        let outcome = XCTWaiter().wait(for: [gone], timeout: 10)
+        XCTAssertEqual(
+            outcome, .completed,
+            "the switch did not turn off; switch frame \(element(app, "eventToggle.1").frame), "
+                + "window \(app.windows.firstMatch.frame)\n\(app.debugDescription)")
     }
 
     @MainActor
@@ -95,7 +99,7 @@ final class AgendaScreenUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 10), "the date picker never appeared")
         let before = "\(picker.label)|\(String(describing: picker.value))"
 
-        element(app, "nextDayButton").tap()
+        app.buttons["nextDayButton"].firstMatch.tap()
         let changed = expectation(
             for: NSPredicate { _, _ in
                 "\(picker.label)|\(String(describing: picker.value))" != before
@@ -125,7 +129,10 @@ final class AgendaScreenUITests: XCTestCase {
             let beside = expectation(
                 for: NSPredicate { _, _ in list.exists && list.isHittable }, evaluatedWith: nil)
             let result = XCTWaiter().wait(for: [beside], timeout: 10)
-            XCTAssertEqual(result, .completed, "the list is hidden beside the preview on iPad")
+            XCTAssertEqual(
+                result, .completed,
+                "the list is hidden beside the preview on iPad; list frame \(list.frame)\n"
+                    + app.debugDescription)
         } else {
             XCTAssertFalse(list.isHittable, "the list is still in front of the preview on iPhone")
         }
