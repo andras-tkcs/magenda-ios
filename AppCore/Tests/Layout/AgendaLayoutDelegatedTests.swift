@@ -154,6 +154,16 @@ struct AgendaLayoutDelegatedTests {
         #expect(lines.last?.text.hasPrefix("• ") == false)
     }
 
+    @Test("Strings left over after a budget that ends on a bullet keep the bullet")
+    func statusLeftoversOnBullet() throws {
+        let nine = String(repeating: "word ", count: 63)
+        let page = try delegatedPages(plan([item(status: [nine, "Second", "Third"])]))[0]
+        let lines = column(page, x0: statusX)
+        #expect(lines.count == 10)
+        #expect(lines.last?.text.hasPrefix("• Second") == true)
+        #expect(lines.last?.text.hasSuffix("…") == true)
+    }
+
     @Test("Forty items with long statuses paginate within the page and appear once each")
     func pagination() throws {
         let items = (0..<40).map {

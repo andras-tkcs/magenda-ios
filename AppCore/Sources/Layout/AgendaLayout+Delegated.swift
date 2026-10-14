@@ -66,23 +66,26 @@ extension AgendaLayout {
             TemplateGeometry.delegatedColumns.status - 2 * TemplateGeometry.delegatedCellInset
             - bulletWidth
         var pending = status.map { TextFitter.normalized($0) }.filter { !$0.isEmpty }[...]
-        var lines: [(text: String, isFirst: Bool)] = []
-        while let entry = pending.first, lines.count < TemplateGeometry.delegatedStatusLines {
+        var texts: [String] = []
+        var indents: [Double] = []
+        while let entry = pending.first, texts.count < TemplateGeometry.delegatedStatusLines {
             pending.removeFirst()
             let wrapped = fitter.wrap(
                 entry, font: font, maxWidth: width,
-                maxLines: TemplateGeometry.delegatedStatusLines - lines.count)
-            lines += wrapped.enumerated().map { (text: $1, isFirst: $0 == 0) }
+                maxLines: TemplateGeometry.delegatedStatusLines - texts.count)
+            for (index, line) in wrapped.enumerated() {
+                texts.append(index == 0 ? bullet + line : line)
+                indents.append(index == 0 ? 0 : bulletWidth)
+            }
         }
         if !pending.isEmpty {
-            let last = lines[lines.count - 1]
-            lines[lines.count - 1].text = fitter.ellipsized(
-                ([last.text] + pending).joined(separator: " "), font: font, maxWidth: width)
+            let last = texts.count - 1
+            let prefix = indents[last] == 0 ? bullet : ""
+            let rest = ([String(texts[last].dropFirst(prefix.count))] + pending)
+                .joined(separator: " ")
+            texts[last] = prefix + fitter.ellipsized(rest, font: font, maxWidth: width)
         }
-        return (
-            lines.map { ($0.isFirst ? bullet : "") + $0.text },
-            lines.map { $0.isFirst ? 0 : bulletWidth }
-        )
+        return (texts, indents)
     }
 
     private func delegatedPage(_ rows: [DelegatedRow], firstNumber: Int, isLast: Bool) -> PagePlan {
@@ -101,15 +104,13 @@ extension AgendaLayout {
             ("delegated.header.owner", taskX1, ownerX1),
             ("delegated.header.status", ownerX1, right),
         ]
-        operations +=
-            headers
-            .compactMap { id, x0, x1 in
-                manifest.slot(id).flatMap { slot in
-                    slot.text.map { centeredRuns($0, in: slot, x0: x0, x1: x1) }
+        for (id, x0, x1) in headers {
+            for slot in [manifest.slot(id)].compactMap({ $0 }) {
+                for text in [slot.text].compactMap({ $0 }) {
+                    operations += centeredRuns(text, in: slot, x0: x0, x1: x1).map { .text($0) }
                 }
             }
-            .flatMap { $0 }
-            .map { .text($0) }
+        }
         operations += labelRuns(
             of: slots(on: "delegated_shell").filter { $0.id == "delegated.footer_label" }
         ).map { .text($0) }
