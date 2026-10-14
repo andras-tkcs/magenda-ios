@@ -23,18 +23,6 @@ jobs:
         run: swift --version
       - name: Test AppCore (100% pass rate required)
         run: swift test --package-path AppCore --enable-code-coverage
-      - name: TEMP uncovered lines
-        if: always()
-        run: |
-          python3 - "$(swift test --package-path AppCore --show-codecov-path)" <<'PY'
-          import json,sys
-          r=json.load(open(sys.argv[1]))
-          for f in r["data"][0]["files"]:
-              if "AppCore/Sources/" not in f["filename"]: continue
-              print(f["filename"], f["summary"]["lines"])
-              for seg in f.get("segments",[]):
-                  if seg[2]==0 and seg[3]: print("  zero-count region starts at line",seg[0],"col",seg[1])
-          PY
       - name: Enforce coverage floor
         run: python3 scripts/check_coverage_floor.py "$(swift test --package-path AppCore --show-codecov-path)"
 

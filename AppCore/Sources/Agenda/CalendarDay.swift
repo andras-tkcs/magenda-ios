@@ -11,15 +11,9 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
     /// The day of the month, 1 to 31.
     public let day: Int
 
-    private static var utcCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
-        return calendar
-    }
-
     private static var isoCalendar: Calendar {
         var calendar = Calendar(identifier: .iso8601)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        calendar.timeZone = .gmt
         return calendar
     }
 
@@ -31,11 +25,9 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
 
     /// The day with these components, or nil when the date does not exist (for example 2026-02-30).
     public init?(year: Int, month: Int, day: Int) {
-        let components = DateComponents(year: year, month: month, day: day)
-        let calendar = Self.utcCalendar
-        guard let date = calendar.date(from: components),
-            calendar.dateComponents([.year, .month, .day], from: date) == components
-        else {
+        let days = Self.epochDays(year: year, month: month, day: day)
+        let back = Self.civil(epochDays: days)
+        guard year >= 1, back == (year, month, day) else {
             return nil
         }
         self.init(validYear: year, month: month, day: day)
@@ -53,13 +45,15 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
         self.init(year: year, month: month, day: day)
     }
 
+    private init(epochDays: Int) {
+        let (year, month, day) = Self.civil(epochDays: epochDays)
+        self.init(validYear: year, month: month, day: day)
+    }
+
     /// The day `now` falls on in `timeZone`.
     public static func today(in timeZone: TimeZone, now: Date) -> CalendarDay {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let parts = calendar.dateComponents([.year, .month, .day], from: now)
-        return CalendarDay(
-            validYear: parts.year ?? 1970, month: parts.month ?? 1, day: parts.day ?? 1)
+        let local = now.timeIntervalSince1970 + Double(timeZone.secondsFromGMT(for: now))
+        return CalendarDay(epochDays: Int((local / 86_400).rounded(.down)))
     }
 
     /// The day as `YYYY-MM-DD`, for example `2026-10-01`.
@@ -69,7 +63,7 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
 
     /// Monday is 0 and Sunday is 6.
     public var weekdayIndex: Int {
-        (Self.utcCalendar.component(.weekday, from: utcDate) + 5) % 7
+        (Self.epochDays(year: year, month: month, day: day) % 7 + 10) % 7
     }
 
     /// The ISO 8601 week number, 1 to 53.
@@ -79,10 +73,7 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
 
     /// The day `days` after this one (before it when negative).
     public func adding(days: Int) -> CalendarDay {
-        let parts = Self.utcCalendar.dateComponents(
-            [.year, .month, .day], from: utcDate.addingTimeInterval(Double(days) * 86_400))
-        return CalendarDay(
-            validYear: parts.year ?? year, month: parts.month ?? month, day: parts.day ?? day)
+        CalendarDay(epochDays: Self.epochDays(year: year, month: month, day: day) + days)
     }
 
     /// The first Monday to Friday after this day.
@@ -98,8 +89,9 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
     public func startDate(in timeZone: TimeZone) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let parts = DateComponents(year: year, month: month, day: day)
-        return calendar.date(from: parts) ?? utcDate
+        let offset = Double(timeZone.secondsFromGMT(for: utcDate))
+        // Six hours in lands inside the local day whichever way daylight saving shifts midnight.
+        return calendar.startOfDay(for: utcDate.addingTimeInterval(6 * 3600 - offset))
     }
 
     /// Whether this day comes before `other`.
@@ -125,7 +117,32 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
     }
 
     private var utcDate: Date {
-        let parts = DateComponents(year: year, month: month, day: day)
-        return Self.utcCalendar.date(from: parts) ?? Date(timeIntervalSince1970: 0)
+        Date(
+            timeIntervalSince1970: Double(Self.epochDays(year: year, month: month, day: day))
+                * 86_400)
+    }
+
+    /// Days since 1970-01-01 of a proleptic Gregorian date (year 1 or later).
+    private static func epochDays(year: Int, month: Int, day: Int) -> Int {
+        let shifted = year - (14 - month) / 12
+        let era = shifted / 400
+        let yearOfEra = shifted - era * 400
+        let dayOfYear = (153 * ((month + 9) % 12) + 2) / 5 + day - 1
+        let dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+        return era * 146_097 + dayOfEra - 719_468
+    }
+
+    /// The inverse of ``epochDays(year:month:day:)``.
+    private static func civil(epochDays: Int) -> (Int, Int, Int) {
+        let shifted = epochDays + 719_468
+        let era = Int((Double(shifted) / 146_097).rounded(.down))
+        let dayOfEra = shifted - era * 146_097
+        let yearOfEra =
+            (dayOfEra - dayOfEra / 1460 + dayOfEra / 36_524 - dayOfEra / 146_096) / 365
+        let dayOfYear = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100)
+        let monthIndex = (5 * dayOfYear + 2) / 153
+        let day = dayOfYear - (153 * monthIndex + 2) / 5 + 1
+        let month = (monthIndex + 2) % 12 + 1
+        return (yearOfEra + era * 400 + (14 - month) / 12, month, day)
     }
 }

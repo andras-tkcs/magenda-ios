@@ -12,7 +12,7 @@ struct CalendarDayTests {
 
     @Test(
         "An impossible date is rejected",
-        arguments: [(2026, 2, 30), (2026, 13, 1), (2026, 0, 1), (2026, 4, 31), (2025, 2, 29)])
+        arguments: [(2026, 2, 30), (2026, 13, 1), (2026, 0, 1), (2026, 4, 31), (2025, 2, 29), (0, 1, 1)])
     func rejectsImpossibleDates(year: Int, month: Int, day: Int) {
         #expect(CalendarDay(year: year, month: month, day: day) == nil)
     }
