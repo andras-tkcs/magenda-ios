@@ -37,7 +37,7 @@ targets:
       - package: AppCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: name.felhasznalo.magenda
+        PRODUCT_BUNDLE_IDENTIFIER: name.tkcs.magenda
         PRODUCT_NAME: Magenda
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
@@ -64,7 +64,7 @@ targets:
       - target: Magenda
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: name.felhasznalo.magenda.tests
+        PRODUCT_BUNDLE_IDENTIFIER: name.tkcs.magenda.tests
         GENERATE_INFOPLIST_FILE: YES
 
   MagendaUITests:
@@ -76,7 +76,7 @@ targets:
       - target: Magenda
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: name.felhasznalo.magenda.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: name.tkcs.magenda.uitests
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:

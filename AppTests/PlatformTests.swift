@@ -16,7 +16,7 @@ struct PlatformTests {
 
     @Test("The token store saves, overwrites, loads and deletes")
     func tokenStoreRoundTrip() throws {
-        let store = KeychainTokenStore(service: "name.felhasznalo.magenda.tests")
+        let store = KeychainTokenStore(service: "name.tkcs.magenda.tests")
         try store.delete()
         defer { try? store.delete() }
 
@@ -38,7 +38,7 @@ struct PlatformTests {
     @Test("The client credentials store round-trips with and without a secret")
     func clientStoreRoundTrip() throws {
         let store = KeychainClientCredentialsStore(
-            service: "name.felhasznalo.magenda.tests-client")
+            service: "name.tkcs.magenda.tests-client")
         try store.delete()
         defer { try? store.delete() }
 
@@ -57,7 +57,7 @@ struct PlatformTests {
 
     @Test("Settings round-trip through UserDefaults and garbage loads as defaults")
     func settingsRoundTrip() throws {
-        let suite = "name.felhasznalo.magenda.tests.settings"
+        let suite = "name.tkcs.magenda.tests.settings"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = UserDefaultsSettingsStore(defaults: defaults)
