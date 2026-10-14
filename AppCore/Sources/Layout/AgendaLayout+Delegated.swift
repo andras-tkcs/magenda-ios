@@ -65,7 +65,7 @@ extension AgendaLayout {
         let width =
             TemplateGeometry.delegatedColumns.status - 2 * TemplateGeometry.delegatedCellInset
             - bulletWidth
-        var pending = status.map { TextFitter.normalized($0) }.filter { !$0.isEmpty }[...]
+        var pending = ArraySlice(status.map { TextFitter.normalized($0) }.filter { !$0.isEmpty })
         var texts: [String] = []
         var indents: [Double] = []
         while let entry = pending.first, texts.count < TemplateGeometry.delegatedStatusLines {
