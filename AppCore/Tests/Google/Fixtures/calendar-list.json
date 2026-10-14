@@ -1,0 +1,26 @@
+{
+  "kind": "calendar#calendarList",
+  "etag": "\"p33a1b2c3d4e5f6\"",
+  "items": [
+    {
+      "kind": "calendar#calendarListEntry",
+      "id": "ada@example.com",
+      "summary": "ada@example.com",
+      "summaryOverride": "Ada's work",
+      "accessRole": "owner",
+      "primary": true
+    },
+    {
+      "kind": "calendar#calendarListEntry",
+      "id": "team-9f8e@group.calendar.google.com",
+      "summary": "Platform team",
+      "accessRole": "reader"
+    },
+    {
+      "kind": "calendar#calendarListEntry",
+      "id": "holidays-4c2d@group.calendar.google.com",
+      "accessRole": "reader",
+      "primary": false
+    }
+  ]
+}

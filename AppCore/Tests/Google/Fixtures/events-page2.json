@@ -1,0 +1,27 @@
+{
+  "kind": "calendar#events",
+  "timeZone": "Europe/Budapest",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "evt-lunch-1230",
+      "status": "confirmed",
+      "summary": "Lunch",
+      "start": { "dateTime": "2026-09-30T12:30:00+02:00" },
+      "end": { "dateTime": "2026-09-30T13:00:00+02:00" },
+      "attendees": [
+        {
+          "email": "ada@example.com",
+          "self": true,
+          "responseStatus": "declined"
+        }
+      ]
+    },
+    {
+      "kind": "calendar#event",
+      "id": "evt-no-start",
+      "status": "confirmed",
+      "summary": "Event without a start"
+    }
+  ]
+}

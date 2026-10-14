@@ -10,6 +10,8 @@ let package = Package(
     products: [.library(name: "AppCore", targets: ["AppCore"])],
     targets: [
         .target(name: "AppCore", path: "Sources", resources: [.copy("Resources/slots.json")]),
-        .testTarget(name: "AppCoreTests", dependencies: ["AppCore"], path: "Tests"),
+        .testTarget(
+            name: "AppCoreTests", dependencies: ["AppCore"], path: "Tests",
+            resources: [.copy("Google/Fixtures")]),
     ]
 )

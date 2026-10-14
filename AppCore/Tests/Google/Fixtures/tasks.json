@@ -1,0 +1,28 @@
+{
+  "kind": "tasks#tasks",
+  "etag": "\"tasks-etag\"",
+  "items": [
+    {
+      "kind": "tasks#task",
+      "id": "task-invoice",
+      "title": "Send the invoice",
+      "notes": "Use the new template",
+      "status": "needsAction",
+      "due": "2026-09-30T00:00:00.000Z",
+      "position": "00000000000000000001"
+    },
+    {
+      "kind": "tasks#task",
+      "id": "task-untitled",
+      "status": "needsAction",
+      "position": "00000000000000000002"
+    },
+    {
+      "kind": "tasks#task",
+      "id": "task-bad-due",
+      "title": "Ring the supplier",
+      "status": "needsAction",
+      "due": "soon"
+    }
+  ]
+}
