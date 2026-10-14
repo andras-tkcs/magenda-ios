@@ -48,7 +48,7 @@ struct AgendaLayoutDelegatedTests {
     }
 
     private func column(_ page: PagePlan, x0: Double) -> [TextRun] {
-        runs(page).filter { $0.container.x0 == x0 && $0.container.y0 >= 129.5 }
+        runs(page).filter { abs($0.container.x0 - x0) < 0.001 && $0.container.y0 >= 129.5 }
             .filter { $0.container.y0 < 628.2 }
     }
 
@@ -117,7 +117,8 @@ struct AgendaLayoutDelegatedTests {
     @Test("A row grows by one line height for each line beyond two")
     func rowHeight() throws {
         let long = (1...5).map { "Line \($0)" }
-        let page = try delegatedPages(plan([item(status: long), item(status: ["Short"])]))[0]
+        let page = try delegatedPages(
+            plan([item(status: long), item(status: ["Short"]), item(status: ["Short"])]))[0]
         let tops = borders(page).map(\.y)
         #expect(abs(tops[1] - tops[0] - (49.8 + 3 * 11)) < 0.001)
         #expect(abs(tops[2] - tops[1] - 49.8) < 0.001)
