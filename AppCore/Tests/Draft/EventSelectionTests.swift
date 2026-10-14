@@ -81,8 +81,8 @@ struct EventSelectionTests {
             event("Zed", id: "1", start: .timed(at(10))),
             event("Beta", id: "2", start: .timed(at(9))),
             event("Alpha", id: "3", start: .timed(at(9))),
-            event("Gamma", id: "4", start: .timed(at(9, 30)), uid: "x"),
-            event("Gamma", id: "5", start: .timed(at(9, 30)), uid: "y"),
+            event("Gamma", id: "4", uid: "x", start: .timed(at(9, 30))),
+            event("Gamma", id: "5", uid: "y", start: .timed(at(9, 30))),
         ]
         let expected = ["primary|3", "primary|2", "primary|4", "primary|5", "primary|1"]
         #expect(drafts(events).map(\.id) == expected)
@@ -286,7 +286,7 @@ struct EventSelectionTests {
         #expect(
             notices([event("Away  trip", type: "outOfOffice")])
                 == ["You're out of office on this day (“Away trip”)."])
-        #expect(notices([event("Vacation", start: .allDay(day), status: "cancelled")]).isEmpty)
+        #expect(notices([event("Vacation", status: "cancelled", start: .allDay(day))]).isEmpty)
     }
 
     @Test("Untitled and unrelated events give no out-of-office notice")
