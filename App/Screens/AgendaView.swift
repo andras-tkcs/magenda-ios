@@ -29,6 +29,7 @@ struct AgendaView: View {
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var preferredColumn = NavigationSplitViewColumn.sidebar
     @State private var showsSettings = false
+    @State private var editing: EditTarget?
 
     private var canRender: Bool {
         controller.status == .ready && controller.draft != nil
@@ -63,9 +64,31 @@ struct AgendaView: View {
         .sheet(isPresented: $showsSettings) {
             Text("Settings")
         }
+        .sheet(item: $editing) { target in
+            editSheet(for: target)
+        }
         .onChange(of: controller.rendered) { _, rendered in
             if rendered != nil {
                 preferredColumn = .detail
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func editSheet(for target: EditTarget) -> some View {
+        switch target {
+        case .event(let id):
+            if let event = controller.draft?.events.first(where: { $0.id == id }) {
+                EditTextSheet(
+                    target: target, text: event.title, originalTitle: event.originalTitle)
+            }
+        case .task(let id):
+            if let task = controller.draft?.tasks.first(where: { $0.id == id }) {
+                EditTextSheet(target: target, text: task.text, originalTitle: nil)
+            }
+        case .delegated(let id):
+            if let task = controller.draft?.delegated.first(where: { $0.id == id }) {
+                EditTextSheet(target: target, text: task.text, originalTitle: nil)
             }
         }
     }
@@ -117,19 +140,21 @@ struct AgendaView: View {
                 }
                 Section("Schedule and meetings") {
                     ForEach(Array(draft.events.enumerated()), id: \.element.id) { index, event in
-                        EventRow(event: event, index: index, onEdit: {})
+                        EventRow(
+                            event: event, index: index, onEdit: { editing = .event(event.id) })
                     }
                 }
                 Section("To-do list") {
                     ForEach(Array(draft.tasks.enumerated()), id: \.element.id) { index, task in
-                        TaskRow(task: task, index: index, onEdit: {})
+                        TaskRow(task: task, index: index, onEdit: { editing = .task(task.id) })
                     }
                 }
                 if !draft.delegated.isEmpty {
                     Section("Delegated") {
                         ForEach(Array(draft.delegated.enumerated()), id: \.element.id) {
                             index, task in
-                            DelegatedRow(task: task, index: index, onEdit: {})
+                            DelegatedRow(
+                                task: task, index: index, onEdit: { editing = .delegated(task.id) })
                         }
                     }
                 }

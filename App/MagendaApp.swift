@@ -26,5 +26,6 @@ struct MagendaApp: App {
                     .accessibilityIdentifier("templateError")
             }
         }
+        .commands { AgendaCommands(controller: controller) }
     }
 }
