@@ -39,16 +39,17 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(done.exists, "the settings sheet never opened after \(taps) taps")
     }
 
-    /// Scrolls the form until `target` exists and can be tapped.
+    /// Scrolls the form until `target` exists and can be tapped. A lazy row does not exist until
+    /// it is scrolled near, so existence is polled briefly between swipes.
     @MainActor
     private func reveal(_ app: XCUIApplication, _ target: XCUIElement) {
-        _ = target.waitForExistence(timeout: 30)
         var swipes = 0
-        while !target.isHittable && swipes < 10 {
+        while !(target.exists && target.isHittable) && swipes < 10 {
+            if target.waitForExistence(timeout: 3) && target.isHittable { break }
             app.swipeUp()
             swipes += 1
         }
-        XCTAssertTrue(target.exists, "\(target) never appeared")
+        XCTAssertTrue(target.waitForExistence(timeout: 30), "\(target) never appeared")
     }
 
     @MainActor
