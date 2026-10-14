@@ -105,7 +105,7 @@ struct AgendaLayoutDelegatedTests {
             return
         }
         #expect(width == 3.0)
-        #expect(borders(page).map(\.width) == [3.0, 0.5, 0.5])
+        #expect(borders(page).map(\.width) == [3.0, 0.5])
     }
 
     @Test("The cadence label is the first line of the task cell")
