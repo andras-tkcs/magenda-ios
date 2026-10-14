@@ -79,12 +79,17 @@ final class AgendaScreenUITests: XCTestCase {
         XCTAssertTrue(element(app, "eventPageToggle.1").exists)
         XCTAssertFalse(element(app, "eventPageToggle.0").exists)
 
-        // The tap goes to the system switch inside the toggle, not to the toggle's own frame.
-        element(app, "eventToggle.1").switches.firstMatch.tap()
-        let gone = expectation(
-            for: NSPredicate(format: "exists == false"),
-            evaluatedWith: element(app, "eventPageToggle.1"))
-        wait(for: [gone], timeout: 10)
+        // The tap goes to the system switch inside the toggle. On an iPad simulator a synthesized
+        // tap in the split view's sidebar is sometimes dropped, so the switch is tapped again
+        // while the event is still included (the notes-page switch only exists then).
+        let page = element(app, "eventPageToggle.1")
+        var taps = 0
+        while page.exists && taps < 5 {
+            element(app, "eventToggle.1").switches.firstMatch.tap()
+            taps += 1
+            _ = page.waitForNonExistence(timeout: 3)
+        }
+        XCTAssertFalse(page.exists, "the notes-page switch is still there after \(taps) taps")
     }
 
     @MainActor
@@ -131,42 +136,5 @@ final class AgendaScreenUITests: XCTestCase {
         } else {
             XCTAssertFalse(list.isHittable, "the list is still in front of the preview on iPhone")
         }
-    }
-
-    // PROBE: temporary, prints where taps on an iPad row switch land; never fails.
-    /// Taps around the include switch until it or the notes-page switch flips.
-    @MainActor
-    private func sweep(_ name: String, extra: [String] = []) {
-        let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "standard"] + extra
-        app.launch()
-        let include = app.switches["eventToggle.1"]
-        let page = app.switches["eventPageToggle.1"]
-        guard page.waitForExistence(timeout: 30) else {
-            print("PROBE \(name): never appeared")
-            return
-        }
-        let frame = include.frame
-        let origin = app.coordinate(withNormalizedOffset: .zero)
-        let offsets: [(CGFloat, CGFloat)] = [
-            (0, 0), (0, -16), (0, 16), (0, -32), (0, 32), (-10, 0), (10, 0), (-20, -32),
-        ]
-        for (dx, dy) in offsets {
-            let point = CGVector(dx: frame.midX + dx, dy: frame.midY + dy)
-            origin.withOffset(point).tap()
-            _ = page.waitForNonExistence(timeout: 3)
-            let state = "include \(String(describing: include.value)) page "
-                + (page.exists ? String(describing: page.value) : "gone")
-            print("PROBE \(name) tap \(dx),\(dy) at \(point): \(state) frame now \(include.frame)")
-            if !page.exists || String(describing: page.value) == "Optional(0)" { break }
-        }
-    }
-
-    @MainActor
-    func testProbeSwitchTaps() {
-        sweep("split 1")
-        sweep("split 2")
-        sweep("stack 1", extra: ["-ProbeStack"])
-        sweep("stack 2", extra: ["-ProbeStack"])
     }
 }

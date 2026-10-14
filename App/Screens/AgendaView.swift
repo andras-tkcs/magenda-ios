@@ -49,19 +49,6 @@ struct AgendaView: View {
     }
 
     var body: some View {
-        // PROBE: temporary, shows the list in a stack instead of the split view's sidebar.
-        if ProcessInfo.processInfo.arguments.contains("-ProbeStack") {
-            NavigationStack {
-                sidebar
-                    .navigationTitle("Agenda")
-                    .toolbar { toolbar }
-            }
-        } else {
-            splitView
-        }
-    }
-
-    private var splitView: some View {
         NavigationSplitView(
             columnVisibility: $columnVisibility, preferredCompactColumn: $preferredColumn
         ) {
@@ -117,13 +104,8 @@ struct AgendaView: View {
                 if !draft.notices.isEmpty {
                     Section("Notices") {
                         ForEach(Array(draft.notices.enumerated()), id: \.offset) { index, notice in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .foregroundStyle(.orange)
-                                    .accessibilityHidden(true)
-                                Text(notice)
-                                    .accessibilityIdentifier(ID.notice(index))
-                            }
+                            Text(notice)
+                                .accessibilityIdentifier(ID.notice(index))
                         }
                         if controller.showsNextWorkingDay {
                             Button("Go to next working day") {
