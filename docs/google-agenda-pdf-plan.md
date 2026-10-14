@@ -1,23 +1,36 @@
-# Plan: Magenda for iOS, fed by Google Calendar and Google Tasks
+# Plan: Magenda for iPad, fed by Google Calendar and Google Tasks
 
 ## Goal
 
-Port [Magenda](https://github.com/andras-tkcs/magenda) to this iOS app. Today Magenda is a macOS MCP
-server: Claude hands it a date, meetings, a daily schedule, to-dos and delegated tasks, and it
-renders a daily agenda PDF laid out exactly like its Word template. The iOS app does the same
-without Claude: the user signs in with Google, picks a date, reviews what the app pulled from
-**Google Calendar** (meetings and the daily schedule) and **Google Tasks** (the to-do list, and the
-delegated-tasks page from a second task list), optionally unticks or edits items, taps **Render**,
-sees the PDF in an in-app **preview**, and sends it anywhere with the iOS **share** button.
-Settings choose the calendars, the two task lists, the font pack and the five accent colors. iOS's
-own calendar (EventKit) is not used.
+Port [Magenda](https://github.com/andras-tkcs/magenda) and the user's "magenda-daily-binder" Claude
+skill to this app, with no AI anywhere. Today a Claude session runs the skill: it reads Google
+Calendar and two Google Tasks lists through an MCP gateway, applies the skill's selection rules,
+makes a few judgement calls (shortening long meeting titles, spotting personal blocks, merging
+duplicates), hands the result to the Magenda MCP server, which renders a daily agenda PDF laid out
+exactly like its Word template, and uploads it. The app does the same deterministically: the user
+signs in with Google, picks a date, reviews what the app selected from **Google Calendar**
+(schedule and meeting pages) and **Google Tasks** (the "Claude" list for the to-do list, the
+"Claude Delegations" list for the delegated-tasks page), sees every item's reason ("Declined",
+"Personal block", "No other attendees", "Overdue", "Check-in due"…), optionally unticks or edits
+items, taps **Render**, sees the PDF in an in-app **preview**, and sends it with the iOS **share**
+button (the user imports it into Noteshelf 3 from the share sheet). Data always comes live from
+Google's REST APIs; iOS's own calendar (EventKit) is not used, because it syncs late.
+
+Every judgement call Claude makes today becomes a fixed, editable rule (Design, "Binder rules"):
+an exclude list for personal blocks, a strip list for title prefixes, a short name saved per
+recurring meeting, same-title duplicates merged, "to be discussed" tasks kept only when that person
+is in a meeting that day, and a manual edit as the last resort. The app is designed for iPad first
+(split view with the preview beside the list, any window size, keyboard shortcuts) and still runs
+on iPhone.
 
 Long event titles and long task names must never break the layout, in the PDF or in the app's
 screens: the PDF fits text with fixed rules (shrink, wrap, cut with "…", cap lines, move what does
 not fit to a warning), and every rendered plan is checked by an automated layout audit, on Linux
 with a deterministic fake font and on simulators with the real fonts.
 
-There is no tracking issue.
+There is no tracking issue. The skill text the rules come from was pasted by the user into the
+planning session on 2026-10-14; the rules it contains are restated in full under "Binder rules", so
+no phase needs the skill itself.
 
 ## Current state
 
@@ -63,6 +76,39 @@ There is no tracking issue.
   mutation time; `src/magenda/text_fit.py` measures with PIL; `src/magenda/calendar_math.py`
   does the header and "next four weeks" dates; `src/magenda/layout_constants.py` holds the
   numbers; `src/magenda/theme.py` maps a slot's role to a color.
+
+**The daily-binder skill** (Claude skill "magenda-daily-binder", pasted by the user; not in any
+repository) is the workflow the app replaces. Its rules, which the Design turns into code:
+
+1. Resolve the date. Only when the date was inferred from relative wording ("tomorrow"): if it is a
+   Saturday or Sunday, or has an all-day event titled like "OOO", "Out of Office", "Vacation" or
+   "PTO" (not a location marker like "Home"), stop and ask.
+2. Read the primary calendar for the day. Ignore all-day events. Leave out personal/break blocks
+   ("Lunch", "Start the day"), recognised "by their nature" — **an AI judgement**.
+3. Drop events the user declined (their own attendee entry is `declined`). A meeting page only when
+   at least one attendee is neither the user nor a room (`…@resource.calendar.google.com`); go by
+   attendees, never by title.
+4. Schedule: every surviving event at its start time, 08:00–18:59, full title (Magenda cuts it).
+5. Personal tasks from the Google Tasks list titled "Claude" (looked up by title each run; never
+   another list; stop if missing): overdue first, then due on the day, then due within the next 5
+   days "if there's room", skipping look-ahead titles like "… - to be discussed" / "TBD". Each task
+   is `{text: "<title>: <notes>", due: "MM/DD"}` (no ": <notes>" when notes are empty).
+6. Delegated tasks from the list titled "Claude Delegations" (stop if missing): title `Owner: Task`;
+   description's first line `#daily` / `#weekly` / `#monthly`; status = the **last two** lines of
+   the oldest-first log below it (one line if only one); a task that does not parse is flagged.
+   Marked when its `due` (the next check-in date) is on or before the day. All are included.
+7. Meeting-page titles over ~35 characters wrap in Magenda (a bug), so Claude shortens them by hand,
+   dropping prefixes ("REMINDER // ") and filler — **an AI judgement**.
+8. Render, upload to a Drive folder, and write a summary of what was left out and why.
+
+The user's own review of four recent runs (Sep 22, Sep 28, Oct 1, Oct 8) listed what Claude changed
+beyond those rules: meeting titles shortened (3 of 4 runs, e.g. a long recurring title starting with
+"CONDITIONAL" rewritten to about 30 characters, "(temp) weekly …" losing both prefixes); task notes cut because the to-do
+list ran past 18 rows; personal blocks spotted by nature; a duplicate "Quarterly Summit" at 08:00 and
+08:30 merged; "Peter – to be discussed" kept because a 1:1 with Peter was that day; a 07:00
+event given a meeting page but no schedule slot; the closing summary. The user chose: no AI at all
+(no on-device model either), output through the iOS share sheet only (no Drive upload), the date
+picked in the app (no scheduled runs), iPad first while keeping iPhone.
 
 Measured problems in the Python output that this port must not copy (rendered with the commit
 above):
@@ -134,7 +180,10 @@ phase that introduces the protocol and not edited by later phases.
   `public`, and every public struct or class gets an explicit `public init` taking all its stored
   properties in declaration order (Swift's memberwise initializer is internal), unless listed
   here as internal: `TextPlacer`, `TextAlignment`, `TemplateGeometry`, and the private helpers of
-  `AgendaLayout`'s extensions. Test files use `@testable import AppCore` only when they need one
+  `AgendaLayout`'s extensions. Where the Design gives a type's initializers (for example
+  `GoogleOAuthConfiguration.init?(clientID:)`, `CalendarDay.init?`, `TemplateManifest`,
+  `AgendaController`, `InMemorySettingsStore`, `TextFitter`, `GoogleSession`), those are its only
+  public initializers; never add a memberwise one that skips their validation. Test files use `@testable import AppCore` only when they need one
   of those internal types; otherwise plain `import AppCore`.
 - **Coverage-friendly code.** Colors are written as `RGBColor(red: 0x08, green: 0x30, blue: 0x50)`
   literals, never through the failable `RGBColor(hex:)`. A template slot missing from the
@@ -153,12 +202,14 @@ public struct CalendarDay: Hashable, Comparable, Codable, Sendable {
     public var weekdayIndex: Int                            // Monday 0 … Sunday 6
     public var isoWeek: Int                                 // ISO 8601 week number
     public func adding(days: Int) -> CalendarDay
+    public func nextWeekday() -> CalendarDay                // the first Monday–Friday after self
     public func startDate(in timeZone: TimeZone) -> Date    // local midnight
 }
 ```
 
 All arithmetic uses `Calendar(identifier: .gregorian)` with `TimeZone(identifier: "UTC")` internally,
-and `Calendar(identifier: .iso8601)` for `isoWeek`.
+and `Calendar(identifier: .iso8601)` for `isoWeek` (if the `core` job on Linux gives a wrong ISO
+week with it, stop blocked with the test output).
 
 `CalendarMath` (enum):
 
@@ -181,7 +232,8 @@ for hour 8…18 and nil otherwise.
 public enum Cadence: String, Codable, CaseIterable, Sendable { case daily, weekly, monthly
     public var label: String                                // "Daily", "Weekly", "Monthly"
 }
-public struct TodoItem: Equatable, Sendable { public var text: String; public var due: String }
+public struct TodoItem: Equatable, Sendable { public var text: String; public var notes: String; public var due: String }
+// text = the task title; notes = its notes ("" when none); due = "MM/DD" or ""
 public struct ScheduleEntry: Equatable, Sendable { public var slot: Int; public var text: String; public var meetingIndex: Int? }
 public struct DelegatedItem: Equatable, Sendable {
     public var text: String; public var owner: String; public var cadence: Cadence
@@ -249,13 +301,15 @@ to that color's default (never fails).
 - `func ellipsized(_ text: String, font: FontSpec, maxWidth: Double) -> String`: the longest prefix
   of whole `Character`s (so an emoji or a ZWJ family is never split), with trailing spaces removed,
   such that `prefix + "…"` measures ≤ `maxWidth`; returns `prefix + "…"`, or `""` if even `"…"`
-  does not fit. Always appends the ellipsis (U+2026).
+  does not fit. Always appends the ellipsis (U+2026). The prefix length is found by binary search
+  over the `Character` count (width grows with length), never by trying every length, because
+  CoreText measuring a 2,000-character string once per length is quadratic.
 - `func singleLine(_ text: String, font: FontSpec, maxWidth: Double) -> String`: `normalized(text)`;
   returned unchanged if it fits, else `ellipsized`.
 - `func wrap(_ text: String, font: FontSpec, maxWidth: Double, maxLines: Int) -> [String]`:
   `normalized(text)`; empty gives `[]`. Greedy by words split on `" "`. A word wider than
   `maxWidth` on its own is broken at `Character` boundaries: take the longest prefix that fits (at
-  least one `Character`), emit it as a line, continue with the rest (this also handles CJK text
+  least one `Character`; found by the same binary search), emit it as a line, continue with the rest (this also handles CJK text
   with no spaces). If the result has more than `maxLines` lines, keep the first `maxLines − 1` and
   make the last one `ellipsized(remaining lines joined with " ")`.
 - `func downsizeOrWrap(_ text: String, pack: FontPack, weight: FontWeight, maxPoints: Double,
@@ -376,9 +430,14 @@ slot's padded box; the container is the padded box widened to `x1 = contentRight
    y-range; `schedule.label` centered in `scheduleBand` × padded y-range; every other static slot
    left in its padded box, container widened to `contentRight`.
 3. To-do rows from `y = todoTop`, for each `TodoItem` in order:
-   - `fitted = downsizeOrWrap(text, pack, .thin, maxPoints: 12, minPoints: 9, maxWidth: 119.0,
-     maxLines: 4)`; `lh = metrics(fitted.font).lineHeight`; `baseLines = max(1, floor(28.35 / lh))`;
-     `rowHeight = 28.35 + max(0, fitted.lines.count − baseLines) × lh`.
+   - The cell shows the skill's `"<title>: <notes>"`, but notes can never take more than one
+     line (they are what overflowed the 18 rows in the Sep 28 run). With `n =
+     TextFitter.normalized(notes)`: if `n` is empty, `fitted = downsizeOrWrap(text, pack, .thin,
+     maxPoints: 12, minPoints: 9, maxWidth: 119.0, maxLines: 3)` and `lines = fitted.lines`.
+     Otherwise `fitted = downsizeOrWrap(text + ":", …same arguments…)` and `lines = fitted.lines
+     + [singleLine(n, fitted.font, maxWidth: 119.0)]`. `lh = metrics(fitted.font).lineHeight`;
+     `baseLines = max(1, floor(28.35 / lh))`; `rowHeight = 28.35 + max(0, lines.count − baseLines)
+     × lh`. Below, "task lines" means `lines`.
    - If `y + rowHeight > todoBottom + 0.5`, this item and every later one go to
      `omittedTodoItems` and the loop stops (order is kept; no later item jumps ahead).
    - Unless it is the first row: `line((56.7, y) → (297.0, y), 083050, 0.75)`.
@@ -450,9 +509,9 @@ weekday names):
 
 | Name | Content |
 |---|---|
-| `typical` | 3 to-dos ("Call the bank" due "Today"; "Send the slides" due "28 Sep"; "Book flights" due ""), schedule slot 2 "Team sync" (meetingIndex 0) and slot 5 "1:1 with Anna" (meetingIndex 1), meetings ["Team sync", "1:1 with Anna"], delegated ("Hire a designer", owner "Anna", weekly, marked, status ["Interviews scheduled", "Two candidates left"]) and ("Renew the office lease", owner "Ben", monthly, not marked, status ["Waiting for the landlord"]) |
-| `longText` | for i in 0…5 with s = `longStrings[i]`: to-do (s, due s); schedule entry slot `i * 4`, text s, meetingIndex i; meeting s; delegated (text s, owner s, cadence `Cadence.allCases[i % 3]`, marked `i % 2 == 0`, status [s, `longStrings[(i + 1) % 7]`, `longStrings[(i + 2) % 7]`]) |
-| `overflow` | 30 to-dos (`longStrings[0]`, due "Today"); 22 schedule entries, slot i, text `longStrings[1]`, meetingIndex i; 25 meetings `"Meeting <i>: " + longStrings[0]`; 40 delegated (text `"Delegated task <i>: " + longStrings[0]`, owner "Alexandra Montgomery-Smith", cadence `Cadence.allCases[i % 3]`, marked `i % 4 == 0`, status five copies of `longStrings[0]`) |
+| `typical` | 3 to-dos ("Call the bank", notes "", due "09/30"; "Send the slides", notes "Ask Ben for the Q3 numbers first", due "09/28"; "Book flights", notes "", due "10/02"), schedule slot 2 "Team sync" (meetingIndex 0) and slot 5 "1:1 with Anna" (meetingIndex 1), meetings ["Team sync", "1:1 with Anna"], delegated ("Hire a designer", owner "Anna", weekly, marked, status ["Interviews scheduled", "Two candidates left"]) and ("Renew the office lease", owner "Ben", monthly, not marked, status ["Waiting for the landlord"]) |
+| `longText` | for i in 0…5 with s = `longStrings[i]`: to-do (text s, notes `longStrings[(i + 1) % 7]`, due s); schedule entry slot `i * 4`, text s, meetingIndex i; meeting s; delegated (text s, owner s, cadence `Cadence.allCases[i % 3]`, marked `i % 2 == 0`, status [s, `longStrings[(i + 1) % 7]`, `longStrings[(i + 2) % 7]`]) |
+| `overflow` | 30 to-dos (text `longStrings[0]`, notes `longStrings[6]`, due "09/30"); 22 schedule entries, slot i, text `longStrings[1]`, meetingIndex i; 25 meetings `"Meeting <i>: " + longStrings[0]`; 40 delegated (text `"Delegated task <i>: " + longStrings[0]`, owner "Alexandra Montgomery-Smith", cadence `Cadence.allCases[i % 3]`, marked `i % 4 == 0`, status five copies of `longStrings[0]`) |
 | `empty` | nothing but the date |
 
 `public static let longStrings: [String]`, exactly:
@@ -467,8 +526,13 @@ weekday names):
 
 ### Google sign-in (`AppCore/Sources/Google/`)
 
-OAuth 2.0 authorization code with PKCE (RFC 7636, S256), Google "iOS" client type (no client
-secret), presented by `ASWebAuthenticationSession` in `App/`. Scopes, exactly:
+OAuth 2.0 authorization code with PKCE (RFC 7636, S256), presented by
+`ASWebAuthenticationSession` in `App/`. The repository is public and ships **no** Google client:
+each user creates their own OAuth client in their own Google Cloud project and enters its client
+ID (and, only if the client type has one, its client secret) in the app on first launch; both are
+kept in the device's Keychain. The recommended client type is "iOS" (no secret, redirect scheme =
+the reversed client ID, which `ASWebAuthenticationSession` handles without any Info.plist URL
+type, so a client ID entered at runtime works). Scopes, exactly:
 `https://www.googleapis.com/auth/calendar.readonly` and
 `https://www.googleapis.com/auth/tasks.readonly`.
 
@@ -481,8 +545,11 @@ public protocol HTTPClient: Sendable { func send(_ request: HTTPRequest) async t
 public protocol SHA256Hashing: Sendable { func sha256(_ data: Data) -> Data }
 
 public struct GoogleOAuthConfiguration: Equatable, Sendable {
-    public init?(clientID: String)       // trimmed; must match ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$
+    public init?(clientID: String, clientSecret: String? = nil)
+        // clientID trimmed, must match ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$;
+        // clientSecret trimmed, empty → nil, otherwise must be 1…200 characters with no whitespace or control characters, else nil
     public let clientID: String
+    public let clientSecret: String?
     public var redirectScheme: String    // "com.googleusercontent.apps." + the part before ".apps.googleusercontent.com"
     public var redirectURI: String       // redirectScheme + ":/oauth2redirect"
     public static let scopes: [String]
@@ -513,7 +580,8 @@ public enum GoogleOAuth {
   `Content-Type: application/x-www-form-urlencoded`. Bodies (form-encoded, each value
   percent-encoded so only `A–Z a–z 0–9 - . _ ~` stay literal): exchange
   `code, client_id, redirect_uri, code_verifier, grant_type=authorization_code`; refresh
-  `client_id, refresh_token, grant_type=refresh_token`. Revoke: `POST
+  `client_id, refresh_token, grant_type=refresh_token`; when `clientSecret` is non-nil,
+  `client_secret` is appended to both, right after `client_id`. Revoke: `POST
   https://oauth2.googleapis.com/revoke`, `Content-Type: application/x-www-form-urlencoded`, body
   `token=<token>` encoded the same way.
 - `tokens(from:)`: status 200 with JSON `access_token` (non-empty), `expires_in` (number),
@@ -534,7 +602,7 @@ public enum GoogleAPIError: Error, Equatable, Sendable {
 
 | Case | `userMessage` |
 |---|---|
-| `notConfigured` | Google sign-in isn't set up in this build. |
+| `notConfigured` | Enter your Google client ID first. |
 | `authorizationCancelled` | Google sign-in was cancelled. |
 | `authorizationFailed` | Google sign-in didn't complete. Try again. |
 | `missingScopes` | Magenda needs to see your calendars and tasks. Sign in again and allow both. |
@@ -547,21 +615,39 @@ public enum GoogleAPIError: Error, Equatable, Sendable {
 ```swift
 public protocol TokenStore: Sendable { func load() throws -> OAuthTokens?; func save(_ tokens: OAuthTokens) throws; func delete() throws }
 public protocol AuthorizedHTTPSending: Sendable { func send(_ request: HTTPRequest) async throws -> HTTPResponse }
+public struct GoogleClientCredentials: Codable, Equatable, Sendable {
+    public let clientID: String; public let clientSecret: String?
+    public init(clientID: String, clientSecret: String?)
+    public var configuration: GoogleOAuthConfiguration? { get }   // GoogleOAuthConfiguration(clientID:clientSecret:)
+}
+public protocol ClientCredentialsStore: Sendable {
+    func load() throws -> GoogleClientCredentials?; func save(_ credentials: GoogleClientCredentials) throws; func delete() throws
+}
+public final class InMemoryClientCredentialsStore: ClientCredentialsStore, @unchecked Sendable {   // NSLock, as InMemorySettingsStore
+    public init(_ credentials: GoogleClientCredentials? = nil)
+}
 public protocol GoogleAccount: Sendable {
+    func configure(_ configuration: GoogleOAuthConfiguration?) async   // nil = no client entered yet
+    func isConfigured() async -> Bool
     func isSignedIn() async -> Bool
     func signIn(authenticate: @escaping @Sendable (URL, String) async throws -> URL) async throws   // (authorization URL, callback scheme) → callback URL
     func signOut() async
 }
 public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
-    public init(configuration: GoogleOAuthConfiguration, http: any HTTPClient, tokens: any TokenStore,
+    public init(configuration: GoogleOAuthConfiguration?, http: any HTTPClient, tokens: any TokenStore,
                 hasher: any SHA256Hashing, now: @escaping @Sendable () -> Date)
 }
-public struct UnconfiguredGoogleAccount: GoogleAccount   // never signed in; signIn throws .notConfigured
 ```
 
 `GoogleSession` behaviour:
 
-- `isSignedIn()`: `tokens.load()` returns a value; a thrown load counts as signed out.
+- `configure(_:)`: stores the configuration. When the new value's `clientID` differs from the
+  current one (including to or from nil), the tokens belong to the old client: delete them (ignoring
+  a delete error) without a revoke request. The same client ID with a new secret keeps the tokens.
+- `isConfigured()`: configuration is non-nil.
+- `isSignedIn()`: false when not configured; otherwise `tokens.load()` returns a value; a thrown
+  load counts as signed out.
+- With no configuration, `signIn` and `send` throw `.notConfigured` before doing anything else.
 - `signIn`: builds an `AuthorizationRequest` with `SystemRandomNumberGenerator`, calls
   `authenticate(request.url, configuration.redirectScheme)`. A thrown `GoogleAPIError` is
   rethrown; any other error becomes `.authorizationFailed`. Then parses the callback, exchanges
@@ -581,10 +667,16 @@ public struct UnconfiguredGoogleAccount: GoogleAccount   // never signed in; sig
 ```swift
 public struct GoogleCalendar: Equatable, Identifiable, Sendable { public let id: String; public let title: String; public let isPrimary: Bool }
 public enum EventStart: Equatable, Sendable { case allDay(CalendarDay), timed(Date) }
+public struct GoogleAttendee: Equatable, Sendable {
+    public let email: String; public let displayName: String?
+    public let isSelf: Bool; public let isResource: Bool; public let responseStatus: String?
+}
 public struct GoogleEvent: Equatable, Sendable {
     public let calendarID: String; public let id: String; public let iCalUID: String?
+    public let recurringEventID: String?
     public let title: String?; public let status: String?; public let start: EventStart
     public let eventType: String?; public let selfResponse: String?
+    public let attendees: [GoogleAttendee]     // every attendee, self and rooms included
 }
 public struct GoogleTaskList: Equatable, Identifiable, Sendable { public let id: String; public let title: String }
 public struct GoogleTask: Equatable, Sendable {
@@ -615,6 +707,11 @@ concatenation of IDs):
   `orderBy=startTime`, `maxResults=250`, `timeZone=<identifier>`. `start.dateTime` (RFC 3339,
   with or without fractional seconds) → `.timed`; `start.date` → `.allDay`; neither → the event
   is skipped. `selfResponse` = the `responseStatus` of the attendee with `"self": true`.
+  `attendees` maps each `attendees[]` entry: `email` (an entry without one is skipped),
+  `displayName`, `isSelf = self == true`, `isResource = resource == true || email` (lowercased)
+  `hasSuffix("@resource.calendar.google.com")`, `responseStatus`; missing `attendees` → `[]`.
+  `recurringEventID` = `recurringEventId`. The query adds no `maxAttendees`, so Google returns
+  every attendee.
 - Task lists: `https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=100`.
 - Tasks: `https://tasks.googleapis.com/tasks/v1/lists/<listId>/tasks?showCompleted=false&showHidden=false&maxResults=100`.
   `due` → `CalendarDay(isoString:)` of its first 10 characters.
@@ -624,16 +721,26 @@ concatenation of IDs):
   `Bundle.module.url(forResource:withExtension:subdirectory: "Fixtures")` from the test target
   (`resources: [.copy("Google/Fixtures")]` on the test target in `Package.swift`).
 
-### From Google data to a draft (`AppCore/Sources/Settings/`, `AppCore/Sources/Draft/`)
+### Settings and binder rules (`AppCore/Sources/Settings/`)
 
 ```swift
 public struct AgendaSettings: Equatable, Codable, Sendable {
     public var fontPack: FontPack = .outfit
     public var colors: ThemeColors = .default
-    public var calendarIDs: [String] = []        // empty means the primary calendar
-    public var todoListID: String? = nil         // nil means the first task list
-    public var delegatedListID: String? = nil    // nil means no delegated page
+    public var calendarIDs: [String] = []                    // empty means the primary calendar
+    public var todoListTitle: String = "Claude"              // the skill's personal-task list
+    public var delegatedListTitle: String = "Claude Delegations"   // "" means no delegated page
+    public var rules: BinderRules = .default
     public var theme: Theme { get }
+}
+public struct BinderRules: Equatable, Codable, Sendable {
+    public var personalBlocks: [String]          // default ["Lunch", "Start the day"]
+    public var titlePrefixes: [String]           // default ["REMINDER //", "REMINDER:", "(temp)", "FW:", "Fwd:", "CONDITIONAL", "weekly"]
+    public var outOfOfficeWords: [String]        // default ["OOO", "Out of Office", "Vacation", "PTO"]
+    public var shortNames: [String: String]      // MeetingTitle key → short meeting-page title; default [:]
+    public var personAliases: [String: String]   // BinderText.fold(name used in tasks) → lowercased attendee email; default [:]
+    public var lookAheadDays: Int                // default 5, clamped to 0…14 when read by the builder
+    public static let `default`: BinderRules
 }
 public protocol SettingsStore: Sendable { func load() -> AgendaSettings; func save(_ settings: AgendaSettings) }
 public final class InMemorySettingsStore: SettingsStore, @unchecked Sendable {   // state guarded by an NSLock; a comment says so
@@ -641,78 +748,223 @@ public final class InMemorySettingsStore: SettingsStore, @unchecked Sendable {  
 }
 ```
 
-Decoding is tolerant: an unknown `fontPack` becomes `.outfit`; a missing field takes its default.
+Task lists are chosen **by title**, as the skill does ("don't hardcode its ID, since it can
+change"). Decoding is tolerant: an unknown `fontPack` becomes `.outfit`; any missing field
+(including any missing `BinderRules` field) takes its default, so a settings blob written by an
+older build still loads.
 
-`DelegatedNotes.parse(_ notes: String?) -> DelegatedNotes` (`owner`, `cadence`, `marked`,
-`status: [String]`, `warning: String?`). Notes format, documented for users in the README:
+`BinderText` (enum), the only place the rules compare text:
+
+- `static func fold(_ text: String) -> String`: `TextFitter.normalized(text)`, then
+  `.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)`, then
+  `.lowercased()`. `fold("Zoltán") == fold("ZOLTAN") == "zoltan"`.
+- `static func startsWithPhrase(_ text: String, _ phrase: String) -> Bool`: with `t = fold(text)`
+  and `p = fold(phrase)`: false when `p` is empty; true when `t == p`; true when `t.hasPrefix(p)`
+  and either `p`'s last `Character` is not a letter or digit, or the `Character` of `t` right after
+  the prefix is not a letter or digit. So "Lunch" matches "Lunch", "lunch with Sam" and "Lunch:
+  team", not "Lunchtime"; "FW:" matches "FW:Budget".
+- `static func containsPhrase(_ text: String, _ phrase: String) -> Bool`: false for an empty
+  folded phrase; true when `p` occurs in `t` at a position where the `Character` before it (if
+  any) and the `Character` after it (if any) are not letters or digits. So "OOO" matches "OOO -
+  Budapest" and "Vacation" matches "Summer vacation", while "PTO" does not match "Photography".
+
+`MeetingTitle` (enum), the meeting-page title rules that replace Claude's shortening:
+
+- `static func key(originalTitle: String, recurringEventID: String?) -> String`:
+  `"r:" + recurringEventID` when it is non-nil and non-empty, else `"t:" + fold(originalTitle)`.
+  Every instance of a recurring meeting shares one key, so a short name is entered once.
+- `static func stripped(_ title: String, prefixes: [String]) -> String`: `t =
+  TextFitter.normalized(title)`; repeat until no prefix matches: for the first prefix in list order
+  with `startsWithPhrase(t, prefix)`, drop the prefix's length in `Character`s (the folded and
+  original strings have the same number of `Character`s for these inputs; take the count from
+  `TextFitter.normalized(prefix)`), then drop leading characters from the set `" -–—:/|·"`. If the
+  result is empty, return `TextFitter.normalized(title)`. Otherwise uppercase its first
+  `Character` if that is a lowercase letter. Examples (with the default prefixes, all in the
+  tests): "REMINDER // Decision about the office move" → "Decision about the office move";
+  "(temp) weekly budget / invoice review" → "Budget / invoice review"; "FW: Fwd: Contract
+  deadline" → "Contract deadline"; "Weekly" → "Weekly" (nothing left, so unchanged); "Weekly sync" →
+  "Sync"; "CONDITIONAL Product - Cross Team Roadmap Planning Alignment & Tracking" →
+  "Product - Cross Team Roadmap Planning Alignment & Tracking" (the layout then cuts it
+  with "…" unless a short name is saved).
+- `static func pageTitle(originalTitle: String, recurringEventID: String?, rules: BinderRules) ->
+  String`: the normalized `rules.shortNames[key(…)]` when it is non-empty, else `stripped(…)`.
+
+The meeting-page title is only the default. The user can edit it per agenda, and the edit sheet
+can save it as the meeting's short name (`AgendaController.saveShortName`). A title that is still
+too long is cut with "…" by the layout, never wrapped (`singleLine` in "Layout rules"), which is
+the Magenda bug the skill was working around.
+
+`TaskTitle` (enum):
+
+- `static func isDiscussion(_ title: String) -> Bool`: with `t = fold(title)`, true when `t` ends
+  with `"to be discussed"` or `containsPhrase(title, "tbd")`.
+- `static func discussionName(_ title: String) -> String?`: the regex
+  `^(.+?)\s*[-–—:]\s*(?:to be discussed|tbd)\s*$` (case-insensitive) on
+  `TextFitter.normalized(title)`; capture group 1 trimmed, or nil. "Peter – to be discussed" →
+  "Peter"; "Zoltán - TBD" → "Zoltán"; "TBD" → nil. Use `NSRegularExpression` (Linux-safe).
+
+`DelegatedTask.parse(title: String?, notes: String?) -> DelegatedTask` with `owner`, `text`,
+`cadence`, `status: [String]`, `warning: String?`, the delegated-tasks format the skill reads:
 
 ```
-Owner: Anna
-Cadence: weekly
-Marked: yes
-Interviews scheduled
-Two candidates left
+Title:  Sam: Countersign the supplier agreement
+Notes:  #weekly
+        2026-08-13 Delegated to Sam.
+        2026-08-20 Followed up — waiting on their lawyer.
+        2026-08-27 Countersigned copy received, filing pending.
 ```
 
-Lines are split on `\n`. Leading lines matching `^\s*(owner|cadence|marked)\s*:\s*(.*)$`
-(case-insensitive) are fields, in any order, until the first non-empty line that does not match;
-blank lines among them are skipped. Every remaining non-empty trimmed line is one status bullet.
-Defaults: owner `""`, cadence daily, marked false. Cadence values daily/weekly/monthly ignoring
-case; anything else gives daily and `warning = "Unknown cadence “<value>” — shown as Daily."`.
-Marked is true for `yes`, `y`, `true`, `x`, `1` ignoring case.
+- Title: `TextFitter.normalized(title ?? "")`, split at the **first** `":"`; `owner` = the
+  trimmed part before it, `text` = the trimmed part after it. With no colon, or an empty part on
+  either side: `owner = ""`, `text` = the whole normalized title, and the warning
+  `No “Owner: Task” title — shown without an owner.`
+- Notes: split on `"\n"`, each line trimmed, empty lines dropped. If the first line, folded, is
+  exactly `#daily`, `#weekly` or `#monthly`, that is the cadence and the line is consumed; otherwise
+  cadence is `.daily`, nothing is consumed, and the warning
+  `No #daily, #weekly or #monthly on the first line — shown as Daily.`
+- `status` = the last two remaining lines in their original order (one if only one, none if
+  none). Lines are kept as written, dates included.
+- Both warnings → joined with one space in the order above.
+
+### From Google data to a draft (`AppCore/Sources/Draft/`)
 
 ```swift
+public enum EventExclusion: String, Equatable, Sendable {
+    case declined, personalBlock, duplicate
+    public var label: String     // "Declined", "Personal block", "Duplicate of an earlier event"
+}
 public struct DraftEvent: Equatable, Identifiable, Sendable {
-    public let id: String                 // "<calendarID>|<event id>"
-    public let originalTitle: String; public var title: String
+    public let id: String                      // "<calendarID>|<event id>"
+    public let originalTitle: String           // normalized; "(No title)" when empty
+    public var title: String                   // meeting-page title, MeetingTitle.pageTitle by default
+    public var defaultTitle: String            // what a blank edit restores; starts equal to title
+    public let shortNameKey: String            // MeetingTitle.key(originalTitle:recurringEventID:)
     public let start: Date; public let timeText: String   // "HH:mm", 24-hour, local
-    public let scheduleSlot: Int?         // nil when the event starts before 8:00 or after 18:59
-    public var includesMeetingPage: Bool  // true by default
+    public let scheduleSlot: Int?              // nil when the event starts before 8:00 or after 18:59
+    public let exclusion: EventExclusion?
+    public let hasOtherAttendees: Bool
+    public let attendeeEmails: [String]        // lowercased, other non-resource attendees
+    public let attendeeFirstNames: [String]    // BinderText.fold of each one's first name
+    public var isIncluded: Bool                // exclusion == nil by default
+    public var includesMeetingPage: Bool       // isIncluded && hasOtherAttendees by default
+    public var reasons: [String] { get }
+}
+public enum TaskBucket: String, Equatable, Sendable { case overdue, today, upcoming
+    public var label: String                   // "Overdue", "Due today", "Upcoming"
 }
 public struct DraftTask: Equatable, Identifiable, Sendable {
-    public let id: String; public let originalText: String; public var text: String
-    public let dueText: String; public var isIncluded: Bool   // true by default
+    public let id: String                      // GoogleTask.id
+    public let originalText: String; public var text: String
+    public let notes: String                   // normalized; "" when none
+    public let dueText: String                 // "MM/DD"
+    public let bucket: TaskBucket
+    public let reason: String?                 // why a discussion task was kept or left out
+    public var isIncluded: Bool
 }
 public struct DraftDelegated: Equatable, Identifiable, Sendable {
-    public let id: String; public let originalText: String; public var text: String
+    public let id: String                      // GoogleTask.id
+    public let originalText: String            // the parsed DelegatedTask.text
+    public var text: String
     public let owner: String; public let cadence: Cadence; public let marked: Bool
-    public let status: [String]; public let warning: String?; public var isIncluded: Bool
+    public let status: [String]; public let warning: String?; public var isIncluded: Bool  // true by default
 }
 public struct AgendaDraft: Equatable, Sendable {
     public let date: CalendarDay
+    public var notices: [String]               // shown above the lists; never in the PDF
+    public let titlePrefixes: [String]         // the builder's rules.titlePrefixes
     public var events: [DraftEvent]; public var tasks: [DraftTask]; public var delegated: [DraftDelegated]
-    public mutating func setTitle(_ text: String, forEvent id: String)       // normalized; blank → originalTitle
-    public mutating func setText(_ text: String, forTask id: String)
-    public mutating func setText(_ text: String, forDelegated id: String)
-    public mutating func setMeetingPage(_ on: Bool, forEvent id: String)
+    public mutating func setTitle(_ text: String, forEvent id: String)       // normalized; blank → defaultTitle
+    public mutating func applyShortName(_ title: String, key: String)        // see below
+    public mutating func setText(_ text: String, forTask id: String)         // normalized; blank → originalText
+    public mutating func setText(_ text: String, forDelegated id: String)    // normalized; blank → originalText
+    public mutating func setIncluded(_ on: Bool, forEvent id: String)        // off also clears includesMeetingPage; on restores it to hasOtherAttendees
+    public mutating func setMeetingPage(_ on: Bool, forEvent id: String)     // ignored while the event is not included
     public mutating func setIncluded(_ on: Bool, forTask id: String)
     public mutating func setIncluded(_ on: Bool, forDelegated id: String)
     public func content() -> AgendaContent
 }
 public struct AgendaBuilder: Sendable {
-    public init(timeZone: TimeZone)
+    public init(timeZone: TimeZone, rules: BinderRules)
     public func draft(for day: CalendarDay, events: [GoogleEvent], tasks: [GoogleTask], delegated: [GoogleTask]) -> AgendaDraft
 }
 ```
 
-Builder rules:
+`applyShortName(title, key:)`: for every event whose `shortNameKey == key`, sets both `title`
+and `defaultTitle` to `TextFitter.normalized(title)`, or, when that is empty, to
+`MeetingTitle.stripped(originalTitle, prefixes: titlePrefixes)` (the short name was removed).
 
-- Events: drop `status == "cancelled"`, `.allDay` starts, `eventType` in `workingLocation`,
-  `outOfOffice`, `birthday`, `selfResponse == "declined"`, and events whose local start day is not
-  `day`. Deduplicate by `iCalUID ?? id`, keeping the first (input order is calendar order). Sort by
-  start, then title. Title = `TextFitter.normalized(title ?? "")`, or `(No title)` when empty.
-- To-do tasks: `status == "needsAction"`, normalized title non-empty, `due == nil || due <= day`.
-  Order: dated tasks by due ascending (ties by `position`, then input order), then undated tasks
-  by `position` (nil last, then input order). `dueText`: nil → `""`; equal to `day` → `Today`;
-  otherwise `"<day> <monthAbbreviation>"` (`28 Sep`).
-- Delegated: `status == "needsAction"`, normalized title non-empty, notes parsed as above, input
-  order (the layout sorts).
-- `content()`: schedule groups every event that has a `scheduleSlot` (toggles do not remove events
-  from the schedule) by slot, in start order; text = their titles joined with `" / "`;
-  `meetingIndex` set only when the slot holds exactly one event and that event has a meeting page,
-  and then it is that event's position within `meetings` (not within `events`).
-  `meetings` = titles of events with `includesMeetingPage`, in order. `todoItems` = included tasks
-  `(text, dueText)`. `delegated` = included items.
+**Event rules** (in `AppCore/Sources/Draft/EventSelection.swift`, `enum EventSelection` with
+`static func draftEvents(for day:, events:, timeZone:, rules:) -> [DraftEvent]` and
+`static func notices(for day:, events:, timeZone:, rules:) -> [String]`):
+
+1. Not listed at all: `status == "cancelled"`; `eventType` in `workingLocation`, `outOfOffice`,
+   `birthday`; `.allDay` starts (they only feed the notices); a timed start whose local day is not
+   `day`.
+2. Sort the rest by start, then `originalTitle`, then input order (input order is calendar order).
+3. Walk them in that order. The first matching rule sets `exclusion`:
+   `selfResponse == "declined"` → `.declined`; `startsWithPhrase(originalTitle, p)` for any `p` in
+   `rules.personalBlocks` → `.personalBlock`; the same `iCalUID ?? id` as an earlier event in this
+   walk that has no exclusion, or the same `fold(originalTitle)` as such an event that started
+   less than 120 minutes earlier → `.duplicate` (so the earliest one stays: the "Quarterly Summit"
+   08:00 / 08:30 case, while a "Team sync" at 09:00 and another at 15:00 are both kept).
+4. `hasOtherAttendees` = some attendee has `!isSelf && !isResource && responseStatus !=
+   "declined"`. `attendeeEmails` and `attendeeFirstNames` come from those same attendees; the
+   first name is the first space-separated word of `displayName` when it is non-empty, else the
+   email's local part up to the first `.`, `_`, `-` or `+`; folded.
+5. `title` = `MeetingTitle.pageTitle(originalTitle:recurringEventID:rules:)`; `scheduleSlot` =
+   `ScheduleSlot.index(hour:minute:)` of the local start; `timeText` from a `Calendar` in the
+   builder's time zone with `String(format: "%02d:%02d", hour, minute)`.
+6. `reasons`, in this order, exact strings: `exclusion?.label`; `"No meeting page: no other
+   attendees"` when `exclusion == nil && !hasOtherAttendees`; `"Not on the schedule: outside
+   8:00–18:59"` when `scheduleSlot == nil`; `"Page title: <title>"` when `includesMeetingPage &&
+   title != originalTitle`.
+
+**Notices** (in the same file), in this order:
+
+- `day.weekdayIndex >= 5` → `"<Weekday>, <d> <Month> is a weekend."` with the weekday and month
+  names from `CalendarMath` passed through `.capitalized` ("Saturday, 3 October is a weekend.").
+- For the first all-day event (any calendar read, not cancelled, start day ≤ `day`: a multi-day
+  "Vacation" that began earlier is returned by Google for every day it covers, and the query only
+  returns events overlapping `day`), or timed event with `eventType == "outOfOffice"` whose local
+  start day (in `timeZone`) is `day`, whose title `containsPhrase` any of
+  `rules.outOfOfficeWords`, or whose `eventType == "outOfOffice"`: `"You're out of office on this
+  day (“<title>”)."` with the normalized title, or `(No title)` when it is empty. An all-day "Home" or "Office" matches nothing and gives no notice.
+
+The skill stops and asks in these cases; the app shows the notice, keeps the date, and offers a
+"Go to next working day" button (Screens). Nothing is blocked: the user picked the date.
+
+**Task rules** (in `AppCore/Sources/Draft/TaskSelection.swift`, `enum TaskSelection` with
+`static func draftTasks(for day:, tasks:, events: [DraftEvent], rules:) -> [DraftTask]` and
+`static func draftDelegated(for day:, tasks:) -> [DraftDelegated]`):
+
+- Personal tasks: `status == "needsAction"`, normalized title non-empty, and `due` non-nil (the
+  skill only takes dated tasks). Bucket: `due < day` → `.overdue`; `due == day` → `.today`;
+  `day < due ≤ day + lookAheadDays` → `.upcoming`; later → not listed.
+- An `.upcoming` task with `TaskTitle.isDiscussion(title)` is kept only when
+  `discussionName(title)` is non-nil and some event with `isIncluded && hasOtherAttendees` has
+  `fold(name)` in its `attendeeFirstNames`, or `rules.personAliases[fold(name)]` in its
+  `attendeeEmails`. Kept: `reason = "Kept: <name> is in “<that event's originalTitle>” on this
+  day"`, `isIncluded = true`. Not kept: it is still listed with `isIncluded = false` and
+  `reason = "To be discussed: no meeting with <name> on this day"` (or `"To be discussed"` when
+  the name is nil). Overdue and today discussion tasks are ordinary tasks, as in the skill.
+- Order: overdue, then today, then upcoming; inside each, by `due` ascending, then `position`
+  (nil last), then input order.
+- `text` = normalized title, `notes` = normalized notes or `""`, `dueText` =
+  `String(format: "%02d/%02d", due.month, due.day)` (the skill's "MM/DD"; overdue tasks keep their
+  real date).
+- Delegated: `status == "needsAction"` and a non-empty normalized title; parsed with
+  `DelegatedTask.parse(title:notes:)`; `marked = due != nil && due! <= day` written without a
+  force unwrap (`due.map { $0 <= day } ?? false`); input order (the layout sorts). Every one is
+  included, marked or not.
+
+**`content()`**: `schedule` groups every event with `isIncluded` and a `scheduleSlot` by slot, in
+start order; text = their **`originalTitle`s** (the skill keeps the full title on the schedule;
+the layout cuts it with "…") joined with `" / "`; `meetingIndex` only when the slot holds exactly
+one event and that event has a meeting page, and then it is that event's position within
+`meetings`. `meetings` = `title` of events with `includesMeetingPage`, in order. `todoItems` =
+included tasks `(text, notes, dueText)`. `delegated` = included items with their `marked`. A to-do
+list longer than the grid is cut by the layout from the end, which drops look-ahead tasks first
+("if there's room") and lists them under the preview.
 
 ### Controller (`AppCore/Sources/Controller/`)
 
@@ -722,72 +974,152 @@ public protocol AgendaRendering: Sendable { func render(_ plan: RenderPlan, file
 
 @MainActor @Observable
 public final class AgendaController {
-    public enum Status: Equatable { case starting, signedOut, signingIn, loading, ready, rendering, failed(String) }
+    public enum Status: Equatable { case starting, needsSetup, signedOut, signingIn, loading, ready, rendering, failed(String) }
     public private(set) var status: Status = .starting
-    public private(set) var day: CalendarDay
+    public private(set) var day: CalendarDay           // starts at today.nextWeekday()
     public private(set) var draft: AgendaDraft?
     public private(set) var settings: AgendaSettings
     public private(set) var calendars: [GoogleCalendar] = []
     public private(set) var taskLists: [GoogleTaskList] = []
     public private(set) var rendered: RenderedAgenda?
     public private(set) var message: String?          // last error or notice shown on the current screen
+    public private(set) var clientID: String?         // the entered client ID, for Settings; nil before setup
+    public var showsNextWorkingDay: Bool { get }      // draft has a weekend or out-of-office notice
     public init(account: any GoogleAccount, data: any GoogleDataSource, settingsStore: any SettingsStore,
+                credentials: any ClientCredentialsStore,
                 measurer: any TextMeasuring, renderer: any AgendaRendering, manifest: TemplateManifest,
                 timeZone: TimeZone, today: CalendarDay)
-    public func start() async            // signed in → load(); else .signedOut
+    public func start() async            // see below
+    public func saveClientCredentials(clientID: String, clientSecret: String) async -> Bool
+    public func forgetClientCredentials() async
     public func signIn(authenticate: @escaping @Sendable (URL, String) async throws -> URL) async
     public func signOut() async          // → .signedOut; clears draft, calendars, taskLists, rendered
     public func load() async
     public func setDay(_ day: CalendarDay) async      // then load()
-    public func updateSettings(_ change: (inout AgendaSettings) -> Void) async   // save; load() if calendarIDs, todoListID or delegatedListID changed
+    public func goToNextWorkingDay() async            // setDay(day.nextWeekday())
+    public func updateSettings(_ change: (inout AgendaSettings) -> Void) async   // save; load() if calendarIDs, list titles or rules changed
     public func updateDraft(_ change: (inout AgendaDraft) -> Void)
+    public func saveShortName(_ title: String, forEvent id: String)   // see below
     public func render() async
 }
 ```
 
-- `load()`: `.loading`, `message = nil`, `rendered = nil`. Fetch calendars and task lists. Calendars
-  to read = `settings.calendarIDs` that still exist in the list, or `["primary"]` when that is
-  empty. To-do list = `todoListID` if it exists, else the first list, else none. Delegated list =
-  `delegatedListID` if it exists and differs from the to-do list, else none. Fetch events for each
-  calendar in that order, then the open tasks of each list, build the draft, `.ready`.
-  `GoogleAPIError.signedOut` → `.signedOut` with `message` = its `userMessage`; any other
-  `GoogleAPIError` → `.failed(userMessage)`; any other error → `.failed(unexpectedResponse's message)`.
+- `load()`: increments a private `loadGeneration: Int` and keeps its value; after every `await`
+  it returns without touching any state if `loadGeneration` has changed, so a newer load (a second
+  ⌘] press) always wins. Then: `.loading`, `message = nil`, `rendered = nil`. Fetch calendars and task lists.
+  Calendars to read = `settings.calendarIDs` that still exist in the list, or `["primary"]` when
+  that is empty (the skill reads the primary calendar). To-do list = the first task list whose
+  `BinderText.fold(title)` equals `fold(settings.todoListTitle)`; delegated list = the first task list
+  other than the to-do list whose folded title equals `fold(delegatedListTitle)`, when that title is
+  non-empty. Never fall back
+  to another list. Fetch events for each calendar in that order, then the open tasks of each
+  matched list, build the draft with `AgendaBuilder(timeZone:rules: settings.rules)`, and append
+  to `draft.notices`, after the builder's: `No Google Tasks list named “<todoListTitle>”. Create it
+  in Google Tasks or pick another list in Settings.` when the to-do list is missing, and `No Google
+  Tasks list named “<delegatedListTitle>”, so there is no delegated page.` when the delegated title
+  is non-empty and no such list exists (also when the only match is the to-do list itself). Then `.ready`. `GoogleAPIError.signedOut` → `.signedOut` with
+  `message` = its `userMessage`; any other `GoogleAPIError` → `.failed(userMessage)`; any other
+  error → `.failed(unexpectedResponse's message)`.
+- `showsNextWorkingDay`: true when some notice of the current draft ends with `"is a weekend."`
+  or starts with `"You're out of office"`.
+- `start()`: loads the stored client credentials (a thrown load counts as none) and calls
+  `account.configure(credentials?.configuration)`; sets `clientID`. No usable credentials →
+  `.needsSetup`; otherwise signed in → `load()`, else `.signedOut`.
+- `saveClientCredentials(clientID:clientSecret:)`: builds `GoogleOAuthConfiguration(clientID:
+  clientSecret:)`. Nil → `message = "That isn't a Google client ID. It looks like
+  123456789012-abc….apps.googleusercontent.com."` (when the client ID part is the problem, i.e.
+  `GoogleOAuthConfiguration(clientID: clientID)` is also nil) or `"The client secret can't contain
+  spaces."` (otherwise), returns false, state unchanged. Valid → saves
+  `GoogleClientCredentials(clientID: configuration.clientID, clientSecret:
+  configuration.clientSecret)` (a save error → `message = "Couldn't save the client in the
+  Keychain. Try again."`, false), calls `account.configure(configuration)`, sets `clientID`,
+  clears draft, calendars, taskLists and rendered, `message = nil`, and then: signed in (same
+  client ID as before, so the session kept its tokens) → `load()`, else `.signedOut`; returns
+  true.
+- `forgetClientCredentials()`: `signOut()`, deletes the stored credentials (ignoring a delete
+  error), `account.configure(nil)`, `clientID = nil`, `.needsSetup`.
 - `signIn`: `.signingIn`; success → `load()`; `authorizationCancelled` → `.signedOut`, `message`
   nil; other errors → `.signedOut` with the error's `userMessage`.
 - `updateDraft` and `updateSettings` clear `rendered`.
+- `saveShortName(title, forEvent:)`: a no-op when there is no draft or no event with that id
+  (written with optional chaining, so no unreachable branch); otherwise looks up the event's
+  `shortNameKey`; with `n =
+  TextFitter.normalized(title)`, sets `settings.rules.shortNames[key] = n` (removes the key when
+  `n` is empty), saves the settings, calls `draft.applyShortName(n, key:)`, clears `rendered`. No
+  reload.
 - `render()`: needs a draft. `.rendering`; plan = `AgendaLayout(manifest:, measurer:, theme:
-  settings.theme).plan(for: draft.content())`; url = `renderer.render(plan, fileName: "Agenda
-  <day.isoString>.pdf")`; `rendered = RenderedAgenda(url, plan.pages.count,
-  plan.omittedTodoItems.map(\.text))`; `.ready`. A renderer error → `.ready` with
-  `message = "Couldn't create the PDF. Try again."`.
+  settings.theme).plan(for: draft.content())`, computed off the main actor with `await Task.detached
+  { layout.plan(for: content) }.value` (both are `Sendable`); url = `renderer.render(plan, fileName:
+  "<day.isoString>.pdf")` (the skill's file name, e.g. `2026-09-30.pdf`); `rendered =
+  RenderedAgenda(url: url, pageCount: plan.pages.count, omittedTasks:
+  plan.omittedTodoItems.map(\.text))`; `.ready`. A renderer
+  error → `.ready` with `message = "Couldn't create the PDF. Try again."`.
 
-Fixtures for UI tests and SwiftUI previews (AppCore, public):
+Fixtures for UI tests and SwiftUI previews (AppCore, public, `GoogleFixtures.swift`):
 
-- `GoogleFixture: String, CaseIterable` — `standard`, `longText`, `overflow`, `empty`;
-  `init?(launchArguments: [String])` reads the value after `-MagendaFixture`.
-- `FixtureGoogleDataSource(fixture)`: calendars `GoogleCalendar(id: "primary", title: "Work",
+- `GoogleFixture: String, CaseIterable` — `standard`, `outOfOffice`, `longText`, `overflow`,
+  `empty`; `init?(launchArguments: [String])` reads the value after `-MagendaFixture`.
+- `FixtureGoogleDataSource` with `public init(_ fixture: GoogleFixture)`: calendars `GoogleCalendar(id: "primary", title: "Work",
   isPrimary: true)` and `GoogleCalendar(id: "family", title: "Family", isPrimary: false)`; task
-  lists `GoogleTaskList(id: "todo", title: "My Tasks")` and `GoogleTaskList(id: "delegated",
-  title: "Delegated")`. Events exist only on calendar `primary`, built on the requested day in the
-  requested time zone, status `confirmed`, ids `e0`, `e1`, …; tasks have ids `t0`, `t1`, … and
-  status `needsAction`; `openTasks(listID: "todo")` returns the to-dos, `"delegated"` the
-  delegated tasks, any other ID `[]`.
-  - `standard`: events 09:00 "Team sync", 10:30 "1:1 with Anna", 13:00 "Lunch with Sam",
-    19:00 "Dinner"; to-dos "Call the bank" (due the requested day), "Send the slides" (due two
-    days earlier), "Book flights" (no due); delegated "Hire a designer" with notes
-    `"Owner: Anna\nCadence: weekly\nMarked: yes\nInterviews scheduled\nTwo candidates left"` and
-    "Renew the office lease" with notes `"Owner: Ben\nCadence: monthly\nWaiting for the landlord"`.
+  lists `GoogleTaskList(id: "todo", title: "Claude")`, `GoogleTaskList(id: "delegated", title:
+  "Claude Delegations")` and `GoogleTaskList(id: "other", title: "ToDos")`. Events exist only on
+  calendar `primary`, built on the requested day `D` in the requested time zone, status
+  `confirmed`, ids `e0`, `e1`, … in the order listed; tasks have ids `t0`, `t1`, … and status
+  `needsAction`; `openTasks(listID:)` returns the to-dos for `"todo"`, the delegated tasks for
+  `"delegated"`, and one task titled "Wrong list" (due `D`) for `"other"`, which must never appear.
+  "Self" below is `GoogleAttendee(email: "me@example.com", displayName: "Me", isSelf: true,
+  isResource: false, responseStatus: "accepted")`; another person *x* is
+  `GoogleAttendee(email: "<x>@example.com", displayName: nil, isSelf: false, isResource: false,
+  responseStatus: "accepted")`; the room is `"room-1@resource.calendar.google.com"` with
+  `isResource: true`. Unless stated, an event's `selfResponse` is self's `responseStatus` (nil when
+  self is not an attendee), `iCalUID`, `recurringEventID` and `eventType` are nil, and a task's
+  `notes` and `position` are nil.
+  - `standard` events: an all-day "Home"; 08:00 "Start the day" (no attendees); 09:00 "Team sync"
+    (self, anna, room); 10:30 "1:1 with Peter" (self, `peter.brown`); 12:00 "Lunch" (no
+    attendees); 13:00 "REMINDER // Decision about the office move" (self, ben;
+    `recurringEventID: "rec-office"`); 14:00 "Server upgrade" (self with `responseStatus:
+    "declined"`, ops; `selfResponse: "declined"`); 15:00 "Week preparation" (self only); 16:00
+    "Quarterly Summit" (self, anna); 16:30 "Quarterly Summit" (self, anna); 19:00 "Dinner with
+    partners" (self, partner). To-dos: "Send the slides" with notes "Ask Ben for the Q3 numbers
+    first" due `D − 2`; "Call the bank" due `D`; "Nora - to be discussed" due `D + 1`; "Peter –
+    to be discussed" due `D + 2`; "Book flights" due `D + 3`; "Renew passport" due `D + 9`;
+    "Someday" with no due. Delegated: "Anna: Hire a designer", notes `"#weekly\n2026-09-16
+    Delegated to Anna.\n2026-09-23 Interviews scheduled.\n2026-09-29 Two candidates left."`, due
+    `D`; "Ben: Renew the office lease", notes `"#monthly\n2026-09-01 Waiting for the landlord."`,
+    due `D + 10`; "Fix the printer", no notes, no due.
+  - `outOfOffice`: an all-day "Vacation" and a timed 10:00 "Team sync" (self, anna); no tasks.
   - `longText`: events at 08:00, 09:30, 11:00, 13:30, 15:00, 17:30 titled `longStrings[0]` …
-    `longStrings[5]`; to-dos titled `longStrings[0]` … `longStrings[5]`, no due; three delegated
-    tasks titled `longStrings[0]`, `longStrings[1]`, `longStrings[3]`, each with notes
-    `"Owner: " + longStrings[1] + "\nCadence: weekly\n" + longStrings[0] + "\n" + longStrings[2]`.
+    `longStrings[5]`, each with self and anna; to-dos titled `longStrings[0]` … `longStrings[5]`,
+    notes `longStrings[6]`, due `D`; three delegated tasks titled `longStrings[1] + ": " +
+    longStrings[0]`, `longStrings[1] + ": " + longStrings[3]` and `"Owner: " + longStrings[2]`,
+    each with notes `"#weekly\n" + longStrings[0] + "\n" + longStrings[2] + "\n" +
+    longStrings[3]`, due `D`.
   - `overflow`: 22 events, event *i* at hour `8 + i / 2`, minute `(i % 2) * 30`, titled
-    `longStrings[1]`; 30 to-dos titled `longStrings[0]`, no due; 40 delegated tasks titled
-    `"Delegated task <i>: " + longStrings[0]` with notes `"Owner: Alexandra Montgomery-Smith\nCadence: "`
-    + `["daily", "weekly", "monthly"][i % 3]` + five lines of `longStrings[0]`, each preceded by `"\n"`.
+    `"Meeting " + String(i) + ": " + longStrings[1]` (distinct titles, so none is a duplicate),
+    each with self and anna; 30 to-dos titled `longStrings[0]`, notes `longStrings[6]`, due `D`;
+    40 delegated tasks titled `"Alexandra Montgomery-Smith: Delegated task " + String(i) + " " +
+    longStrings[0]` with notes `"#" + ["daily", "weekly", "monthly"][i % 3]` + five lines of
+    `longStrings[0]`, each preceded by `"\n"`, due `D` when `i % 4 == 0`, else `D + 7`.
   - `empty`: the calendars and lists above, no events, no tasks.
 - `FixtureGoogleAccount: GoogleAccount` (actor) — `init(signedIn: Bool)`; `signIn` succeeds without
   calling `authenticate`.
+
+For `standard` on `D = 2026-09-30` with default settings the draft is exactly this (the builder,
+controller and UI tests assert it). Events, in start order (n = row index): 0 "Start the day"
+(Personal block), 1 "Team sync" (page), 2 "1:1 with Peter" (page), 3 "Lunch" (Personal block), 4
+"REMINDER // Decision about the office move" (page titled "Decision about the office move"), 5
+"Server upgrade" (Declined), 6 "Week preparation" (included, no page), 7 "Quarterly Summit" 16:00
+(page), 8 "Quarterly Summit" 16:30 (Duplicate), 9 "Dinner with partners" (page, not on the
+schedule); "Home" is not listed. Tasks: 0 "Send the slides" (Overdue, 09/28), 1 "Call the bank"
+(Due today, 09/30), 2 "Nora - to be discussed" (left out), 3 "Peter – to be discussed" (kept,
+Peter is in "1:1 with Peter"), 4 "Book flights" (Upcoming, 10/03). Delegated: 0 "Hire a
+designer" (Anna, Weekly, marked, status ["2026-09-23 Interviews scheduled.", "2026-09-29 Two
+candidates left."]), 1 "Renew the office lease" (Ben, Monthly, not marked), 2 "Fix the printer"
+(no owner, Daily, both warnings). No notices. `content().meetings` is ["Team sync", "1:1 with
+Peter", "Decision about the office move", "Quarterly Summit", "Dinner with partners"];
+`content().todoItems` has 4 items (Nora is left out); the schedule has entries in slots 2, 5, 10, 14 and 16
+("Team sync", "1:1 with Peter", "REMINDER // Decision about the office move", "Week
+preparation", "Quarterly Summit").
 
 ### App (`App/`)
 
@@ -800,14 +1132,16 @@ the Python repo's files at the pinned commit; the OFL texts are
 
 - `FontLibrary` (final class): `init(bundle: Bundle) throws` loads all 15 TTFs once with
   `CTFontManagerCreateFontDescriptorFromData`; a missing file or a nil descriptor throws
-  `FontLibraryError.missingFont(String)`. `func font(_ spec: FontSpec) -> CTFont`. Fonts are never
+  `FontLibraryError.missingFont(String)` (the enum also has `case missingTemplate`). `func font(_ spec: FontSpec) -> CTFont`. Fonts are never
   registered system-wide. It and `CoreTextMeasurer` hold only immutable CoreText objects; if the
   compiler rejects their `Sendable` conformance, mark them `@unchecked Sendable` with a comment
   saying why (immutable, and CoreText fonts are thread-safe).
-- `CoreTextMeasurer: TextMeasuring`: width = `CTLineGetTypographicBounds` of a `CTLine` made from
+- `CoreTextMeasurer: TextMeasuring`, `init(library: FontLibrary)`: width = `CTLineGetTypographicBounds` of a `CTLine` made from
   the string with that `CTFont` (CoreText's font fallback covers emoji, CJK and Arabic); metrics
   = `CTFontGetAscent` / `CTFontGetDescent`.
-- `PDFAgendaRenderer: AgendaRendering`: `UIGraphicsPDFRenderer` with bounds 595.304 × 841.890.
+- `PDFAgendaRenderer: AgendaRendering`, `init(library: FontLibrary, bundle: Bundle) throws`: loads
+  `chrome.pdf` from the bundle as a `CGPDFDocument` once and throws
+  `FontLibraryError.missingTemplate` when it is absent or unreadable. `UIGraphicsPDFRenderer` with bounds 595.304 × 841.890.
   Per page: draw `chrome.pdf`'s page `chrome.rawValue + 1` with `saveGState`,
   `translateBy(x: 0, y: pageHeight)`, `scaleBy(x: 1, y: -1)`, `drawPDFPage`, `restoreGState`;
   then the operations in order: fills, strokes and lines with `CGContext` in UIKit's top-left
@@ -827,57 +1161,79 @@ the Python repo's files at the pinned commit; the OFL texts are
 - `CryptoKitHasher: SHA256Hashing` (`SHA256.hash(data:)`).
 - `UserDefaultsSettingsStore: SettingsStore` (key `agendaSettings`, JSON; the `UserDefaults`
   instance is an init parameter).
-- `BundledGoogleClient.configuration(bundle:) -> GoogleOAuthConfiguration?` reads
-  `GoogleOAuthClientID.txt` from the bundle.
+- `KeychainClientCredentialsStore: ClientCredentialsStore`: generic password, service
+  `name.felhasznalo.magenda.google-client` (an init parameter), account `client`, JSON-encoded
+  `GoogleClientCredentials`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. Shares a private
+  Keychain helper with `KeychainTokenStore` (`App/Platform/KeychainItem.swift`).
 - `App/PrivacyInfo.xcprivacy`: `NSPrivacyTracking` false, no tracking domains, no collected data
   types, accessed API type `NSPrivacyAccessedAPICategoryUserDefaults` with reason `CA92.1`.
-- `App/GoogleOAuthClientID.txt` holds the iOS OAuth client ID (one line). The user fills it in on
-  the plan branch before implementation (manual step mb3). It is a public identifier: Google ships
-  it inside every iOS app; there is no client secret.
+- No client ID, client secret, project number or account name is ever committed, and nothing reads
+  a client from the bundle.
 
 **Wiring** (`App/AppEnvironment.swift`):
 `static func makeController(arguments: [String], bundle: Bundle) throws -> AgendaController`. It
 loads `TemplateManifest.bundled()` and `FontLibrary(bundle:)` first (their errors propagate).
 With `GoogleFixture(launchArguments: arguments)` non-nil: `FixtureGoogleAccount(signedIn:
 !arguments.contains("-MagendaSignedOut"))`, `FixtureGoogleDataSource(fixture)`,
-`InMemorySettingsStore(AgendaSettings(todoListID: "todo", delegatedListID: "delegated"))` (other
-fields default; `AgendaSettings` has a public init with every field defaulted),
-`TimeZone.current`, today 2026-09-30. Otherwise:
+`InMemoryClientCredentialsStore(arguments.contains("-MagendaNeedsSetup") ? nil :
+GoogleClientCredentials(clientID: "123456789012-fixture.apps.googleusercontent.com",
+clientSecret: nil))`,
+`InMemorySettingsStore(AgendaSettings())` (the defaults name the fixture's "Claude" and "Claude
+Delegations" lists; `AgendaSettings` has a public init with every field defaulted),
+`TimeZone.current`, today 2026-09-29, so the first day shown is 2026-09-30. Otherwise:
 `GoogleSession(configuration:http:tokens:hasher:now:)` with `URLSessionHTTPClient`,
-`KeychainTokenStore`, `CryptoKitHasher` and `{ Date() }` as both the account and the sender of a
-`LiveGoogleDataSource`. When `BundledGoogleClient.configuration(bundle:)` returns nil, the account
-is `UnconfiguredGoogleAccount()` and the data source `FixtureGoogleDataSource(.empty)` (nothing
-loads while signed out, and sign-in shows "Google sign-in isn't set up in this build.").
-Shared by both: `UserDefaultsSettingsStore(defaults: .standard)`, `CoreTextMeasurer`,
-`PDFAgendaRenderer`, `TimeZone.current`, `CalendarDay.today(in: .current, now: Date())`.
-`MagendaApp` holds the controller in `@State`, injects it with `.environment`, calls `start()` in
-`.task`, and shows `RootView(appInfo:)` with the `AppInfo` it already builds today; `RootView`
+`KeychainTokenStore`, `CryptoKitHasher` and `{ Date() }`, created with `configuration: nil`
+(`start()` configures it from the Keychain), as both the account and the sender of a
+`LiveGoogleDataSource`. Live branch only: `KeychainClientCredentialsStore()`,
+`UserDefaultsSettingsStore(defaults: .standard)` and `CalendarDay.today(in:
+.current, now: Date())`. Shared by both: `CoreTextMeasurer(library:)`, `PDFAgendaRenderer(library:
+bundle:)` (its error propagates too) and `TimeZone.current`.
+`MagendaApp` holds the controller in `@State`, injects it with `.environment`, adds
+`.commands { AgendaCommands(controller: controller) }` (`AgendaCommands` takes an optional
+controller and disables every item when it is nil), calls `start()` in `.task`, and shows `RootView(appInfo:)` with the `AppInfo` it already builds today; `RootView`
 passes it to `AgendaView(appInfo:)`, which passes it to `SettingsView(appInfo:)` for the version
 row. If `makeController` throws, it shows only
 `Text("Couldn't load the agenda template. Reinstall Magenda.")` with identifier `templateError`.
 
 **Screens** (`App/Screens/`, one per file, each with an `ID` enum and a `#Preview` using the
-fixtures):
+fixtures). The app is designed for iPad first and also runs on iPhone (`TARGETED_DEVICE_FAMILY`
+stays `"1,2"`); layouts go by size class and available width, never by device model.
 
 | File | Shows | Identifiers |
 |---|---|---|
-| `RootView.swift` | `.starting` → `ProgressView`; `.signedOut`/`.signingIn` → SignInView; otherwise AgendaView in a `NavigationStack` | — |
+| `RootView.swift` | `.starting` → `ProgressView`; `.needsSetup` → SetupView; `.signedOut`/`.signingIn` → SignInView; otherwise AgendaView | — |
+| `SetupView.swift` | Used full screen for `.needsSetup` and as a sheet from Settings. Centered, maximum width 480 pt. Title "Connect Google"; text "Magenda reads your calendar and tasks through your own Google Cloud OAuth client. Create an iOS client for the bundle ID name.felhasznalo.magenda, then enter it here."; `Link("How to create a client", destination: URL(string: "https://github.com/andras-tkcs/magenda-ios#google-cloud-setup"))`; `TextField` "Client ID" (no autocorrection, no autocapitalization, `.keyboardType(.asciiCapable)`); `SecureField` "Client secret (optional)"; footnote "Leave the secret empty for an iOS client. Both stay in this device's Keychain and are never sent anywhere but Google."; button "Save" (disabled while the client ID field is blank; Return in either field submits) calling `controller.saveClientCredentials`; `message` below in red when the save fails. As a sheet, prefilled with the current client ID (secret left empty, so it must be re-entered when one is used) and dismissed on success, with a "Cancel" button. | `clientIDField`, `clientSecretField`, `saveClientButton`, `setupMessage`, `setupHelpLink`, `setupCancel` |
 | `SignInView.swift` | Title "Magenda"; text "Make a printable agenda from your Google Calendar and Google Tasks."; button "Sign in with Google" (disabled while signing in); `message` below in secondary style | `signInButton`, `signInMessage` |
-| `AgendaView.swift` | Toolbar: `DatePicker` "Date" (date only), Settings gear (label "Settings"), "Render" button (disabled unless `.ready` with a draft). Sections "Schedule and meetings", "To-do list", "Delegated" (only when a delegated list is set), each row described below. `.loading` shows `ProgressView`; `.failed(message)` shows the message and a "Try again" button; `.rendering` shows `ProgressView("Rendering…")`. Pull to refresh calls `load()`. After a successful render it pushes PreviewView. | `agendaScreen` (the List), `datePicker`, `settingsButton`, `renderButton`, `loadingIndicator`, `errorMessage`, `retryButton`, `eventRow.<n>`, `eventToggle.<n>`, `eventScheduleNote.<n>`, `taskRow.<n>`, `taskToggle.<n>`, `delegatedRow.<n>`, `delegatedToggle.<n>` (n = 0-based position) |
-| `EditTextSheet.swift` | Title "Edit text"; multi-line `TextField` (1…5 lines); "Done" saves, "Cancel" discards; caption "Changes only affect this agenda. Nothing is changed in Google." | `editField`, `editDone`, `editCancel` |
-| `PreviewView.swift` | `PDFKitView` (a `UIViewRepresentable` around `PDFView`, `autoScales`, single page continuous); toolbar `ShareLink(item: url)` labelled "Share PDF"; when `omittedTasks` is non-empty a banner "<n> task(s) didn't fit on the to-do list and were left out:" followed by their texts, `lineLimit(3)` | `pdfPreview`, `shareButton`, `omittedTasksBanner` |
-| `SettingsView.swift` | Sections "Calendars" (multi-select checkmarks; footnote "None selected uses your primary calendar."), "Task lists" (Picker "To-do list"; Picker "Delegated tasks" with "None" first and the to-do list excluded), "Look" (three rows "Outfit", "Roboto", "JetBrains Mono", each a button showing a checkmark when selected; five rows "Weekend", "Date heading", "Section labels", "Accent", "Notes heading", each a color swatch and a hex `TextField` that saves on submit when `RGBColor(hex:)` accepts it and otherwise shows "Use six hex digits, like 215E99."; button "Reset colors"), "Account" (button "Sign out"), "About" (version row as today, footnote "Fonts: Outfit, Roboto and JetBrains Mono, under the SIL Open Font License 1.1.") | `calendarRow.<n>`, `todoListPicker`, `delegatedListPicker`, `fontOption.<rawValue>` (`fontOption.outfit`, `fontOption.roboto`, `fontOption.jetbrains_mono`), `colorField.<role>` (weekend, heading, label, accent, notes), `colorError`, `resetColorsButton`, `signOutButton`, `version` |
+| `AgendaView.swift` | A `NavigationSplitView(columnVisibility:preferredCompactColumn:)` with `columnVisibility` starting at `.all` and `.navigationSplitViewStyle(.balanced)`, so an iPad in portrait shows the list and the preview side by side instead of hiding the list. **Sidebar** (`.navigationSplitViewColumnWidth(min: 320, ideal: 420, max: 560)`): the review `List`. Toolbar placements: "Render" button in `.primaryAction` (disabled unless `.ready` with a draft); Settings gear (label "Settings", `.keyboardShortcut(",", modifiers: .command)`, opens SettingsView as a `.sheet`) in `.topBarLeading`; a `ToolbarItemGroup(placement: .bottomBar)` with "Previous day" (`chevron.left`), a `DatePicker` "Date" (date only, `.datePickerStyle(.compact)`) and "Next day" (`chevron.right`). List sections, in order: "Notices" (only when `draft.notices` is non-empty: one `Text` per notice, then a "Go to next working day" button when `showsNextWorkingDay`), "Schedule and meetings", "To-do list", "Delegated" (only when the draft has delegated items). `.loading` shows `ProgressView`; `.failed(message)` shows the message and a "Try again" button; `.rendering` shows `ProgressView("Rendering…")`; `message`, when set while `.ready`, shows under the toolbar. Pull to refresh calls `load()`. **Detail**: PreviewView when `rendered` is set, else `ContentUnavailableView("No PDF yet", systemImage: "doc.richtext", description: Text("Tap Render to see the agenda."))`. After a successful render `preferredCompactColumn` becomes `.detail`, so in compact width (iPhone, narrow iPad window) the preview is pushed and Back returns to the list; in regular width the preview simply appears beside the list. | `agendaScreen` (the List), `previousDayButton`, `datePicker`, `nextDayButton`, `settingsButton`, `renderButton`, `notice.<n>`, `nextWorkingDayButton`, `loadingIndicator`, `errorMessage`, `retryButton`, `previewPlaceholder`, row identifiers below (n = 0-based position) |
+| `AgendaCommands.swift` | `struct AgendaCommands: Commands` added with `.commands` in `MagendaApp`: a `CommandMenu("Agenda")` with "Render" (⌘R; enabled when status is `.ready` and `draft != nil`), "Previous Day" (⌘[), "Next Day" (⌘]) and "Reload" (⌘⇧R) (each enabled when status is `.ready` or `.failed`), and "Next Working Day" (⌘⌥]; enabled under the same condition and `showsNextWorkingDay`), each calling the controller. This puts them in the iPad menu bar and the ⌘-hold shortcut list. | — |
+| `EditTextSheet.swift` | Title "Edit text"; multi-line `TextField` (1…5 lines); for an event, under it the original title as a caption ("Calendar title: <originalTitle>") and a `Toggle` "Use this name for this meeting every time" (off by default); "Done" saves (with the toggle on, through `controller.saveShortName`, otherwise `setTitle`), "Cancel" discards; footer "Changes only affect this agenda. Nothing is changed in Google." (with the toggle on: "Saved in Settings → Short meeting names. Nothing is changed in Google."). The field is `TextField(axis: .vertical)`, so Return types a line break, which normalizing turns into a space; "Done" has `.keyboardShortcut(.defaultAction)` (⌘Return) and "Cancel" `.keyboardShortcut(.cancelAction)` (Esc). | `editField`, `editRemember`, `editDone`, `editCancel` |
+| `PreviewView.swift` | `PDFKitView` (a `UIViewRepresentable` around `PDFView`, `autoScales`, single page continuous); toolbar `ShareLink(item: url)` labelled "Share PDF" (the system share sheet: Noteshelf, Files, AirDrop, Print…); when `omittedTasks` is non-empty a banner, one accessibility element (`.accessibilityElement(children: .combine)`), reading "1 task didn't fit on the to-do list and was left out:" or "<n> tasks didn't fit on the to-do list and were left out:", followed by their texts, `lineLimit(3)` each | `pdfPreview`, `shareButton`, `omittedTasksBanner` |
+| `SettingsView.swift` | A `NavigationStack` `Form` with a "Done" button. Sections "Calendars" (multi-select checkmarks; footnote "None selected uses your primary calendar."), "Task lists" (Picker "To-do list" over the task list titles, storing the title; Picker "Delegated tasks" with "None" (stores `""`) first and the to-do list excluded; footnote "Lists are found by name, so renaming one in Google Tasks means picking it again here."), "Look" (three rows "Outfit", "Roboto", "JetBrains Mono", each a button showing a checkmark when selected; five rows "Weekend", "Date heading", "Section labels", "Accent", "Notes heading", each a color swatch and a hex `TextField` that saves on submit when `RGBColor(hex:)` accepts it and otherwise shows "Use six hex digits, like 215E99."; button "Reset colors"), a `NavigationLink` "Binder rules" to RulesView, "Google client" (the client ID with `.truncationMode(.middle)` and `.textSelection(.enabled)`; button "Change client…" opening SetupView as a sheet; button "Forget client" with role `.destructive` and a `confirmationDialog` "Forget this Google client? You'll need to enter a client ID again." calling `forgetClientCredentials`), "Account" (button "Sign out"), "About" (version row as today, footnote "Fonts: Outfit, Roboto and JetBrains Mono, under the SIL Open Font License 1.1.") | `calendarRow.<n>`, `todoListPicker`, `delegatedListPicker`, `fontOption.<rawValue>`, `colorField.<role>` (weekend, heading, label, accent, notes), `colorError`, `resetColorsButton`, `rulesLink`, `clientIDLabel`, `changeClientButton`, `forgetClientButton`, `signOutButton`, `version`, `settingsDone` |
+| `RulesView.swift` | A `Form`. Sections, each with a footnote: "Personal blocks" (footnote "Events whose title starts with one of these are left off the agenda."), "Title prefixes" ("Removed from the start of meeting-page titles."), "Out-of-office words" ("An all-day event with one of these in its title shows a notice."), each an editable list of strings: rows with swipe-to-delete, and a `TextField` "Add…" that appends on submit (trimmed; blank or a duplicate after `BinderText.fold` is ignored); "Short meeting names" (one row per entry, showing the short name and, as a caption, "Recurring meeting" for an `r:` key or the folded calendar title for a `t:` key; swipe to delete; footnote "Set from a meeting's Edit sheet."); "People" (rows "<key> → <email>", swipe to delete, two fields "Name in tasks" and "Email" and an "Add" button that stores `personAliases[BinderText.fold(name)] = email` trimmed and lowercased, ignored when either field is blank; footnote "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs."); "Look-ahead" (`Stepper` "Upcoming tasks: <n> days", 0…14). Every change goes through `controller.updateSettings`. "Reset rules" restores `BinderRules.default` except `shortNames` and `personAliases`. | `rulesRow.<section>.<n>` (section = personalBlocks, titlePrefixes, outOfOfficeWords, shortNames or people; n = 0-based row), `rulesAdd.<section>` (the "Add…" field; for people, `peopleName`), `peopleName`, `peopleEmail`, `peopleAdd`, `lookAheadStepper`, `resetRulesButton` |
 
-Rows (event, task, delegated): an `HStack` whose leading part is a `Button` (identifier
-`eventRow.<n>` / `taskRow.<n>` / `delegatedRow.<n>`) holding the title `Text` with `.lineLimit(2)`
-and `.truncationMode(.tail)` and a secondary line (event: `timeText`, plus a
-`Text("Not on the schedule")` with identifier `eventScheduleNote.<n>` when `scheduleSlot` is nil;
-task: `dueText`; delegated: cadence label, owner, and `warning` in orange when set); tapping it
-opens `EditTextSheet`. That button's `accessibilityLabel` is the full, untruncated title. The
-trailing part is a `Toggle` (identifier `eventToggle.<n>` / `taskToggle.<n>` /
-`delegatedToggle.<n>`) with visible label "Notes page" (events) or "Include" (tasks, delegated)
-and accessibility label "Notes page for <title>" / "Include <title>". The row is not combined into
-one accessibility element.
+Rows, in `AgendaRows.swift`. Each row is an `HStack`: the leading part is a `Button` (identifier
+`eventRow.<n>` / `taskRow.<n>` / `delegatedRow.<n>`) holding the title `Text` with
+`.lineLimit(2)` and `.truncationMode(.tail)` and secondary lines; tapping it opens `EditTextSheet`
+(for events it edits the meeting-page title). That button's `accessibilityLabel` is the full,
+untruncated title. The trailing part is a `Toggle` "Include" (identifier `eventToggle.<n>` /
+`taskToggle.<n>` / `delegatedToggle.<n>`, accessibility label "Include <title>"). The row is not
+combined into one accessibility element; it has `.hoverEffect()` on the button and a
+`.contextMenu` with "Edit…" and "Include"/"Leave out".
+
+- Event: title = `originalTitle`; secondary: `timeText`; then `reasons.joined(separator: " · ")`
+  when non-empty (identifier `eventReason.<n>`); then, only while included, a `Toggle` "Notes
+  page" (identifier `eventPageToggle.<n>`, accessibility label "Notes page for <title>"). A
+  left-out event's title is in `.secondary` style.
+- Task: title = `text`, then `notes` in one secondary line (`lineLimit(1)`); secondary:
+  `"<bucket.label> · <dueText>"`, then `reason` when set (identifier `taskReason.<n>`).
+- Delegated: title = `text`; secondary: `"<owner> · <cadence.label>"` (owner omitted when
+  empty), a "Check-in due" capsule when `marked` (identifier `delegatedMarked.<n>`), the status
+  lines in `.secondary` style, and `warning` in orange when set.
+
+Multiple windows: the one `AgendaController` lives in `MagendaApp`'s `@State`, so every iPad
+window shows the same agenda; there is no per-window state, and all mutation is on the main actor.
+No Pencil or drag-and-drop support: the app edits text and hands the PDF to the share sheet,
+where Noteshelf takes over.
 
 ### Rejected alternatives
 
@@ -898,11 +1254,36 @@ one accessibility element.
   ~150 lines of PKCE do; ADR-gated by CONTRIBUTING.md. Rejected.
 - **EventKit (iOS Calendar).** The user asked for Google's APIs; EventKit has no Google Tasks and
   would need a calendar permission prompt. Rejected.
-- **Delegated tasks stored in the app.** Not synced and invisible to Google; the user chose a
-  Google Tasks list with a notes format.
-- **The client ID in `project.yml` or an Info.plist key.** Custom Info.plist keys need a plist
-  file that `GENERATE_INFOPLIST_FILE` does not manage, and `ASWebAuthenticationSession` needs no
-  URL type registration. A one-line bundled text file is simpler and editable on GitHub.
+- **Delegated tasks stored in the app, or a new notes format.** The user already keeps them in
+  the "Claude Delegations" list in the `Owner: Task` / `#cadence` / dated-log format the skill
+  reads; the app reads that format unchanged.
+- **A client ID committed to the repository** (a bundled text file, `project.yml` or an Info.plist
+  key). The repository is public and the owner does not want any organization's Google project in
+  it; every user brings their own client. Rejected for entry in the app, stored in the Keychain.
+- **A client ID injected at build time** (an `.xcconfig` filled from a CI secret). Builds from the
+  same source would then differ per person, and release archives would carry one person's client.
+  Rejected for the same runtime entry.
+- **An on-device language model (Apple Foundation Models) to shorten one-off titles or spot
+  personal blocks.** The user asked for no AI at all; it would also make the output depend on a
+  model version and on iOS 26 hardware. Rejected for the strip list, saved short names, the "…" cut
+  and a manual edit.
+- **Personal blocks found by calendar color or a tag.** Colors are per-user display settings that
+  other tools change, and a tag means editing every recurring event. Rejected for an editable
+  title-prefix list, defaulting to the skill's two examples.
+- **Wrapping or shrinking long meeting titles.** Wrapping is the Magenda bug that broke the page;
+  shrinking a 20 pt title makes pages inconsistent. Rejected for one line cut with "…".
+- **Undated tasks on the to-do list.** The skill takes only overdue, due-today and next-5-days
+  tasks; an undated task has no place in that order. Left out, as in the skill.
+- **Task lists chosen by ID.** The skill looks them up by title on every run because IDs can
+  change; settings store the title.
+- **Blocking a weekend or out-of-office date** (the skill stops and asks). In the app the user
+  picks the date, so the app shows a notice and a "Go to next working day" button instead.
+- **Uploading to Google Drive.** The user imports into Noteshelf from the share sheet; Drive
+  upload would add a write scope for nothing.
+- **Duplicates by title across the whole day.** Two separate "Team sync" events at 09:00 and 15:00
+  are real; the observed duplicate started 30 minutes after the first. Rejected for "same title,
+  starting less than 120 minutes after an earlier kept one", with the same iCalUID always a
+  duplicate.
 - **Narrower `calendar.calendarlist.readonly` + `calendar.events.readonly` scopes.** Two scopes
   for the same read access; one well-known `calendar.readonly` is enough and still read-only.
 
@@ -918,26 +1299,36 @@ The last phase writes these (next free number is 0011):
   omitted to-dos reported), and every plan is checked by `LayoutAudit`; `App/` only executes it.
 - **0013** — Google sign-in is OAuth 2.0 with PKCE implemented in AppCore and presented by
   `ASWebAuthenticationSession`, not the GoogleSignIn SDK; tokens live only in the Keychain; scopes
-  are read-only `calendar.readonly` and `tasks.readonly`; the public iOS client ID ships in
-  `App/GoogleOAuthClientID.txt`.
-- **0014** — The agenda's inputs are Google Calendar and Google Tasks, not EventKit; delegated tasks
-  come from a chosen Google Tasks list whose notes carry `Owner:`, `Cadence:` and `Marked:` lines.
+  are read-only `calendar.readonly` and `tasks.readonly`; no Google client ships with the app: the
+  user enters their own client ID (and optional secret) on first launch and it is kept in the
+  Keychain, so the public repository holds no project-specific value.
+- **0014** — The agenda's inputs are read live from the Google Calendar and Google Tasks REST APIs,
+  not EventKit (which syncs late); task lists are found by title ("Claude", "Claude Delegations");
+  delegated tasks use the existing `Owner: Task` title, `#cadence` first line and dated log.
 - **0015** — AppCore may import the toolchain's `Observation` module (it ships with Swift on Linux)
   so the `@Observable` controller is tested on Linux; this amends ADR 0007's "Foundation at most".
   Rejected: keeping the controller in `App/` (untested on Linux) or a hand-written observer.
+- **0016** — What goes on the agenda is decided by fixed, user-editable rules in AppCore
+  (`BinderRules`: personal-block prefixes, title prefixes, out-of-office words, saved short names,
+  person aliases, look-ahead days) and never by a language model, on or off the device; every
+  left-out item is shown with its reason instead of a summary.
 
 ## Manual steps
 
 Step-by-step page: https://claude.ai/artifact/DZxBnKphSDuV8PDN5XCo6t (source
 `docs/google-agenda-pdf-plan-manual-steps.html`).
 
-- **Before** (`manual_before`): create a Google Cloud project with the Calendar and Tasks APIs
-  enabled; configure the OAuth consent screen in Testing mode with your Google account as a test
-  user and the two read-only scopes; create an iOS OAuth client for `name.felhasznalo.magenda`
-  and commit its client ID into `App/GoogleOAuthClientID.txt` on `plan/google-agenda-pdf`.
-- **After** (`manual_after`): on a real iPhone, sign in, render, preview and share; check long
-  titles with real Google data and at the largest text size; check the delegated page from a real
-  Tasks list; set the App Store Connect privacy answers.
+- **Before** (`manual_before`): nothing. No phase talks to Google: every test runs against fakes
+  and fixtures, and the app ships without a client.
+- **After** (`manual_after`): create your own Google Cloud project with the Calendar and Tasks APIs
+  enabled, an OAuth consent screen with the two read-only scopes ("Internal" if the project belongs
+  to your Google Workspace organization, otherwise "External" in Testing mode) and an iOS OAuth
+  client for `name.felhasznalo.magenda`; on a real iPad, enter the client ID in the app, sign in,
+  render, preview and share into Noteshelf 3; compare the app's agenda with a binder the Claude
+  workflow built for the same date; check long titles and the largest text size in a narrow and a
+  full-screen window; check the delegated page; set the App Store Connect privacy answers. The
+  client ID is typed into the app only; it never goes into the repository, the PR or the
+  checklist.
 
 ## Risks and open questions
 
@@ -952,12 +1343,24 @@ Step-by-step page: https://claude.ai/artifact/DZxBnKphSDuV8PDN5XCo6t (source
   coordinates.
 - **PDF link destinations.** If `UIGraphicsSetPDFContextDestinationForRect` links do not appear
   as `PDFAnnotation`s with a destination in `PDFKit`, stop blocked with what was observed.
-- **Google consent in Testing mode** expires refresh tokens after 7 days; the app then shows
-  "Your Google sign-in expired. Sign in again." That is expected until the OAuth app is published
-  and verified, which is outside this plan.
-- **The client ID file.** If `App/GoogleOAuthClientID.txt` on the feature branch still holds the
-  placeholder, the app builds and shows "Google sign-in isn't set up in this build." Phases do not
-  edit the file; the `scripts/tests` check added in p13 fails until mb3 is done.
+- **Google Workspace policy.** If the account is on a Google Workspace whose admin restricts
+  third-party apps, sign-in fails with an "access blocked" page until the admin trusts the client
+  ID (Admin console → Security → API controls). That shows up in ma1, not in CI; the fix is an
+  admin setting, not code.
+- **`String.folding(options:locale:)` on Linux.** `BinderText.fold` relies on it. If the `core`
+  job shows "Zoltán" not folding to "zoltan", stop blocked with the test output; do not hand-roll a
+  diacritic table.
+- **Fixture expectations.** The `standard` fixture's expected draft is spelled out under
+  "Controller". If the builder produces something else and the rules as written agree with the
+  builder, the expectation paragraph is wrong: stop blocked and quote both, rather than bending the
+  rules to the fixture.
+- **Google consent in Testing mode** (an "External" consent screen) expires refresh tokens after 7 days; the app then shows
+  "Your Google sign-in expired. Sign in again." An "Internal" consent screen does not have this
+  limit; publishing and verifying an external app is outside this plan.
+- **No client in CI.** UI tests run with `-MagendaFixture`, which supplies a fixture client ID in
+  memory; `-MagendaNeedsSetup` exercises the setup screen. Live sign-in is only checked by hand in
+  manual_after. A phase that finds itself needing a real client ID stops blocked; it never commits
+  one.
 - **Coverage at 100%.** A phase that cannot reach a line from a test restructures the code so the
   failing input can be injected; it never lowers a floor.
 
@@ -969,40 +1372,35 @@ feature_branch: feature/google-agenda-pdf
 max_parallel: 2
 manual_steps_artifact: https://claude.ai/artifact/DZxBnKphSDuV8PDN5XCo6t
 manual_steps_source: docs/google-agenda-pdf-plan-manual-steps.html
-manual_before:
-  - id: mb1-google-cloud-project
-    title: Create a Google Cloud project and enable the Google Calendar API and the Google Tasks API
-    why: Every live request the app makes (p8b's clients, wired into the app by p14a) fails with 403 until both APIs are enabled.
-    done_when: Both APIs show "API enabled" on their Google Cloud console pages for the new project.
-  - id: mb2-oauth-consent-screen
-    title: Configure the OAuth consent screen (External, Testing) with your Google account as a test user and the calendar.readonly and tasks.readonly scopes
-    why: Google refuses sign-in for an unconfigured consent screen or a user who is not a test user; the manual_after device checks need it.
-    done_when: The Audience page shows Publishing status "Testing" with your address under Test users, and Data access lists both read-only scopes.
-  - id: mb3-ios-client-id
-    title: Create an iOS OAuth client for bundle ID name.felhasznalo.magenda and commit its client ID into App/GoogleOAuthClientID.txt on plan/google-agenda-pdf
-    why: p13's scripts test and the app's live sign-in read this file; with the placeholder the app reports that sign-in isn't set up.
-    done_when: git show origin/plan/google-agenda-pdf:App/GoogleOAuthClientID.txt prints one line matching ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$
+manual_before: []
 manual_after:
-  - id: ma1-device-sign-in-render-share
-    title: On a real iPhone, sign in with Google, render today's agenda, check the preview and share the PDF to Files, AirDrop or Print
-    why: ASWebAuthenticationSession against real Google, the Keychain on a device and the share sheet cannot run in CI.
-  - id: ma2-long-text-real-data
-    title: With real Google data containing very long titles, an unbroken long word, emoji and the largest Dynamic Type size, check the app's lists and the rendered PDF
-    why: Confirms the audited layout with real accounts and real fonts as a person sees them.
-  - id: ma3-delegated-list
-    title: Create a Google Tasks list with tasks in the Owner/Cadence/Marked notes format, choose it as the delegated list and check the delegated page
-    why: Confirms the notes format against the real Google Tasks app.
-  - id: ma4-app-store-privacy
+  - id: ma1-google-cloud-client
+    title: In your own Google Cloud project, enable the Calendar and Tasks APIs, configure the OAuth consent screen with the two read-only scopes, and create an iOS OAuth client for name.felhasznalo.magenda
+    why: The app ships without a Google client; live sign-in (ma2 onwards) needs one. Its client ID is typed into the app on the iPad and is never committed.
+  - id: ma2-ipad-setup-sign-in-render-share
+    title: On a real iPad, enter the client ID on the "Connect Google" screen, sign in, render tomorrow's agenda, check the preview beside the list and share the PDF into Noteshelf 3
+    why: The setup screen with a real client, ASWebAuthenticationSession against real Google (and any Workspace policy), the Keychain on a device and the share sheet into Noteshelf cannot run in CI.
+  - id: ma3-parity-with-claude-binder
+    title: Pick a date the Claude binder workflow already built and compare the app's agenda with that PDF item by item (schedule, meeting pages, to-dos, delegated rows and marks)
+    why: Confirms the deterministic rules reproduce the workflow on real data; every difference is either an intended rule (named in the PR) or a bug.
+  - id: ma4-long-text-windows
+    title: With real data containing long titles, check the app at the largest Dynamic Type size in a narrow Stage Manager window and full screen, and check the rendered PDF
+    why: Confirms the audited layout and the split view with real accounts and real fonts as a person sees them.
+  - id: ma5-delegated-list
+    title: Check the delegated page against the "Claude Delegations" list (owners, cadence, last two log lines, marks for check-ins due)
+    why: Confirms the parser against the real list.
+  - id: ma6-app-store-privacy
     title: Set App Store Connect's App Privacy answers to "Data Not Collected"
     why: The app reads Google data only on the device and sends nothing to the developer; App Store Connect needs the answer before review.
 verify_after_merge:
   - swift test --package-path AppCore --enable-code-coverage && python3 scripts/check_coverage_floor.py "$(swift test --package-path AppCore --show-codecov-path)"
+  - dispatch tests.yml on feature/google-agenda-pdf
 final_checks:
   - docs/google-agenda-pdf-plan.md and docs/google-agenda-pdf-plan-manual-steps.html are deleted and nothing links to them
-  - ADRs 0011, 0012, 0013, 0014 and 0015 exist, are Accepted, and are in docs/adr/README.md's index
+  - ADRs 0011, 0012, 0013, 0014, 0015 and 0016 exist, are Accepted, and are in docs/adr/README.md's index
   - CHANGELOG.md has [Unreleased] entries and no version heading
   - AppCore/Sources/Greeting.swift, App/ContentView.swift and AppUITests/MainScreenUITests.swift are gone
-  - App/GoogleOAuthClientID.txt holds a real client ID (python3 -m unittest discover -s scripts/tests passes)
+  - no real Google client ID, client secret or organization name is in the repository (the only client IDs are the made-up ones in tests and fixtures)
 phases:
   - id: p1-calendar-and-content
     title: Calendar math, schedule slots and the agenda content model in AppCore
@@ -1028,13 +1426,16 @@ phases:
          AppCore/Tests/GreetingTests.swift): CalendarDayTests (invalid dates such as 2026-02-30
          return nil; isoString round trip; init(isoString:) accepts "2026-10-01T00:00:00.000Z" and
          rejects "2026-1-1" and ""; weekdayIndex for 2026-10-01 is 3; isoWeek is 53 for 2026-12-31
-         and 1 for 2027-01-04; adding(days:) across a month and a year end; today(in:now:) for a
+         and 1 for 2027-01-04; adding(days:) across a month and a year end; nextWeekday() from
+         Thursday 2026-10-01 is 2026-10-02, from Friday 2026-10-02 and from Saturday 2026-10-03
+         is Monday 2026-10-05; today(in:now:) for a
          fixed Date in two time zones that disagree on the day; startDate(in:)).
          CalendarMathTests, parameterized: header(for: 2026-10-01) gives "1 THURSDAY", "CW 40",
          "OCTOBER", "2026", [28,29,30,1,2,3,4]; nextFourWeeks(from: 2026-10-01) gives CW 40–43 with
          the Python output's day numbers (28…4, 5…11, 12…18, 19…25); a year boundary
          (2026-12-30 → CW 53, 1, 2, 3). ScheduleSlot.index: (8,0)→0, (8,29)→0, (8,30)→1, (18,59)→21,
-         (7,59)→nil, (19,0)→nil. AgendaContentTests: Cadence labels; sortedForPage keeps input
+         (7,59)→nil, (19,0)→nil. AgendaContentTests: Cadence labels; TodoItem keeps text, notes
+         and due; sortedForPage keeps input
          order inside each (marked, cadence) group.
       5. Do not touch CHANGELOG.md or docs.
     acceptance:
@@ -1108,8 +1509,7 @@ phases:
          AppCore/Sources/Resources/slots.json unchanged. Check `sha256sum` prints
          ff9ed22ec6aece4d2f0daf764f0a8bd2a1507c813aa0fa5363afee8a9aa902bb; if not, stop blocked.
       2. AppCore/Package.swift: add `resources: [.copy("Resources/slots.json")]` to the AppCore
-         target. Change nothing else in the file except the comment above `let package` if it
-         needs to mention resources.
+         target. Change nothing else in the file.
       3. AppCore/Sources/Layout/TemplateManifest.swift: TemplateSlot, TemplateManifest (with
          init(data:), init(contentsOf:), bundled(), slot(_:)), TemplateError. JSON keys are
          snake_case (`page_width`, `size_half_points`, `header_slots`, `page_slots`, `delegated`,
@@ -1132,6 +1532,7 @@ phases:
       7. Do not touch CHANGELOG.md or docs.
     acceptance:
       - sha256sum AppCore/Sources/Resources/slots.json prints ff9ed22ec6aece4d2f0daf764f0a8bd2a1507c813aa0fa5363afee8a9aa902bb
+      - build.yml dispatched on the phase branch is green (AppCore/Package.swift now ships a resource bundle in the archive; link the run in the phase's report)
       - swift test --package-path AppCore --filter "TemplateManifestTests|RenderPlanTests|TextPlacerTests" passes on the core job (Linux), proving Bundle.module works there
       - the core job's coverage floor step passes at 100%
       - the lint job passes
@@ -1163,7 +1564,9 @@ phases:
          for 0 and 3 meetings; every page's header carries "30 WEDNESDAY", "CW 40", "SEPTEMBER",
          "2026" for 2026-09-30; the overview's first operation is fill(todoErase, white); a to-do
          item that fits at 12 pt keeps 12 pt and one row of 28.35; a long item shrinks then wraps
-         and its rows grow by the formula; separators are drawn at every row top except the
+         and its rows grow by the formula; a title with notes draws "<title>:" lines followed by
+         exactly one notes line that ends with "…" when the notes are long (longStrings[6]), and
+         a title with empty notes draws no colon and no notes line; separators are drawn at every row top except the
          first; blank rows fill the grid to todoBottom; 30 items of longStrings-length text fill
          the grid and the rest land in omittedTodoItems in order, while every drawn row ends at or
          above 655.75; a schedule entry longer than 201.8 ends with "…" and fits; a meeting title
@@ -1269,7 +1672,10 @@ phases:
          AppCore/Tests/Support/FakeHasher.swift: returns canned digests per input and fails the
          test on an unknown input.
       5. Tests, positive and negative: configuration accepts "123-abc.apps.googleusercontent.com"
-         and rejects uppercase, a missing prefix, a trailing path, an empty string; redirect scheme
+         and rejects uppercase, a missing prefix, a trailing path, an empty string; a client
+         secret "  test-secret-abc  " is trimmed, "" and "   " become nil, "a b" and a 201-character
+         secret make the init nil; token and refresh bodies contain client_secret right after
+         client_id when a secret is set and no client_secret field when it is nil; redirect scheme
          and URI; the RFC 7636 test vector through FakeHasher; verifier length 64 and state length
          32 from the allowed set (seeded generator); authorization URL query items and their
          order; callback: wrong scheme, wrong state, missing state, missing code,
@@ -1297,8 +1703,9 @@ phases:
     brief: |
       Read the Design section "Google sign-in" from `TokenStore` on.
       1. AppCore/Sources/Google/GoogleSession.swift: TokenStore, AuthorizedHTTPSending,
-         GoogleAccount, GoogleSession, UnconfiguredGoogleAccount (public init()), behaving exactly
-         as listed. The in-flight refresh is a `Task<OAuthTokens, Error>?` stored on the actor and
+         GoogleClientCredentials, ClientCredentialsStore, InMemoryClientCredentialsStore,
+         GoogleAccount and GoogleSession (configuration optional, configure(_:), isConfigured()),
+         behaving exactly as listed. The in-flight refresh is a `Task<OAuthTokens, Error>?` stored on the actor and
          cleared when it finishes.
       2. AppCore/Tests/Support/FakeTokenStore.swift: a final class guarded by an NSLock that
          holds optional tokens, counts saves and deletes, and can be told to throw on load or save.
@@ -1311,8 +1718,12 @@ phases:
          closure, exchanges the code and saves tokens; a closure GoogleAPIError passes through,
          any other closure error becomes .authorizationFailed, a save error becomes
          .authorizationFailed; signOut sends the revoke request and deletes tokens even when the
-         revoke fails or delete throws; UnconfiguredGoogleAccount throws .notConfigured and is
-         never signed in.
+         revoke fails or delete throws; with configuration nil, isConfigured and isSignedIn are
+         false and signIn and send throw .notConfigured without any request; configure with a
+         different client ID deletes stored tokens without a revoke request, the same client ID
+         with a new secret keeps them; GoogleClientCredentials.configuration is nil for an invalid
+         ID; InMemoryClientCredentialsStore save, load and delete. All client IDs in tests are
+         made up.
       4. Do not touch CHANGELOG.md or docs.
     acceptance:
       - swift test --package-path AppCore --filter GoogleSessionTests passes on the core job (Linux)
@@ -1334,7 +1745,7 @@ phases:
       - AppCore/Tests/Support/FakeSender.swift
     brief: |
       Read the Design section "Google Calendar and Tasks clients".
-      1. AppCore/Sources/Google/GoogleModels.swift: GoogleCalendar, EventStart, GoogleEvent,
+      1. AppCore/Sources/Google/GoogleModels.swift: GoogleCalendar, EventStart, GoogleAttendee, GoogleEvent,
          GoogleTaskList, GoogleTask, GoogleDataSource, LiveGoogleDataSource (all public, explicit
          public inits).
       2. AppCore/Sources/Google/GoogleCalendarClient.swift and GoogleTasksClient.swift: requests,
@@ -1345,7 +1756,7 @@ phases:
          target only (keep p3's AppCore target resources). Tests read a fixture with
          Bundle.module.url(forResource: <name>, withExtension: "json", subdirectory: "Fixtures").
       4. AppCore/Tests/Google/Fixtures/: calendar-list.json, events-page1.json (with
-         nextPageToken), events-page2.json, events-all-day.json, task-lists.json, tasks.json,
+         nextPageToken, and events carrying attendees and recurringEventId), events-page2.json, events-all-day.json, task-lists.json, tasks.json,
          tasks-malformed.json, in Google's documented response shapes (fields as named in the
          Design). Only made-up names and addresses. No "#" followed by digits in any string
          (scripts/tests/test_no_project_history.py scans .json files).
@@ -1355,106 +1766,259 @@ phases:
          percent-encoded in the path and, for time zone Europe/Budapest and day 2026-09-30,
          timeMin=2026-09-29T22:00:00Z and timeMax=2026-09-30T22:00:00Z with no "+" anywhere in
          the URL; two-page paging; the 10-page cap; all-day vs timed starts with and without
-         fractional seconds; an event with neither start form is skipped; selfResponse; title
+         fractional seconds; an event with neither start form is skipped; selfResponse; attendees
+         (self, a person, a room flagged by `resource: true`, a room recognised only by its
+         "@resource.calendar.google.com" address, an entry with no email skipped, no attendees
+         key → []); recurringEventID; title
          fallbacks for calendars; due parsing for tasks; malformed body → .unexpectedResponse;
-         a sender error passes through; LiveGoogleDataSource forwards each call.
+         a sender error passes through; LiveGoogleDataSource forwards each call. If the core job
+         (Linux) encodes the "#" in the calendar ID differently from the test's expected URL,
+         stop blocked with the actual URL; do not loosen the assertion.
       7. Do not touch CHANGELOG.md or docs.
     acceptance:
       - swift test --package-path AppCore --filter "GoogleCalendarClientTests|GoogleTasksClientTests" passes on the core job (Linux)
       - the core job's coverage floor step passes at 100%
       - the lint job passes
       - python3 -m unittest discover -s scripts/tests passes
-  - id: p9-settings-and-delegated-notes
-    title: Agenda settings, the settings store protocol and the delegated-notes parser
+  - id: p9a-settings-and-title-rules
+    title: Agenda settings with binder rules, text folding, and meeting-page title rules
     depends_on: [p1-calendar-and-content, p2-text-fitting]
-    complexity: S
-    touches:
-      - AppCore/Sources/Settings/AgendaSettings.swift
-      - AppCore/Sources/Settings/DelegatedNotes.swift
-      - AppCore/Tests/Settings/AgendaSettingsTests.swift
-      - AppCore/Tests/Settings/DelegatedNotesTests.swift
-    brief: |
-      Read the Design section "From Google data to a draft" up to, not including, DraftEvent.
-      1. AppCore/Sources/Settings/AgendaSettings.swift: AgendaSettings (with theme), SettingsStore,
-         InMemorySettingsStore (NSLock, as the Design says).
-      2. AppCore/Sources/Settings/DelegatedNotes.swift: DelegatedNotes and parse(_:) with the
-         exact rules and warning text.
-      3. Tests: settings defaults; JSON round trip; unknown fontPack decodes to .outfit; a JSON
-         object with only {"todoListID":"x"} decodes with every other default; theme mirrors
-         fontPack and colors; InMemorySettingsStore save then load. DelegatedNotes, parameterized:
-         nil and empty notes; the full example from the Design; fields in another order and case
-         ("CADENCE: Monthly"); blank lines among fields; a status line that looks like a field
-         after a status line stays a status line; unknown cadence gives daily and the exact
-         warning; every accepted marked value and "no".
-      4. Do not touch CHANGELOG.md or docs.
-    acceptance:
-      - swift test --package-path AppCore --filter "AgendaSettingsTests|DelegatedNotesTests" passes
-      - the core job's coverage floor step passes at 100%
-      - the lint job passes
-  - id: p10-draft-and-builder
-    title: AgendaDraft with edits and toggles, and AgendaBuilder from Google data
-    depends_on: [p8b-google-clients, p9-settings-and-delegated-notes]
     complexity: M
     touches:
+      - AppCore/Sources/Settings/AgendaSettings.swift
+      - AppCore/Sources/Settings/BinderRules.swift
+      - AppCore/Sources/Settings/BinderText.swift
+      - AppCore/Sources/Settings/MeetingTitle.swift
+      - AppCore/Tests/Settings/AgendaSettingsTests.swift
+      - AppCore/Tests/Settings/BinderTextTests.swift
+      - AppCore/Tests/Settings/MeetingTitleTests.swift
+    brief: |
+      Read the plan's "Current state" part "The daily-binder skill" and the Design section
+      "Settings and binder rules" up to, not including, `TaskTitle`.
+      1. AppCore/Sources/Settings/BinderRules.swift: BinderRules with the exact defaults, tolerant
+         decoding (a custom init(from:) using decodeIfPresent for every field).
+      2. AppCore/Sources/Settings/AgendaSettings.swift: AgendaSettings (with theme), SettingsStore,
+         InMemorySettingsStore (NSLock, as the Design says), tolerant decoding as specified.
+      3. AppCore/Sources/Settings/BinderText.swift: fold, startsWithPhrase, containsPhrase exactly
+         as specified. "Letter or digit" is Character.isLetter || Character.isNumber.
+      4. AppCore/Sources/Settings/MeetingTitle.swift: key, stripped, pageTitle exactly as
+         specified.
+      5. Tests (Swift Testing, parameterized where a table fits): AgendaSettingsTests — defaults
+         ("Claude", "Claude Delegations", BinderRules.default values); JSON round trip; unknown
+         fontPack decodes to .outfit; {"todoListTitle":"x"} decodes with every other default; a
+         "rules" object holding only {"lookAheadDays":3} keeps the other rule defaults; theme
+         mirrors fontPack and colors; InMemorySettingsStore save then load. BinderTextTests —
+         fold("Zoltán") == fold("ZOLTAN") == "zoltan", fold("  Árvíztűrő\ttükörfúrógép ") ==
+         "arvizturo tukorfurogep"; startsWithPhrase: "Lunch" vs "Lunch", "lunch with Sam",
+         "Lunch: team" (true) and "Lunchtime", "Team lunch" (false); "FW:" vs "FW:Budget" (true);
+         empty phrase (false); containsPhrase: "OOO" in "OOO - Budapest", "Vacation" in "Summer
+         vacation", "Out of Office" in "Out of office (Nora)" (true), "PTO" in "Photography",
+         "Home" with every default out-of-office word (false). MeetingTitleTests — every example
+         listed under MeetingTitle in the Design, verbatim; key for a recurring and a one-off
+         event; pageTitle prefers a non-empty short name and ignores a blank one.
+      6. If fold("Zoltán") is not "zoltan" on the core job (Linux), stop blocked with the output
+         (see the plan's Risks).
+      7. Do not touch CHANGELOG.md or docs.
+    acceptance:
+      - swift test --package-path AppCore --filter "AgendaSettingsTests|BinderTextTests|MeetingTitleTests" passes on the core job (Linux)
+      - the core job's coverage floor step passes at 100%
+      - the lint job passes
+  - id: p9b-task-and-delegated-parsing
+    title: Discussion-task detection and the delegated-task parser
+    depends_on: [p9a-settings-and-title-rules]
+    complexity: S
+    touches:
+      - AppCore/Sources/Settings/TaskTitle.swift
+      - AppCore/Sources/Settings/DelegatedTask.swift
+      - AppCore/Tests/Settings/TaskTitleTests.swift
+      - AppCore/Tests/Settings/DelegatedTaskTests.swift
+    brief: |
+      Read the Design section "Settings and binder rules" from `TaskTitle` to the end of that
+      section, and the skill's rule 6 under "Current state".
+      1. AppCore/Sources/Settings/TaskTitle.swift: isDiscussion and discussionName exactly as
+         specified, with NSRegularExpression.
+      2. AppCore/Sources/Settings/DelegatedTask.swift: DelegatedTask (owner, text, cadence,
+         status, warning) and parse(title:notes:) with the exact rules and warning strings.
+      3. Tests, parameterized: TaskTitleTests — "Peter – to be discussed" (name "Peter"),
+         "Zoltán - TBD" ("Zoltán"), "Nora: to be discussed" ("Nora"), "TBD" (discussion, nil
+         name), "Prepare TBD list" (discussion, nil name), "Call the bank" (not a discussion),
+         "Todo: be discussed later" (not a discussion). DelegatedTaskTests — the Design's
+         Sam example (status = the last two log lines); one log line; no log lines; "#Weekly"
+         in another case; no cadence line (Daily, warning, the first line counts as log); no
+         colon in the title; ": Task" and "Owner:" (empty part); title with two colons
+         ("Anna: Fix: the printer" → owner "Anna", text "Fix: the printer"); both warnings joined
+         with one space; nil title and notes.
+      4. Do not touch CHANGELOG.md or docs.
+    acceptance:
+      - swift test --package-path AppCore --filter "TaskTitleTests|DelegatedTaskTests" passes
+      - the core job's coverage floor step passes at 100%
+      - the lint job passes
+  - id: p10a-event-selection
+    title: Event selection rules, reasons and the weekend / out-of-office notices
+    depends_on: [p8b-google-clients, p9a-settings-and-title-rules]
+    complexity: M
+    touches:
+      - AppCore/Sources/Draft/DraftEvent.swift
+      - AppCore/Sources/Draft/EventSelection.swift
+      - AppCore/Tests/Draft/EventSelectionTests.swift
+    brief: |
+      Read the Design section "From Google data to a draft": the code block's EventExclusion and
+      DraftEvent, "Event rules" and "Notices". The skill's rules 1–4 and the review findings under
+      "Current state" explain why each rule exists.
+      1. AppCore/Sources/Draft/DraftEvent.swift: EventExclusion (with label) and DraftEvent (with
+         defaultTitle and the computed reasons) exactly as specified.
+      2. AppCore/Sources/Draft/EventSelection.swift: EventSelection.draftEvents(for:events:
+         timeZone:rules:) and EventSelection.notices(for:events:timeZone:rules:) with the exact
+         rules, order and strings.
+      3. EventSelectionTests (build GoogleEvent values directly, time zone Europe/Budapest, day
+         2026-09-30 unless stated): each "not listed" rule; sorting by start, then title, then
+         input order; declined wins over personal block; personal blocks by prefix ("Lunch with
+         Sam" excluded, "Lunchtime talk" kept); duplicate by iCalUID across two calendars and by
+         folded title ("Quarterly Summit" 08:00 and "quarterly summit" 08:30 → the 08:30 one is
+         .duplicate); "Team sync" at 09:00 and 15:00 are both kept, at 09:00 and 10:59 the second is
+         .duplicate; an excluded event does not make a later same-title event a duplicate;
+         hasOtherAttendees false for self only, self + room, self + a declined person; true for
+         self + an accepted or needsAction person; attendeeFirstNames from displayName
+         "Zoltán Kovács" → "zoltan" and from email "peter.brown@example.com" → "peter";
+         title "REMINDER // Decision about the office move" gets page title "Decision about
+         the office move" and a short name in rules wins; 07:00 and 19:00 events have nil
+         scheduleSlot; every reasons string; notices: Saturday 2026-10-03 gives "Saturday, 3
+         October is a weekend.", an all-day "Vacation" gives "You're out of office on this day
+         (“Vacation”).", an all-day "Home" gives none, an all-day "Vacation" starting 2026-09-28
+         gives the notice on 2026-09-30, a nil-titled all-day outOfOffice event gives
+         "(No title)", an eventType outOfOffice event gives the out-of-office notice, a weekend day with an OOO event gives both in that order.
+      4. Do not touch CHANGELOG.md or docs.
+    acceptance:
+      - swift test --package-path AppCore --filter EventSelectionTests passes
+      - the core job's coverage floor step passes at 100%
+      - the lint job passes
+  - id: p10c-google-fixtures
+    title: Google data fixtures for tests, UI tests and previews
+    depends_on: [p6-layout-audit, p8b-google-clients]
+    complexity: M
+    touches:
+      - AppCore/Sources/Controller/GoogleFixtures.swift
+      - AppCore/Tests/Controller/GoogleFixturesTests.swift
+    brief: |
+      Read the Design section "Controller" from "Fixtures for UI tests and SwiftUI previews" to
+      the end of that section.
+      1. AppCore/Sources/Controller/GoogleFixtures.swift: GoogleFixture (with
+         init?(launchArguments:)), FixtureGoogleDataSource (public init(_ fixture:)) and
+         FixtureGoogleAccount (actor, init(signedIn:); configure stores the value and
+         isConfigured reports it; signIn throws .notConfigured while unconfigured) with all five
+         fixtures' data exactly as specified, including the defaults for unstated fields.
+      2. GoogleFixturesTests: launch-argument parsing ("-MagendaFixture standard", a missing
+         value, an unknown value); each fixture's counts of calendars, task lists, events and
+         tasks per list; `openTasks(listID: "other")` returns only "Wrong list"; an unknown list
+         ID returns []; events are built on the requested day in the requested time zone (09:00
+         Europe/Budapest on 2026-09-30 is 07:00Z); longText uses AgendaContentFixtures.longStrings;
+         FixtureGoogleAccount signs in without calling the closure and signs out.
+      3. Do not touch CHANGELOG.md or docs.
+    acceptance:
+      - swift test --package-path AppCore --filter GoogleFixturesTests passes
+      - the core job's coverage floor step passes at 100%
+      - the lint job passes
+  - id: p10b-tasks-and-draft
+    title: Task and delegated selection, AgendaDraft with edits and toggles, and AgendaBuilder
+    depends_on: [p10a-event-selection, p9b-task-and-delegated-parsing, p10c-google-fixtures]
+    complexity: M
+    touches:
+      - AppCore/Sources/Draft/DraftTask.swift
+      - AppCore/Sources/Draft/TaskSelection.swift
       - AppCore/Sources/Draft/AgendaDraft.swift
       - AppCore/Sources/Draft/AgendaBuilder.swift
+      - AppCore/Tests/Draft/TaskSelectionTests.swift
       - AppCore/Tests/Draft/AgendaDraftTests.swift
       - AppCore/Tests/Draft/AgendaBuilderTests.swift
     brief: |
-      Read the Design section "From Google data to a draft" from DraftEvent on.
-      1. AppCore/Sources/Draft/AgendaDraft.swift: DraftEvent, DraftTask, DraftDelegated,
-         AgendaDraft with every mutating function and content().
-      2. AppCore/Sources/Draft/AgendaBuilder.swift: AgendaBuilder(timeZone:) and
-         draft(for:events:tasks:delegated:) with the exact rules. timeText uses a Calendar in the
-         builder's time zone, formatted with String(format: "%02d:%02d", hour, minute).
-      3. Tests (build GoogleEvent/GoogleTask values directly, time zone Europe/Budapest, day
-         2026-09-30): each event filter rule; dedupe by iCalUID across two calendars; sort by
-         start then title; "(No title)"; an event at 07:30 and one at 19:00 have nil
-         scheduleSlot but still a meeting page; to-do filter and order (overdue, today, undated
-         by position) and dueText "Today" / "28 Sep" / ""; delegated parsing reaches the draft;
-         content(): two events in one slot join with " / " and get no meetingIndex; unticking a
-         meeting page keeps the event on the schedule and removes its meetingIndex; unticked
-         tasks and delegated items are left out; setTitle with "  " restores the original;
-         setText normalizes newlines.
-      4. Do not touch CHANGELOG.md or docs.
+      Read the Design section "From Google data to a draft": TaskBucket, DraftTask,
+      DraftDelegated, AgendaDraft, AgendaBuilder, "Task rules" and "content()". The skill's rules
+      5–6 under "Current state" explain them.
+      1. AppCore/Sources/Draft/DraftTask.swift: TaskBucket, DraftTask, DraftDelegated.
+      2. AppCore/Sources/Draft/TaskSelection.swift: TaskSelection.draftTasks(for:tasks:events:
+         rules:) and draftDelegated(for:tasks:) with the exact rules and reason strings.
+      3. AppCore/Sources/Draft/AgendaDraft.swift: AgendaDraft with every mutating function
+         (including applyShortName) and content().
+      4. AppCore/Sources/Draft/AgendaBuilder.swift: AgendaBuilder(timeZone:rules:) and
+         draft(for:events:tasks:delegated:) = EventSelection + TaskSelection + notices.
+      5. Tests (Europe/Budapest, day 2026-09-30): TaskSelectionTests — buckets and the
+         look-ahead edge (due day+5 listed, day+6 not, lookAheadDays 0 lists none upcoming);
+         undated and completed tasks not listed; order inside buckets by due, position, input;
+         dueText "09/28"; notes normalized; a discussion task kept by first name with accents
+         ("Zoltán - TBD" with attendee "Zoltan Kovacs"), kept by a person alias, left out with
+         the exact reason, and an overdue discussion task included as ordinary; delegated marked
+         on day and before, unmarked after and when due is nil, warnings carried. AgendaDraftTests
+         — setIncluded off clears the meeting page and on restores it; setMeetingPage ignored on
+         a left-out event; setTitle blank restores defaultTitle; applyShortName on two events
+         sharing a key and with a blank name; content(): the schedule keeps originalTitle while
+         meetings use title; two events in one slot join with " / " and get no meetingIndex; a
+         left-out event is neither on the schedule nor a meeting; meetingIndex counts within
+         meetings; todoItems carry notes; delegated keep marked. AgendaBuilderTests — fetch the
+         `standard` fixture's events and tasks from FixtureGoogleDataSource(.standard) (calendar
+         "primary", lists "todo" and "delegated") in an async test and assert the exact draft described at the end of
+         the Design's "Controller" section (rows, reasons, buckets, content meetings, todoItems
+         count, schedule slots).
+      6. If the `standard` expectation in the Design disagrees with the rules as written, stop
+         blocked and quote both (see the plan's Risks).
+      7. Do not touch CHANGELOG.md or docs.
     acceptance:
-      - swift test --package-path AppCore --filter "AgendaDraftTests|AgendaBuilderTests" passes
+      - swift test --package-path AppCore --filter "TaskSelectionTests|AgendaDraftTests|AgendaBuilderTests" passes
       - the core job's coverage floor step passes at 100%
       - the lint job passes
   - id: p11-agenda-controller
-    title: AgendaController and the Google fixtures for UI tests and previews
-    depends_on: [p6-layout-audit, p10-draft-and-builder]
+    title: AgendaController — loading, list lookup by title, notices, short names, rendering
+    depends_on: [p6-layout-audit, p10b-tasks-and-draft]
     complexity: M
     touches:
       - AppCore/Sources/Controller/AgendaController.swift
-      - AppCore/Sources/Controller/GoogleFixtures.swift
       - AppCore/Tests/Controller/AgendaControllerTests.swift
-      - AppCore/Tests/Controller/GoogleFixturesTests.swift
       - AppCore/Tests/Support/FakeRenderer.swift
+      - AppCore/Tests/Support/GatedDataSource.swift
     brief: |
-      Read the Design section "Controller".
+      Read the Design section "Controller" up to "Fixtures for UI tests and SwiftUI previews".
+      `import Observation` in AppCore departs from ADR 0007 until p16 writes ADR 0015; that is
+      expected on this branch.
       1. AppCore/Sources/Controller/AgendaController.swift: RenderedAgenda, AgendaRendering and
-         AgendaController (`import Observation`, `@MainActor @Observable`) exactly as specified.
-      2. AppCore/Sources/Controller/GoogleFixtures.swift: GoogleFixture (with
-         init?(launchArguments:)), FixtureGoogleDataSource and FixtureGoogleAccount with the
-         specified data.
-      3. AppCore/Tests/Support/FakeRenderer.swift: records the plan and file name, returns a
-         fixed URL or throws.
-      4. Tests (@MainActor, FixtureGoogleDataSource/FixtureGoogleAccount, InMemorySettingsStore,
-         FakeTextMeasurer, TemplateManifest.bundled(), FakeRenderer): start() signed out and
-         signed in; signIn success, cancellation (no message) and failure (message); load()
-         picks primary when calendarIDs is empty or stale, the first list as to-do list, no
-         delegated list when it equals the to-do list; a data source throwing .signedOut moves to
-         .signedOut with its message, .network to .failed; setDay reloads; updateSettings saves
-         and reloads only when a source changed (changing fontPack does not reload);
-         updateDraft and updateSettings clear rendered; render() passes the file name
-         "Agenda 2026-09-30.pdf", fills RenderedAgenda (overflow fixture reports omitted tasks),
-         and a renderer error leaves .ready with "Couldn't create the PDF. Try again.";
-         signOut clears state. GoogleFixturesTests: launch-argument parsing; each fixture's
-         counts; longText uses AgendaContentFixtures.longStrings.
+         AgendaController (`import Observation`, `@MainActor @Observable`) exactly as specified,
+         including loadGeneration, list lookup by folded title, the missing-list notices,
+         showsNextWorkingDay, goToNextWorkingDay, saveShortName and the detached layout in
+         render().
+      2. AppCore/Tests/Support/FakeRenderer.swift: records the plan and file name, returns a
+         fixed URL or throws. AppCore/Tests/Support/GatedDataSource.swift: wraps a
+         GoogleDataSource; its first `events` call waits on a continuation the test resumes.
+      3. Tests (@MainActor, FixtureGoogleDataSource/FixtureGoogleAccount from p10c,
+         InMemoryClientCredentialsStore from p8a, a `FailingCredentialsStore` declared in the
+         test file whose save throws, InMemorySettingsStore, FakeTextMeasurer, TemplateManifest.bundled(), FakeRenderer; today
+         2026-09-29): the initial day is 2026-09-30, and today 2026-10-02 (Friday) gives
+         2026-10-05; start() with an empty credentials store gives .needsSetup and configures the
+         account with nil; saveClientCredentials with "not-an-id" returns false with the client-ID
+         message, with a valid ID and secret "a b" returns false with the secret message, with a
+         valid ID saves it, configures the account, sets clientID and moves to .signedOut, and a
+         store whose save throws gives the Keychain message; forgetClientCredentials signs out,
+         empties the store and returns to .needsSetup; start() signed out and signed in; signIn success, cancellation (no message)
+         and failure (message); load() reads "primary" when calendarIDs is empty or stale; the
+         to-do list is found by title ignoring case and accents and "Wrong list" never appears;
+         todoListTitle "Nope" gives no tasks and the exact missing-list notice;
+         delegatedListTitle "" gives no delegated items and no notice; delegatedListTitle
+         "Claude" (the to-do list) gives no delegated items and the delegated missing-list
+         notice; the standard fixture's draft matches the Design's expectation paragraph;
+         outOfOffice gives the out-of-office notice and showsNextWorkingDay; setDay(2026-10-03)
+         gives the weekend notice and goToNextWorkingDay moves to 2026-10-05; with
+         GatedDataSource, setDay(2026-10-01) then setDay(2026-10-02) before resuming the gate
+         leaves day and draft at 2026-10-02; a data source throwing .signedOut moves to
+         .signedOut with its message, .network to .failed; updateSettings saves and reloads only
+         when calendarIDs, a list title or rules changed (changing fontPack does not reload);
+         saveShortName stores the key, retitles both events sharing it without reloading, a
+         blank name removes it, and an unknown id changes nothing; updateDraft and updateSettings
+         clear rendered; render() passes the file name "2026-09-30.pdf", fills RenderedAgenda
+         (overflow fixture reports omitted tasks), and a renderer error leaves .ready with
+         "Couldn't create the PDF. Try again."; signOut clears state.
+      4. If `import Observation` or `@Observable` fails to compile on the core job, or the
+         coverage report shows uncovered lines that come only from the macro's expansion, stop
+         blocked with the output (see the plan's Risks).
       5. Do not touch CHANGELOG.md or docs.
     acceptance:
-      - swift test --package-path AppCore --filter "AgendaControllerTests|GoogleFixturesTests" passes on the core job (Linux)
+      - swift test --package-path AppCore --filter AgendaControllerTests passes on the core job (Linux)
       - the core job's coverage floor step passes at 100%
       - the lint job passes
   - id: p12-app-pdf-renderer
@@ -1480,7 +2044,8 @@ phases:
          b2e7eb2aafeed0c17db5f33fe1b8f900d5866194989d890035e458770edabfe3; if not, stop blocked.
          Download the three OFL.txt files from the URLs in the Design to the OFL-*.txt names.
       2. App/Rendering/FontLibrary.swift, CoreTextMeasurer.swift, PDFAgendaRenderer.swift as
-         specified. PDFAgendaRenderer conforms to AgendaRendering (p11).
+         specified, with the initializers the Design gives (CoreTextMeasurer(library:),
+         PDFAgendaRenderer(library:bundle:) throws FontLibraryError.missingTemplate). PDFAgendaRenderer conforms to AgendaRendering (p11).
       3. AppTests/RenderingTests.swift (Swift Testing, hosted): every FontPack × FontWeight loads
          from the bundle; CoreTextMeasurer gives a positive width for "TO-DO LIST" and for each
          of AgendaContentFixtures.longStrings, and wider text measures wider; for every
@@ -1488,7 +2053,8 @@ phases:
          TemplateManifest.bundled() gives LayoutAudit.violations(in:) == [] (report the
          violations in the failure message); FontLibrary(bundle: .main) succeeds and
          FontLibrary(bundle: Bundle(for: an NSObject subclass declared in the test file)), the
-         test bundle, which holds no fonts, throws missingFont; rendering the typical and overflow plans writes a
+         test bundle, which holds no fonts, throws missingFont, and
+         PDFAgendaRenderer(library:bundle:) with that test bundle throws missingTemplate; rendering the typical and overflow plans writes a
          file that PDFDocument opens with pageCount == plan.pages.count, page 0's string contains
          "TO-DO LIST" and "30 WEDNESDAY", page 1 of the typical plan has a PDFAnnotation whose
          destination page index is 0, and the first `findString("TO-DO LIST")` selection's
@@ -1505,44 +2071,47 @@ phases:
       - tests.yml app (iphone, newest), app (iphone, oldest) and app (ipad, newest) pass on the phase branch, including RenderingTests
       - the lint and scripts jobs pass
   - id: p13-app-platform
-    title: URLSession, Keychain, CryptoKit and UserDefaults adapters, privacy manifest and client ID loading
-    depends_on: [p8a-google-session, p8b-google-clients, p9-settings-and-delegated-notes]
-    complexity: S
+    title: URLSession, Keychain (tokens and client credentials), CryptoKit and UserDefaults adapters, privacy manifest
+    depends_on: [p8a-google-session, p8b-google-clients, p9a-settings-and-title-rules]
+    complexity: M
     touches:
       - App/Platform/URLSessionHTTPClient.swift
+      - App/Platform/KeychainItem.swift
       - App/Platform/KeychainTokenStore.swift
+      - App/Platform/KeychainClientCredentialsStore.swift
       - App/Platform/CryptoKitHasher.swift
       - App/Platform/UserDefaultsSettingsStore.swift
-      - App/Platform/BundledGoogleClient.swift
       - App/PrivacyInfo.xcprivacy
       - AppTests/PlatformTests.swift
-      - scripts/tests/test_google_oauth_client_id.py
     brief: |
-      Read the Design section "Platform" under "App". Do not edit App/GoogleOAuthClientID.txt;
-      the user fills it in (manual step mb3).
-      1. Create the five App/Platform files as specified. KeychainTokenStore uses SecItemAdd /
-         SecItemUpdate / SecItemCopyMatching / SecItemDelete; errSecItemNotFound on load returns
-         nil; other statuses throw a private error. URLSessionHTTPClient maps URLError to a
-         thrown error without the URL or headers in its description.
-      2. App/PrivacyInfo.xcprivacy with exactly the keys in the Design.
-      3. scripts/tests/test_google_oauth_client_id.py (unittest, stdlib only): the file
-         App/GoogleOAuthClientID.txt exists, has exactly one non-empty line, and that line
-         matches ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$. Its failure message says to
-         follow the manual step "Create an iOS OAuth client" and paste the client ID there.
-      4. AppTests/PlatformTests.swift (hosted): KeychainTokenStore save/load/overwrite/delete
-         round trip under service "name.felhasznalo.magenda.tests" (deleted in the test's
-         cleanup); UserDefaultsSettingsStore round trip in a UserDefaults(suiteName:) removed
-         afterwards, and garbage data loads as defaults; CryptoKitHasher on the RFC 7636 verifier
-         gives the expected challenge digest; BundledGoogleClient.configuration(bundle: .main)
-         is non-nil.
-      5. Push and dispatch tests.yml; read the scripts and app jobs. If the Keychain test fails
-         with OSStatus -34018 (errSecMissingEntitlement) on the simulator, stop blocked and quote
-         the status; do not add entitlements or skip the test.
-      6. Do not touch project.yml, CHANGELOG.md or docs.
+      Read the Design section "Platform" under "App" and the client paragraph at the top of
+      "Google sign-in".
+      1. Do not create any file holding a client ID; the app takes the client from the user at
+         runtime.
+      2. App/Platform/KeychainItem.swift: a struct (service, account) with
+         `read() throws -> Data?`, `write(_ data: Data) throws`, `delete() throws` over
+         SecItemAdd / SecItemUpdate / SecItemCopyMatching / SecItemDelete with
+         kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly; errSecItemNotFound on read returns nil
+         and on delete succeeds; other statuses throw a private error carrying only the OSStatus.
+      3. KeychainTokenStore and KeychainClientCredentialsStore on top of KeychainItem, JSON
+         encoded, as specified; URLSessionHTTPClient (maps URLError to a thrown error without the
+         URL or headers in its description); CryptoKitHasher; UserDefaultsSettingsStore.
+      4. App/PrivacyInfo.xcprivacy with exactly the keys in the Design.
+      5. AppTests/PlatformTests.swift (hosted): KeychainTokenStore and
+         KeychainClientCredentialsStore save/load/overwrite/delete round trips under services
+         "name.felhasznalo.magenda.tests" and "name.felhasznalo.magenda.tests-client" (deleted in
+         the test's cleanup), the client store also with a nil secret; UserDefaultsSettingsStore
+         round trip in a UserDefaults(suiteName:) removed afterwards, and garbage data loads as
+         defaults; CryptoKitHasher on the RFC 7636 verifier gives the expected challenge digest.
+         Test client IDs are made up ("123456789012-test.apps.googleusercontent.com").
+      6. Push and dispatch tests.yml; read the app jobs. If a Keychain test fails with OSStatus
+         -34018 (errSecMissingEntitlement) on the simulator, stop blocked and quote the status;
+         do not add entitlements or skip the test.
+      7. Do not touch project.yml, CHANGELOG.md or docs.
     acceptance:
-      - python3 -m unittest discover -s scripts/tests passes (it fails while the client ID placeholder is still there; if it does, stop blocked and say mb3 is not done)
+      - test ! -e App/GoogleOAuthClientID.txt
       - tests.yml's three app jobs pass on the phase branch, including PlatformTests
-      - the lint job passes
+      - the lint and scripts jobs pass
       - plutil -lint App/PrivacyInfo.xcprivacy succeeds on the app job, or python3 -c "import plistlib;plistlib.load(open('App/PrivacyInfo.xcprivacy','rb'))" succeeds locally
   - id: p14a-app-shell-and-sign-in
     title: App wiring, root and sign-in screens, removal of the template placeholder
@@ -1554,23 +2123,33 @@ phases:
       - App/ContentView.swift
       - App/Screens/RootView.swift
       - App/Screens/SignInView.swift
+      - App/Screens/SetupView.swift
       - App/Screens/AgendaView.swift
       - AppCore/Sources/Greeting.swift
       - AppCore/Tests/GreetingTests.swift
       - AppUITests/MainScreenUITests.swift
       - AppUITests/SignInUITests.swift
+      - AppUITests/SetupUITests.swift
     brief: |
-      Read the Design sections "Wiring" and "Screens" (rows RootView and SignInView) and
+      Read the Design sections "Wiring" and "Screens" (rows RootView, SetupView and SignInView) and
       docs/coding-and-testing-guidelines.md "Views".
       1. App/AppEnvironment.swift: makeController(arguments:bundle:) exactly as the Design's
-         "Wiring" paragraph says, live and fixture branches included.
+         "Wiring" paragraph says, live and fixture branches included (fixture today 2026-09-29).
       2. App/MagendaApp.swift: as the "Wiring" paragraph says, including the templateError text
-         when makeController throws, and RootView(appInfo:).
+         when makeController throws, and RootView(appInfo:). Leave out `.commands`; p14c adds it.
       3. App/Screens/RootView.swift and SignInView.swift with the exact strings, identifiers and
          #Previews. SignInView passes @Environment(\.webAuthenticationSession)'s
          authenticate(using: url, callback: .customScheme(scheme), preferredBrowserSession:
-         .shared, additionalHeaderFields: [:]) to controller.signIn, mapping
+         .shared, additionalHeaderFields: [:]) to controller.signIn as
+         `{ @MainActor url, scheme in try await session.authenticate(…) }`, mapping
          ASWebAuthenticationSessionError.canceledLogin to GoogleAPIError.authorizationCancelled.
+         If Swift 6 strict concurrency still rejects the closure, stop blocked with the
+         diagnostic.
+         The sign-in content is centered with a maximum width of 480 pt so it reads well in a
+         full-screen iPad window.
+      3b. App/Screens/SetupView.swift with the exact strings, identifiers, field settings and
+         #Preview, usable full screen and as a sheet (an `isSheet: Bool` parameter adds Cancel,
+         prefills the client ID and dismisses on success).
       4. App/Screens/AgendaView.swift: a stub `AgendaView(appInfo:)` showing
          `List { Text(controller.day.isoString) }` with identifier `agendaScreen` on the List and
          a #Preview; p14b replaces its body.
@@ -1579,95 +2158,196 @@ phases:
       6. AppUITests/SignInUITests.swift (XCTest, identifiers only, waitForExistence, no sleeps):
          -MagendaFixture standard -MagendaSignedOut shows signInButton, and tapping it reaches
          agendaScreen within 10 s; -MagendaFixture standard alone reaches agendaScreen without
-         showing signInButton.
-      7. Push and dispatch tests.yml; all three app jobs must pass.
+         showing signInButton. AppUITests/SetupUITests.swift: -MagendaFixture standard
+         -MagendaNeedsSetup -MagendaSignedOut shows clientIDField and saveClientButton disabled;
+         typing "not-an-id" and tapping save shows setupMessage; typing
+         "123456789012-test.apps.googleusercontent.com" and saving reaches signInButton.
+      7. Push and dispatch tests.yml; all three app jobs (iPhone newest, iPhone oldest, iPad
+         newest) must pass.
       8. Do not touch project.yml, CHANGELOG.md or docs.
     acceptance:
       - test ! -e App/ContentView.swift && test ! -e AppCore/Sources/Greeting.swift && test ! -e AppUITests/MainScreenUITests.swift
       - tests.yml's three app jobs pass on the phase branch with SignInUITests
       - the core (coverage floor 100%), lint and scripts jobs pass
   - id: p14b-app-agenda-screen
-    title: The agenda review screen with rows, toggles and editing, and UI tests for long text and Dynamic Type
+    title: The iPad-first agenda screen — split view, toolbar, rows with reasons and toggles — and its UI tests
     depends_on: [p14a-app-shell-and-sign-in]
     complexity: M
     touches:
       - App/Screens/AgendaView.swift
       - App/Screens/AgendaRows.swift
-      - App/Screens/EditTextSheet.swift
       - AppUITests/AgendaScreenUITests.swift
       - AppUITests/LongTextUITests.swift
     brief: |
-      Read the Design section "Screens" (rows AgendaView and EditTextSheet, and the "Rows"
-      paragraph) and docs/coding-and-testing-guidelines.md "Views".
-      1. App/Screens/AgendaView.swift: replace p14a's stub body with the full screen; keep the
-         identifier `agendaScreen` on its List. The settingsButton exists but its destination is
-         `Text("Settings")` until p15. The Render button awaits controller.render() and then
-         pushes a placeholder destination `Text(rendered.url.lastPathComponent)` with identifier
-         `pdfPreview`, which p15 replaces with PreviewView.
-      2. App/Screens/AgendaRows.swift (the three row views) and EditTextSheet.swift with the exact
-         strings, identifiers, accessibility labels and #Previews (fixture data).
+      Read the Design section "Screens" (row AgendaView, the "Rows" list and the "Multiple
+      windows" paragraph), the `standard` expectation paragraph at the end of "Controller", and
+      docs/coding-and-testing-guidelines.md "Views".
+      1. App/Screens/AgendaView.swift: replace p14a's stub body with the NavigationSplitView
+         screen (columnVisibility .all, .balanced style, the toolbar placements as specified);
+         keep the identifier `agendaScreen` on the sidebar's List. The settingsButton opens
+         `.sheet { Text("Settings") }` until p15b. The detail column shows the
+         ContentUnavailableView placeholder (identifier `previewPlaceholder`) and, once
+         `rendered` is set, a placeholder `Text(rendered.url.lastPathComponent)` with identifier
+         `pdfPreview`, which p15a replaces with PreviewView.
+      2. App/Screens/AgendaRows.swift: the three row views with the exact strings, identifiers,
+         accessibility labels, hover effects and #Previews (fixture data). The leading button and
+         the context menu's "Edit…" call an `onEdit` closure the row takes; in this phase
+         AgendaView passes `{}`; p14c presents EditTextSheet from it.
       3. UI tests (XCTest, identifiers only, waitForExistence, no sleeps), launched with
-         -MagendaFixture. AgendaScreenUITests — standard: eventRow.0…3 and taskRow.0…2 and
-         delegatedRow.0…1 exist; toggling eventToggle.0 changes its value; eventScheduleNote.3
-         exists (the 19:00 event) and eventScheduleNote.0 does not; editing taskRow.0 through
-         editField and editDone changes taskRow.0's label; editCancel leaves it unchanged;
-         Render shows pdfPreview within 30 s. LongTextUITests — longText, once at the default size
-         and once with launch arguments -UIPreferredContentSizeCategoryName
-         UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge: for every eventRow.n,
-         taskRow.n and delegatedRow.n, after scrolling it into view, its frame's minX ≥ the
-         window's minX and maxX ≤ the window's maxX, and its toggle isHittable; renderButton is
-         hittable and Render reaches pdfPreview.
+         -MagendaFixture. AgendaScreenUITests — standard: eventRow.0…9, taskRow.0…4 and
+         delegatedRow.0…2 exist; eventReason.0 contains "Personal block", eventReason.5
+         contains "Declined", eventReason.8 contains "Duplicate", eventReason.9 contains "Not
+         on the schedule"; eventPageToggle.1 exists and eventPageToggle.0 does not; toggling
+         eventToggle.1 off removes eventPageToggle.1; taskReason.2 contains "no meeting with
+         Nora"; delegatedMarked.0 exists and delegatedMarked.1 does not; nextDayButton changes
+         datePicker's value; with -MagendaFixture outOfOffice, notice.0 and nextWorkingDayButton
+         exist; Render shows pdfPreview within 30 s, and then `agendaScreen.isHittable` is true
+         when `UIDevice.current.userInterfaceIdiom == .pad` and false otherwise.
+         LongTextUITests — longText, once at the default size and once with launch arguments
+         -UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge:
+         for every eventRow.n, taskRow.n and delegatedRow.n, after scrolling it into view, its
+         frame's minX ≥ the window's minX and maxX ≤ the window's maxX, and its toggle
+         isHittable; renderButton is hittable and Render reaches pdfPreview.
       4. Push and dispatch tests.yml; all three app jobs must pass.
       5. Do not touch project.yml, CHANGELOG.md or docs.
     acceptance:
       - tests.yml's three app jobs pass on the phase branch with AgendaScreenUITests and LongTextUITests
       - the core (coverage floor 100%), lint and scripts jobs pass
       - grep -rn "sleep(" AppUITests prints nothing
-  - id: p15-app-preview-and-settings
-    title: PDF preview with the share button, the settings screen, and their UI tests
+      - grep -n "NavigationSplitView" App/Screens/AgendaView.swift prints a line
+  - id: p14c-app-editing-and-commands
+    title: The edit sheet with saved short names, and the Agenda menu with keyboard shortcuts
     depends_on: [p14b-app-agenda-screen]
-    complexity: M
+    complexity: S
+    touches:
+      - App/MagendaApp.swift
+      - App/Screens/AgendaView.swift
+      - App/Screens/EditTextSheet.swift
+      - App/Screens/AgendaCommands.swift
+      - AppUITests/AgendaEditUITests.swift
+    brief: |
+      Read the Design section "Screens" (rows EditTextSheet and AgendaCommands) and "Wiring"
+      (the `.commands` line).
+      1. App/Screens/EditTextSheet.swift with the exact strings, identifiers, keyboard shortcuts
+         and the "Use this name for this meeting every time" toggle (events only); Done calls
+         controller.saveShortName when the toggle is on, otherwise the matching
+         updateDraft { $0.setTitle / setText }.
+      2. App/Screens/AgendaView.swift: the rows' onEdit presents EditTextSheet for that item as
+         a `.sheet(item:)`. No other change.
+      3. App/Screens/AgendaCommands.swift and the `.commands` line in App/MagendaApp.swift, with
+         the exact titles, shortcuts and enabled conditions.
+      4. AgendaEditUITests (XCTest, identifiers only, no sleeps), -MagendaFixture standard:
+         editing taskRow.0 through editField and editDone changes taskRow.0's label; editCancel
+         leaves it unchanged; editing eventRow.4 shows editRemember and editing taskRow.0 does
+         not; saving "Office move" with editRemember on makes eventReason.4 contain "Page
+         title: Office move"; on the iPad job (`UIDevice.current.userInterfaceIdiom ==
+         .pad`) `app.typeKey("r", modifierFlags: .command)` shows pdfPreview. If typeKey does not
+         trigger Render on the iPad job, stop blocked with the log; do not drop the assertion.
+      5. Push and dispatch tests.yml; all three app jobs must pass.
+      6. Do not touch project.yml, CHANGELOG.md or docs.
+    acceptance:
+      - tests.yml's three app jobs pass on the phase branch with AgendaEditUITests
+      - the core (coverage floor 100%), lint and scripts jobs pass
+      - grep -n "CommandMenu" App/Screens/AgendaCommands.swift prints a line
+  - id: p15a-app-preview
+    title: PDF preview beside the list with the share button, and its UI tests
+    depends_on: [p14c-app-editing-and-commands]
+    complexity: S
     touches:
       - App/Screens/PreviewView.swift
       - App/Screens/PDFKitView.swift
-      - App/Screens/SettingsView.swift
       - App/Screens/AgendaView.swift
       - AppUITests/PreviewUITests.swift
-      - AppUITests/SettingsUITests.swift
     brief: |
-      Read the Design section "Screens" (rows PreviewView and SettingsView).
+      Read the Design section "Screens" (rows PreviewView and AgendaView's Detail part).
       1. App/Screens/PDFKitView.swift: UIViewRepresentable around PDFView (autoScales true,
-         displayMode .singlePageContinuous, document from the URL), identifier pdfPreview.
+         displayMode .singlePageContinuous, document from the URL, reloaded when the URL
+         changes), identifier pdfPreview.
       2. App/Screens/PreviewView.swift: the PDF, the toolbar ShareLink(item: url) with label
          "Share PDF" and identifier shareButton, and the omittedTasksBanner exactly as specified.
-      3. App/Screens/SettingsView.swift with every section, string and identifier in the Design.
-         Hex fields validate with RGBColor(hex:) and save through controller.updateSettings.
-      4. App/Screens/AgendaView.swift: replace p14b's placeholder destinations: the render
-         destination becomes PreviewView and settingsButton opens SettingsView(appInfo:). No
-         other change.
-      5. UI tests with -MagendaFixture: PreviewUITests — standard: Render, pdfPreview exists,
-         shareButton exists and isHittable, no omittedTasksBanner; overflow: the banner exists and
-         its label starts with a number followed by " task"; longText at the largest accessibility
-         size: shareButton isHittable. SettingsUITests — open settings; typing "XYZ" into
-         colorField.heading and submitting shows colorError; typing "7C3AED" removes it;
-         resetColorsButton restores 215E99; tapping fontOption.jetbrains_mono and rendering
-         reaches pdfPreview; the version row exists; signOutButton returns to signInButton.
-      6. Push and dispatch tests.yml; all three app jobs must pass.
-      7. Do not touch project.yml, CHANGELOG.md or docs.
+      3. App/Screens/AgendaView.swift: the detail column shows PreviewView when rendered is set,
+         replacing p14b's placeholder Text. No other change.
+      4. PreviewUITests with -MagendaFixture: standard: Render, pdfPreview exists, shareButton
+         exists and isHittable, no omittedTasksBanner; tapping nextDayButton after rendering
+         brings back previewPlaceholder on the iPad job (rendered is cleared by the reload);
+         overflow: the banner exists and its label starts with a number followed by " task";
+         longText at the largest accessibility size: shareButton isHittable.
+      5. Push and dispatch tests.yml; all three app jobs must pass.
+      6. Do not touch project.yml, CHANGELOG.md or docs.
     acceptance:
-      - tests.yml's three app jobs pass on the phase branch with PreviewUITests and SettingsUITests
+      - tests.yml's three app jobs pass on the phase branch with PreviewUITests
       - the core (coverage floor 100%), lint and scripts jobs pass
       - grep -n "ShareLink" App/Screens/PreviewView.swift prints a line
+  - id: p15b-app-settings
+    title: The settings sheet — calendars, task lists by title, look, account, about — and its UI tests
+    depends_on: [p15a-app-preview]
+    complexity: M
+    touches:
+      - App/Screens/SettingsView.swift
+      - App/Screens/AgendaView.swift
+      - AppUITests/SettingsUITests.swift
+    brief: |
+      Read the Design section "Screens" (row SettingsView) and "Settings and binder rules" (the
+      AgendaSettings block).
+      1. App/Screens/SettingsView.swift with every section, string and identifier in the Design.
+         Hex fields validate with RGBColor(hex:) and save through controller.updateSettings; the
+         task-list pickers store titles. The "Binder rules" NavigationLink (identifier
+         rulesLink) leads to `Text("Binder rules")` until p15c.
+      2. App/Screens/AgendaView.swift: settingsButton's sheet shows SettingsView(appInfo:)
+         instead of p14b's placeholder. No other change. SettingsView's "Google client" section
+         presents SetupView(isSheet: true) from p14a.
+      3. SettingsUITests with -MagendaFixture standard: open settings; typing "XYZ" into
+         colorField.heading and submitting shows colorError; typing "7C3AED" removes it;
+         resetColorsButton restores 215E99; tapping fontOption.jetbrains_mono, closing with
+         settingsDone and rendering reaches pdfPreview; clientIDLabel shows the fixture client
+         ID; changeClientButton opens clientIDField; forgetClientButton and confirming returns to
+         clientIDField (the setup screen); choosing "None" in delegatedListPicker
+         and closing removes delegatedRow.0; rulesLink exists; the version row exists;
+         signOutButton returns to signInButton.
+      4. Push and dispatch tests.yml; all three app jobs must pass.
+      5. Do not touch project.yml, CHANGELOG.md or docs.
+    acceptance:
+      - tests.yml's three app jobs pass on the phase branch with SettingsUITests
+      - the core (coverage floor 100%), lint and scripts jobs pass
+  - id: p15c-app-rules-editor
+    title: The binder-rules editor and its UI tests
+    depends_on: [p15b-app-settings]
+    complexity: M
+    touches:
+      - App/Screens/RulesView.swift
+      - App/Screens/SettingsView.swift
+      - AppUITests/RulesUITests.swift
+    brief: |
+      Read the Design section "Screens" (row RulesView) and "Settings and binder rules".
+      1. App/Screens/RulesView.swift with every section, string and identifier in the Design,
+         including `rulesRow.<section>.<n>` on each row. Adding ignores blanks and duplicates by
+         BinderText.fold; People stores as specified.
+      2. App/Screens/SettingsView.swift: rulesLink leads to RulesView instead of p15b's
+         placeholder. No other change.
+      3. RulesUITests with -MagendaFixture standard: through rulesLink, typing "Week
+         preparation" into rulesAdd.personalBlocks and submitting adds rulesRow.personalBlocks.2;
+         after closing settings eventReason.6 contains "Personal block"; swiping left on
+         rulesRow.personalBlocks.0 ("Lunch" in the defaults) and tapping Delete makes
+         eventReason.3 no longer contain "Personal block"; adding peopleName "Nora" and
+         peopleEmail "nora@example.com" adds rulesRow.people.0; lookAheadStepper's increment
+         changes its value to "Upcoming tasks: 6 days"; resetRulesButton restores
+         rulesRow.personalBlocks.0 and .1.
+      4. Push and dispatch tests.yml; all three app jobs must pass.
+      5. Do not touch project.yml, CHANGELOG.md or docs.
+    acceptance:
+      - tests.yml's three app jobs pass on the phase branch with RulesUITests
+      - the core (coverage floor 100%), lint and scripts jobs pass
   - id: p16-retire-plan
-    title: ADRs 0011–0015, standing docs, coverage floors, changelog, and plan removal
-    depends_on: [p15-app-preview-and-settings]
-    complexity: S
+    title: ADRs 0011–0016, standing docs, coverage floors, changelog, and plan removal
+    depends_on: [p15c-app-rules-editor]
+    complexity: M
     touches:
       - docs/adr/0011-the-agenda-pdf-is-drawn-on-device-from-the-vendored-magenda-template.md
       - docs/adr/0012-text-layout-is-computed-in-appcore-and-audited.md
       - docs/adr/0013-google-sign-in-uses-pkce-with-aswebauthenticationsession.md
-      - docs/adr/0014-agenda-inputs-come-from-google-calendar-and-google-tasks.md
+      - docs/adr/0014-agenda-inputs-come-live-from-google-calendar-and-google-tasks.md
       - docs/adr/0015-appcore-may-import-observation.md
+      - docs/adr/0016-agenda-selection-uses-editable-rules-not-a-language-model.md
       - docs/adr/README.md
       - AppCore/Package.swift
       - README.md
@@ -1681,19 +2361,30 @@ phases:
     brief: |
       Read CONTRIBUTING.md "Decisions, plans and ADRs", docs/adr/README.md (template and rules),
       and this plan's "ADRs" and "Rejected alternatives".
-      1. Write ADRs 0011–0015 with the file names in `touches`, Status "Accepted — <today's
+      1. Write ADRs 0011–0016 with the file names in `touches`, Status "Accepted — <today's
          date>.", using the plan's Design and Rejected alternatives for Context, Decision and
          Alternatives considered. They link to source files and commits, never to this plan.
          Add them to the index in docs/adr/README.md.
-      2. README.md: replace "An iOS app." with what Magenda does (Google sign-in, review, render,
-         preview, share, settings), a "Delegated tasks" section with the notes format from the
-         Design, a "Google Cloud setup" pointer saying the client ID lives in
-         App/GoogleOAuthClientID.txt (ADR 0013), and the new folders in the Layout table
-         (App/Rendering, App/Platform, App/Screens, App/Resources).
+      2. README.md: replace "An iOS app." with what Magenda does (an iPad-first app that builds
+         the daily binder from Google Calendar and Google Tasks: sign in, review with reasons,
+         edit, render, preview, share to Noteshelf or anywhere), a "What goes on the agenda"
+         section restating the binder rules in user terms (from the Design's "Event rules",
+         "Notices" and "Task rules", and where each rule is edited in Settings → Binder rules),
+         a "Delegated tasks" section with the `Owner: Task` / `#cadence` / log format from the
+         Design, a "Google Cloud setup" section (heading exactly "## Google Cloud
+         setup", so SetupView's link anchor #google-cloud-setup resolves) with the steps from the
+         plan's manual_after ma1 written for any user: create a project, enable the two APIs,
+         configure the consent screen with the two read-only scopes, create an iOS client for the
+         bundle ID, enter its client ID in the app (the secret only for a client type that has
+         one; it stays in the Keychain, ADR 0013); no organization names or real IDs, a "Keyboard shortcuts" table from
+         AgendaCommands, and the new folders in the Layout table (App/Rendering, App/Platform,
+         App/Screens, App/Resources).
       3. docs/testing-policy.md: Layer 4 says the Google decoding tests replay
          AppCore/Tests/Google/Fixtures and that no live contract check runs; the layout audit
-         runs in AppCore (fake font) and in AppTests (real fonts).
-         docs/release-testing.md "What stays manual": real Google sign-in and real account data.
+         runs in AppCore (fake font) and in AppTests (real fonts); the binder rules are tested in
+         AppCore against the `standard` fixture.
+         docs/release-testing.md "What stays manual": real Google sign-in, real account data, and
+         the comparison with a binder built by the old Claude workflow while it still runs.
          docs/coding-and-testing-guidelines.md: "Where code goes" gets a row for the vendored
          template resources (ADR 0011) and says AppCore may import Observation (ADR 0015); the
          examples that name the deleted placeholder change — "`ContentView` is the placeholder"
@@ -1706,12 +2397,18 @@ phases:
          comment, AppCore/Sources/Layout/TextFitter.swift, AgendaLayout.swift,
          AgendaLayout+Overview.swift, AgendaLayout+Delegated.swift, LayoutAudit.swift,
          AppCore/Sources/Google/GoogleOAuth.swift, GoogleSession.swift,
-         AppCore/Sources/Settings/DelegatedNotes.swift. Remove nothing.
+         AppCore/Sources/Settings/BinderText.swift, MeetingTitle.swift, TaskTitle.swift,
+         DelegatedTask.swift, AppCore/Sources/Draft/EventSelection.swift, TaskSelection.swift.
+         Remove nothing.
       5. CHANGELOG.md under [Unreleased] → Added: replace the placeholder first-screen line with
-         user-facing lines: sign in with Google; agenda from Google Calendar events and Google
-         Tasks; untick or edit items before rendering; delegated tasks from a Google Tasks list;
-         PDF preview and sharing; font and color settings; long titles are shortened with "…"
-         and to-dos that don't fit are listed.
+         user-facing lines: sign in with Google; the daily binder built from Google Calendar and
+         the "Claude" and "Claude Delegations" task lists, with the same rules as before and no
+         AI; every left-out item shows why; editable binder rules (personal blocks, title
+         prefixes, out-of-office words, short meeting names, people, look-ahead days); untick or
+         edit items before rendering; your own Google client entered on first launch and kept in
+         the Keychain; PDF preview beside the list on iPad and sharing; keyboard
+         shortcuts; font and color settings; long titles are shortened with "…" and to-dos that
+         don't fit are listed.
       6. Delete docs/google-agenda-pdf-plan.md and docs/google-agenda-pdf-plan-manual-steps.html;
          grep the repo for "google-agenda-pdf-plan" and remove any remaining link.
       7. Run python3 -m unittest discover -s scripts/tests (the no-project-history guard covers
@@ -1719,9 +2416,12 @@ phases:
     acceptance:
       - test ! -e docs/google-agenda-pdf-plan.md && test ! -e docs/google-agenda-pdf-plan-manual-steps.html
       - grep -rn "google-agenda-pdf-plan" --exclude-dir=.git . prints nothing
-      - ls docs/adr/001[1-5]-*.md lists five files, each containing "Accepted"
-      - grep -c "^| \[001[1-5]\]" docs/adr/README.md prints 5
+      - ls docs/adr/001[1-6]-*.md lists six files, each containing "Accepted"
+      - grep -c "^| \[001[1-6]\]" docs/adr/README.md prints 6
       - grep -rn "Greeting\|ContentView" docs README.md CONTRIBUTING.md prints nothing
       - python3 -m unittest discover -s scripts/tests passes
       - grep -n "^## \[[0-9]" CHANGELOG.md prints nothing
+      - grep -n "^## Google Cloud setup" README.md prints one line
+      - grep -rn "GOCSPX-" --exclude-dir=.git . prints nothing (no real client secret)
+      - grep -rnoE "[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com" --exclude-dir=.git . | grep -vE "123456789012-(fixture|test)|123-abc" prints nothing (only made-up client IDs)
 ```
