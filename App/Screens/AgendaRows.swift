@@ -228,11 +228,16 @@ extension View {
     @ViewBuilder
     fileprivate func probeHover(onLabel: Bool) -> some View {
         switch (probeHoverVariant, onLabel) {
-        case (nil, true): self.hoverEffect()
-        case ("-ProbeHoverButton"?, false): self.hoverEffect()
-        case ("-ProbeHoverHighlight"?, false): self.hoverEffect(.highlight)
-        case ("-ProbeHoverLift"?, false): self.hoverEffect(.lift)
-        default: self
+        case (nil, true):
+            self.hoverEffect()
+        case ("-ProbeHoverButton"?, false):
+            self.hoverEffect()
+        case ("-ProbeHoverHighlight"?, false):
+            self.hoverEffect(.highlight)
+        case ("-ProbeHoverLift"?, false):
+            self.hoverEffect(.lift)
+        default:
+            self
         }
     }
 }
