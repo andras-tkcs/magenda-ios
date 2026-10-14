@@ -21,7 +21,7 @@ public struct HTTPRequest: Equatable, Sendable {
 
     /// Creates a request.
     public init(
-        method: HTTPMethod, url: URL, headers: [String: String] = [:], body: Data? = nil,
+        method: HTTPMethod, url: URL, headers: [String: String], body: Data?,
         timeout: TimeInterval = 30
     ) {
         self.method = method
