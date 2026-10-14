@@ -95,16 +95,16 @@ final class AgendaScreenUITests: XCTestCase {
     @MainActor
     func testNextDayChangesTheDatePicker() {
         let app = launch("standard")
-        let picker = element(app, "datePicker").firstMatch
+        let picker = app.datePickers["datePicker"].firstMatch
         XCTAssertTrue(picker.waitForExistence(timeout: 10), "the date picker never appeared")
-        let before = "\(picker.label)|\(String(describing: picker.value))"
+        let before = String(describing: picker.value)
 
         app.buttons["nextDayButton"].firstMatch.tap()
         let changed = expectation(
-            for: NSPredicate { _, _ in
-                "\(picker.label)|\(String(describing: picker.value))" != before
-            }, evaluatedWith: nil)
-        wait(for: [changed], timeout: 10)
+            for: NSPredicate { _, _ in String(describing: picker.value) != before },
+            evaluatedWith: nil)
+        let outcome = XCTWaiter().wait(for: [changed], timeout: 10)
+        XCTAssertEqual(outcome, .completed, "the date picker still says \(before)")
     }
 
     @MainActor
@@ -124,17 +124,37 @@ final class AgendaScreenUITests: XCTestCase {
 
         XCTAssertTrue(
             element(app, "pdfPreview").waitForExistence(timeout: 30), "the preview never appeared")
-        let list = element(app, "agendaScreen")
+        let list = element(app, "eventRow.0")
         if UIDevice.current.userInterfaceIdiom == .pad {
             let beside = expectation(
                 for: NSPredicate { _, _ in list.exists && list.isHittable }, evaluatedWith: nil)
             let result = XCTWaiter().wait(for: [beside], timeout: 10)
             XCTAssertEqual(
                 result, .completed,
-                "the list is hidden beside the preview on iPad; list frame \(list.frame)\n"
+                "the list is hidden beside the preview on iPad; row frame \(list.frame)\n"
                     + app.debugDescription)
         } else {
             XCTAssertFalse(list.isHittable, "the list is still in front of the preview on iPhone")
         }
+    }
+
+    @MainActor
+    func testDiagnosticSwitches() {
+        let app = launch("standard")
+        XCTAssertTrue(element(app, "eventRow.1").waitForExistence(timeout: 10))
+        func value(_ element: XCUIElement) -> String { String(describing: element.value) }
+        let include = app.switches["eventToggle.1"]
+        let page = app.switches["eventPageToggle.1"]
+        print("DIAG start include=\(value(include)) page=\(value(page))")
+        page.firstMatch.tap()
+        print("DIAG after page tap include=\(value(include)) page=\(value(page))")
+        page.firstMatch.tap()
+        print("DIAG after page tap 2 include=\(value(include)) page=\(value(page))")
+        include.firstMatch.tap()
+        print("DIAG after include tap include=\(value(include)) page=\(value(page))")
+        include.switches.firstMatch.tap()
+        print("DIAG after inner tap include=\(value(include)) page=\(value(page))")
+        include.press(forDuration: 0.3)
+        print("DIAG after press include=\(value(include)) page=\(value(page))")
     }
 }
