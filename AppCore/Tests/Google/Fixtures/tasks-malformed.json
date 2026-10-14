@@ -1,0 +1,6 @@
+{
+  "kind": "tasks#tasks",
+  "items": [
+    { "kind": "tasks#task", "title": "A task without an ID or a status" }
+  ]
+}

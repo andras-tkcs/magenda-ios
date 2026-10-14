@@ -1,0 +1,25 @@
+{
+  "kind": "calendar#events",
+  "timeZone": "Europe/Budapest",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "evt-offsite",
+      "status": "confirmed",
+      "summary": "Team offsite",
+      "eventType": "default",
+      "start": { "date": "2026-09-30" },
+      "end": { "date": "2026-10-01" },
+      "attendees": []
+    },
+    {
+      "kind": "calendar#event",
+      "id": "evt-ooo",
+      "status": "confirmed",
+      "summary": "OOO",
+      "eventType": "outOfOffice",
+      "start": { "date": "2026-09-30" },
+      "end": { "date": "2026-10-02" }
+    }
+  ]
+}
