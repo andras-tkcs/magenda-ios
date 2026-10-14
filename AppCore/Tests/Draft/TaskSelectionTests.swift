@@ -57,7 +57,7 @@ struct TaskSelectionTests {
         #expect(result.map(\.id) == ["a", "b", "c", "d"])
         let expected: [TaskBucket] = [.overdue, .today, .upcoming, .upcoming]
         #expect(result.map(\.bucket) == expected)
-        #expect(result.allSatisfy(\.isIncluded))
+        #expect(result.allSatisfy { $0.isIncluded })
         #expect(result.allSatisfy { $0.reason == nil })
     }
 
@@ -193,7 +193,7 @@ struct TaskSelectionTests {
         let cadences: [Cadence] = [.weekly, .monthly, .daily, .daily]
         #expect(result.map(\.cadence) == cadences)
         #expect(result[0].status == ["two", "three"])
-        #expect(result.allSatisfy(\.isIncluded))
+        #expect(result.allSatisfy { $0.isIncluded })
         #expect(result.allSatisfy { $0.warning == nil })
     }
 
