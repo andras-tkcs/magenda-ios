@@ -49,6 +49,19 @@ struct AgendaView: View {
     }
 
     var body: some View {
+        // PROBE: temporary, shows the list in a stack instead of the split view's sidebar.
+        if ProcessInfo.processInfo.arguments.contains("-ProbeStack") {
+            NavigationStack {
+                sidebar
+                    .navigationTitle("Agenda")
+                    .toolbar { toolbar }
+            }
+        } else {
+            splitView
+        }
+    }
+
+    private var splitView: some View {
         NavigationSplitView(
             columnVisibility: $columnVisibility, preferredCompactColumn: $preferredColumn
         ) {

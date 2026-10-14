@@ -133,52 +133,40 @@ final class AgendaScreenUITests: XCTestCase {
         }
     }
 
-    // PROBE: temporary, prints how each way of tapping a row's switch behaves; never fails.
+    // PROBE: temporary, prints where taps on an iPad row switch land; never fails.
+    /// Taps around the include switch until it or the notes-page switch flips.
     @MainActor
-    private func probe(
-        _ name: String, _ fixture: String = "standard", extra: [String] = [],
-        until goneID: String = "eventPageToggle.1", _ action: (XCUIApplication) -> Void
-    ) {
+    private func sweep(_ name: String, extra: [String] = []) {
         let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", fixture] + extra
+        app.launchArguments = ["-MagendaFixture", "standard"] + extra
         app.launch()
-        guard element(app, goneID).waitForExistence(timeout: 30) else {
-            print("PROBE \(name): \(goneID) never appeared")
+        let include = app.switches["eventToggle.1"]
+        let page = app.switches["eventPageToggle.1"]
+        guard page.waitForExistence(timeout: 30) else {
+            print("PROBE \(name): never appeared")
             return
         }
-        action(app)
-        let gone = expectation(
-            for: NSPredicate(format: "exists == false"), evaluatedWith: element(app, goneID))
-        let result = XCTWaiter().wait(for: [gone], timeout: 8)
-        let include = app.switches["eventToggle.1"]
-        let value = include.exists ? String(describing: include.value) : "-"
-        print("PROBE \(name): \(result == .completed ? "WORKED" : "STUCK") include=\(value)")
-    }
-
-    @MainActor
-    private func tapSwitch(_ app: XCUIApplication, at dx: CGFloat) {
-        let toggle = element(app, "eventToggle.1")
-        toggle.coordinate(withNormalizedOffset: CGVector(dx: dx, dy: 0.5)).tap()
-    }
-
-    @MainActor
-    private func tapInner(_ app: XCUIApplication) {
-        element(app, "eventToggle.1").switches.firstMatch.tap()
+        let frame = include.frame
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let offsets: [(CGFloat, CGFloat)] = [
+            (0, 0), (0, -16), (0, 16), (0, -32), (0, 32), (-10, 0), (10, 0), (-20, -32),
+        ]
+        for (dx, dy) in offsets {
+            let point = CGVector(dx: frame.midX + dx, dy: frame.midY + dy)
+            origin.withOffset(point).tap()
+            _ = page.waitForNonExistence(timeout: 3)
+            let state = "include \(String(describing: include.value)) page "
+                + (page.exists ? String(describing: page.value) : "gone")
+            print("PROBE \(name) tap \(dx),\(dy) at \(point): \(state) frame now \(include.frame)")
+            if !page.exists || String(describing: page.value) == "Optional(0)" { break }
+        }
     }
 
     @MainActor
     func testProbeSwitchTaps() {
-        let variants = [
-            "label", "-ProbeHoverButton", "-ProbeHoverHighlight", "-ProbeHoverLift",
-            "-ProbeHoverNone",
-        ]
-        for variant in variants {
-            for attempt in 1...2 {
-                let extra = variant.hasPrefix("-") ? [variant] : []
-                probe("\(variant) inner \(attempt)", extra: extra) { app in self.tapInner(app) }
-            }
-        }
-        probe("label centre", extra: []) { app in self.element(app, "eventToggle.1").tap() }
-        probe("label right", extra: []) { app in self.tapSwitch(app, at: 0.9) }
+        sweep("split 1")
+        sweep("split 2")
+        sweep("stack 1", extra: ["-ProbeStack"])
+        sweep("stack 2", extra: ["-ProbeStack"])
     }
 }

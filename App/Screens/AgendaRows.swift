@@ -50,10 +50,9 @@ struct EventRow: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .probeHover(onLabel: true)
                 }
                 .buttonStyle(.plain)
-                .probeHover(onLabel: false)
+                .hoverEffect()
                 .accessibilityLabel(event.originalTitle)
                 .accessibilityIdentifier(RowID.eventRow(index))
                 Toggle("Include", isOn: included)
@@ -119,9 +118,9 @@ struct TaskRow: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .hoverEffect()
                 }
                 .buttonStyle(.plain)
+                .hoverEffect()
                 .accessibilityLabel(task.text)
                 .accessibilityIdentifier(RowID.taskRow(index))
                 Toggle("Include", isOn: included)
@@ -179,9 +178,9 @@ struct DelegatedRow: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .hoverEffect()
                 }
                 .buttonStyle(.plain)
+                .hoverEffect()
                 .accessibilityLabel(task.text)
                 .accessibilityIdentifier(RowID.delegatedRow(index))
                 Toggle("Include", isOn: included)
@@ -214,30 +213,6 @@ struct DelegatedRow: View {
             Button(task.isIncluded ? "Leave out" : "Include") {
                 included.wrappedValue.toggle()
             }
-        }
-    }
-}
-
-// PROBE: temporary hover-effect variants for diagnosing iPad switch taps; removed before the
-// phase ends.
-private let probeHoverVariant = ProcessInfo.processInfo.arguments.first {
-    $0.hasPrefix("-ProbeHover")
-}
-
-extension View {
-    @ViewBuilder
-    fileprivate func probeHover(onLabel: Bool) -> some View {
-        switch (probeHoverVariant, onLabel) {
-        case (nil, true):
-            self.hoverEffect()
-        case ("-ProbeHoverButton"?, false):
-            self.hoverEffect()
-        case ("-ProbeHoverHighlight"?, false):
-            self.hoverEffect(.highlight)
-        case ("-ProbeHoverLift"?, false):
-            self.hoverEffect(.lift)
-        default:
-            self
         }
     }
 }
