@@ -39,17 +39,45 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(done.exists, "the settings sheet never opened after \(taps) taps")
     }
 
-    /// Scrolls the form until `target` exists and can be tapped. A lazy row does not exist until
-    /// it is scrolled near, so existence is polled briefly between swipes.
+    /// Drags the form by `distance` points (positive scrolls further down the form). The drag
+    /// starts below the sheet's Done button, so it lands in the form on a phone and in the iPad's
+    /// form sheet alike, and it holds at the end so the form does not fling past a row.
     @MainActor
-    private func reveal(_ app: XCUIApplication, _ target: XCUIElement) {
-        var swipes = 0
-        while !(target.exists && target.isHittable) && swipes < 10 {
-            if target.waitForExistence(timeout: 3) && target.isHittable { break }
-            app.swipeUp()
-            swipes += 1
+    private func drag(_ app: XCUIApplication, by distance: CGFloat) {
+        let done = app.buttons["settingsDone"].firstMatch
+        let center = done.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let anchor = center.withOffset(CGVector(dx: -150, dy: 275))
+        let start = anchor.withOffset(CGVector(dx: 0, dy: distance / 2))
+        let end = anchor.withOffset(CGVector(dx: 0, dy: -distance / 2))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: 300, thenHoldForDuration: 0.3)
+    }
+
+    /// Scrolls the form in short drags until `target` can be tapped. A lazy row does not exist
+    /// until it is scrolled near, so a missing target is looked for further down first and then
+    /// back up. With `upperHalf`, the target also has to sit in the top half of the screen, clear
+    /// of the keyboard that tapping a text field brings up.
+    @MainActor
+    private func reveal(_ app: XCUIApplication, _ target: XCUIElement, upperHalf: Bool = false) {
+        let done = app.buttons["settingsDone"].firstMatch
+        let bottom = upperHalf ? app.windows.firstMatch.frame.height / 2 : .greatestFiniteMagnitude
+        var drags = 0
+        while drags < 30 {
+            if target.waitForExistence(timeout: 2) {
+                let top = done.frame.maxY + 40
+                let mid = target.frame.midY
+                if mid < top {
+                    drag(app, by: -150)
+                } else if target.isHittable && mid <= bottom {
+                    break
+                } else {
+                    drag(app, by: 150)
+                }
+            } else {
+                drag(app, by: drags < 15 ? 150 : -150)
+            }
+            drags += 1
         }
-        XCTAssertTrue(target.waitForExistence(timeout: 30), "\(target) never appeared")
+        XCTAssertTrue(target.exists && target.isHittable, "\(target) was never scrolled into view")
     }
 
     @MainActor
@@ -77,15 +105,17 @@ final class SettingsUITests: XCTestCase {
         XCTAssertEqual(result, .completed, "the field never showed \(expected): \(shown)")
     }
 
-    /// Replaces the text of a color field and presses return.
+    /// Replaces the text of a color field and presses return. The keys go to whatever has focus
+    /// rather than to the field, which an iPad's form sheet may briefly drop from the accessibility
+    /// tree while it makes room for the keyboard.
     @MainActor
     private func enterHex(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
-        reveal(app, field)
+        reveal(app, field, upperHalf: true)
+        let current = field.value as? String ?? ""
+        // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-        if let current = field.value as? String, !current.isEmpty {
-            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
-        }
-        field.typeText(text + "\n")
+        let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
+        app.typeText(deletes + text + "\n")
     }
 
     @MainActor
@@ -114,11 +144,13 @@ final class SettingsUITests: XCTestCase {
 
         let field = element(app, "colorField.heading")
         enterHex(app, field, "7C3AED")
+        reveal(app, field)
         waitForValue(field, "7C3AED")
 
         let reset = app.buttons["resetColorsButton"].firstMatch
         reveal(app, reset)
         reset.tap()
+        reveal(app, field)
         waitForValue(field, "215E99")
     }
 

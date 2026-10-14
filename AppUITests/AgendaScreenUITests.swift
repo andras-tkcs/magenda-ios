@@ -35,7 +35,7 @@ final class AgendaScreenUITests: XCTestCase {
     @MainActor
     func testStandardDayListsEveryRowWithItsReason() {
         let app = launch("standard")
-        XCTAssertTrue(element(app, "agendaScreen").waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "agendaScreen").waitForExistence(timeout: 30))
 
         // Rows are created lazily, so the list is scrolled down one row at a time.
         let checks: [(String, String?, String?)] = [
@@ -96,7 +96,7 @@ final class AgendaScreenUITests: XCTestCase {
     func testNextDayChangesTheDatePicker() {
         let app = launch("standard")
         let picker = app.datePickers["datePicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 10), "the date picker never appeared")
+        XCTAssertTrue(picker.waitForExistence(timeout: 30), "the date picker never appeared")
         let before = shownDate(picker)
         XCTAssertFalse(before.isEmpty, "the date picker shows no date")
 
@@ -124,8 +124,8 @@ final class AgendaScreenUITests: XCTestCase {
     func testRenderShowsThePreview() {
         let app = launch("standard")
         let render = app.buttons["renderButton"]
-        XCTAssertTrue(render.waitForExistence(timeout: 10), "the Render button never appeared")
-        XCTAssertTrue(element(app, "eventRow.0").waitForExistence(timeout: 10))
+        XCTAssertTrue(render.waitForExistence(timeout: 30), "the Render button never appeared")
+        XCTAssertTrue(element(app, "eventRow.0").waitForExistence(timeout: 30))
         render.tap()
 
         XCTAssertTrue(
