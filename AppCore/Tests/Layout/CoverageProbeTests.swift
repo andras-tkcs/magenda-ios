@@ -31,9 +31,9 @@
             echo PROBE-DONE
             """
         print("PROBE-START")
-        fflush(stdout)
+        fflush(nil)
         _ = system(script)
-        fflush(stdout)
+        fflush(nil)
     }
 
     @Suite("Coverage probe")
