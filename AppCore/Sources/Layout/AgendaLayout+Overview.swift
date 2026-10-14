@@ -2,7 +2,7 @@ extension AgendaLayout {
     /// The overview page and the to-do items that did not fit on it.
     func overviewPage(for content: AgendaContent) -> (page: PagePlan, omitted: [TodoItem]) {
         var operations: [DrawOperation] = [.fill(TemplateGeometry.todoErase, .white)]
-        let slots = manifest.pageSlots["overview", default: []]
+        let slots = slots(on: "overview")
         operations += labelRuns(of: slots).map { .text($0) }
         let todo = todoOperations(for: content.todoItems)
         operations += todo.operations
@@ -127,7 +127,7 @@ extension AgendaLayout {
                 values["next4weeks.week.\(week).day.\(index)"] = String(number)
             }
         }
-        return manifest.pageSlots["overview", default: []]
+        return slots(on: "overview")
             .compactMap { slot in values[slot.id].map { (slot, $0) } }
             .flatMap { slot, text in leftRuns(text, in: slot) }
             .map { .text($0) }

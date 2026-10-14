@@ -36,6 +36,11 @@ public struct AgendaLayout: Sendable {
         theme.colors.color(for: slot.role)
     }
 
+    /// The slots of one template page; a page the manifest does not list has none.
+    func slots(on page: String) -> [TemplateSlot] {
+        manifest.pageSlots.filter { $0.key == page }.flatMap { $0.value }
+    }
+
     /// The slot's rectangle grown by the padding text is placed in.
     func paddedBox(of slot: TemplateSlot) -> PlanRect {
         let padding = TemplateGeometry.slotPadding
@@ -104,7 +109,7 @@ public struct AgendaLayout: Sendable {
     }
 
     private func meetingPage(title: String) -> PagePlan {
-        let label = labelRuns(of: manifest.pageSlots["meeting_unit", default: []])
+        let label = labelRuns(of: slots(on: "meeting_unit"))
         let titleRuns = ["meeting.title"].compactMap { manifest.slot($0) }
             .flatMap { slot -> [TextRun] in
                 let box = paddedBox(of: slot)
@@ -123,7 +128,7 @@ public struct AgendaLayout: Sendable {
     }
 
     private func furtherNotesPage() -> PagePlan {
-        let label = labelRuns(of: manifest.pageSlots["further_notes", default: []])
+        let label = labelRuns(of: slots(on: "further_notes"))
         return PagePlan(chrome: .furtherNotes, operations: label.map { .text($0) })
     }
 }

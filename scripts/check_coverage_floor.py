@@ -98,12 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {path} not found -- run `swift test --enable-code-coverage` in AppCore first", file=sys.stderr)
         return 2
 
-    _report = json.loads(path.read_text(encoding="utf-8"))
-    for _e in _report["data"][0]["files"]:
-        for _seg in _e["segments"]:
-            if _seg[3] and _seg[2] == 0 and not _seg[5] and "AppCore/Sources/" in _e["filename"]:
-                print("UNCOVERED", _e["filename"].split("AppCore/Sources/")[-1], _seg[0], _seg[1])
-    failures = check(_report)
+    failures = check(json.loads(path.read_text(encoding="utf-8")))
     if failures:
         print("\nCoverage floor FAILED:", file=sys.stderr)
         for line in failures:
