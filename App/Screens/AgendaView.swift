@@ -72,6 +72,17 @@ struct AgendaView: View {
                 preferredColumn = .detail
             }
         }
+        // A second render of an unchanged day yields an equal `rendered`, so the change above does
+        // not fire; the end of the render itself brings the preview forward on a phone.
+        .onChange(of: controller.status) { old, new in
+            if old == .rendering, new == .ready, controller.rendered != nil {
+                preferredColumn = .detail
+            }
+        }
+        // The draft is replaced when the day changes, so an open sheet would have nothing to edit.
+        .onChange(of: controller.day) {
+            editing = nil
+        }
     }
 
     @ViewBuilder

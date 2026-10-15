@@ -77,7 +77,7 @@ struct EditTextSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", action: save)
-                        .keyboardShortcut(.defaultAction)
+                        .keyboardShortcut(.return, modifiers: .command)
                         .accessibilityIdentifier(ID.done)
                 }
             }

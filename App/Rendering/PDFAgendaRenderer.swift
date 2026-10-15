@@ -11,10 +11,12 @@ final class PDFAgendaRenderer: AgendaRendering, @unchecked Sendable {
     private let library: FontLibrary
     private let template: CGPDFDocument
 
-    /// Loads the template from `bundle`; throws `missingTemplate` when it is absent or unreadable.
+    /// Loads the template from `bundle`; throws `missingTemplate` when it is absent,
+    /// unreadable or has fewer than the four chrome pages.
     init(library: FontLibrary, bundle: Bundle) throws {
         guard let url = bundle.url(forResource: "chrome", withExtension: "pdf"),
-            let document = CGPDFDocument(url as CFURL)
+            let document = CGPDFDocument(url as CFURL),
+            document.numberOfPages >= 4
         else {
             throw FontLibraryError.missingTemplate
         }

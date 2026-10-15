@@ -24,9 +24,11 @@ final class SettingsUITests: XCTestCase {
 
     /// Waits for the list, then opens the settings sheet, retrying a dropped tap.
     @MainActor
-    private func openSettings(_ app: XCUIApplication) {
+    private func openSettings(_ app: XCUIApplication, listIsScrolled: Bool = false) {
+        // A list scrolled down has no first row: it is lazy, and the row is off screen.
+        let listRow = listIsScrolled ? "agendaScreen" : "eventRow.0"
         XCTAssertTrue(
-            element(app, "eventRow.0").waitForExistence(timeout: 30), "the list never appeared")
+            element(app, listRow).waitForExistence(timeout: 30), "the list never appeared")
         let button = app.buttons["settingsButton"].firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30), "the settings button never appeared")
         let done = app.buttons["settingsDone"].firstMatch
@@ -78,6 +80,20 @@ final class SettingsUITests: XCTestCase {
             drags += 1
         }
         XCTAssertTrue(target.exists && target.isHittable, "\(target) was never scrolled into view")
+    }
+
+    /// Swipes the agenda list up until `target` exists (or, without one, `swipes` times). Rows are
+    /// lazy, so a row below the fold does not exist until it is scrolled near; the iPad's list
+    /// never reports a row hittable, so existence is what is waited for.
+    @MainActor
+    private func scrollList(_ app: XCUIApplication, until target: XCUIElement? = nil) {
+        let list = element(app, "agendaScreen")
+        XCTAssertTrue(list.waitForExistence(timeout: 30), "the list never appeared")
+        var swipes = 0
+        while swipes < 8 && !(target?.exists ?? false) {
+            list.swipeUp()
+            swipes += 1
+        }
     }
 
     @MainActor
@@ -207,7 +223,12 @@ final class SettingsUITests: XCTestCase {
     @MainActor
     func testChoosingNoDelegatedListRemovesTheDelegatedPage() {
         let app = launch()
-        openSettings(app)
+        let row = element(app, "delegatedRow.0")
+        XCTAssertTrue(
+            element(app, "eventRow.0").waitForExistence(timeout: 30), "the list never appeared")
+        scrollList(app, until: row)
+        XCTAssertTrue(row.exists, "the fixture shows no delegated row to begin with")
+        openSettings(app, listIsScrolled: true)
 
         let picker = app.buttons["delegatedListPicker"].firstMatch
         reveal(app, picker)
@@ -217,7 +238,11 @@ final class SettingsUITests: XCTestCase {
         none.tap()
         closeSettings(app)
 
-        let row = element(app, "delegatedRow.0")
+        // The reload puts the list back at its top: wait for it, then look at the whole list.
+        XCTAssertTrue(
+            element(app, "eventRow.0").waitForExistence(timeout: 30),
+            "the list never came back after the reload")
+        scrollList(app)
         let gone = XCTWaiter().wait(
             for: [
                 XCTNSPredicateExpectation(

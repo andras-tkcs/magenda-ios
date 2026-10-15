@@ -30,11 +30,12 @@ struct RenderingTests {
     }
 
     private func makePlan(
-        _ content: AgendaContent, pack: FontPack = .outfit, library: FontLibrary
+        _ content: AgendaContent, pack: FontPack = .outfit, colors: ThemeColors = .default,
+        library: FontLibrary
     ) throws -> RenderPlan {
         let layout = AgendaLayout(
             manifest: try TemplateManifest.bundled(), measurer: CoreTextMeasurer(library: library),
-            theme: Theme(fontPack: pack))
+            theme: Theme(fontPack: pack, colors: colors))
         return layout.plan(for: content)
     }
 
@@ -148,6 +149,63 @@ struct RenderingTests {
         let url = try await renderer.render(plan, fileName: "rendering-tests-overflow.pdf")
         let document = try #require(PDFDocument(url: url))
         #expect(document.pageCount == plan.pages.count)
+    }
+
+    @Test("Theme colors reach the PDF's text, and the default look has none of them")
+    func themeColorsAreDrawn() async throws {
+        let library = try loadLibrary()
+        let renderer = try PDFAgendaRenderer(library: library, bundle: .main)
+        let magenta = RGBColor(red: 255, green: 0, blue: 255)
+        let custom = ThemeColors(
+            weekend: magenta, heading: magenta, label: magenta, accent: magenta, notes: magenta)
+
+        let plainPlan = try makePlan(AgendaContentFixtures.typical, library: library)
+        let plainURL = try await renderer.render(plainPlan, fileName: "rendering-tests-plain.pdf")
+        let plain = Self.magentaPixels(in: plainURL)
+
+        let themedPlan = try makePlan(
+            AgendaContentFixtures.typical, colors: custom, library: library)
+        let themedURL = try await renderer.render(
+            themedPlan, fileName: "rendering-tests-themed.pdf")
+        let themed = Self.magentaPixels(in: themedURL)
+
+        #expect(plain == 0, Comment(rawValue: "default page: \(plain) magenta pixels"))
+        #expect(themed > 50, Comment(rawValue: "themed page: \(themed) magenta pixels"))
+    }
+
+    /// The number of nearly-magenta pixels on the first page, rasterized at twice its size.
+    private static func magentaPixels(in url: URL) -> Int {
+        guard let page = PDFDocument(url: url)?.page(at: 0)?.pageRef else {
+            return -1
+        }
+        let box = page.getBoxRect(.mediaBox)
+        let width = Int(box.width * 2)
+        let height = Int(box.height * 2)
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard
+                let context = CGContext(
+                    data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                    bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else {
+                return false
+            }
+            context.scaleBy(x: 2, y: 2)
+            context.translateBy(x: -box.minX, y: -box.minY)
+            context.drawPDFPage(page)
+            return true
+        }
+        guard drawn else {
+            return -1
+        }
+        var count = 0
+        for offset in stride(from: 0, to: pixels.count, by: 4) {
+            if pixels[offset] > 200 && pixels[offset + 1] < 60 && pixels[offset + 2] > 200 {
+                count += 1
+            }
+        }
+        return count
     }
 
     private static func destinationPage(of annotation: PDFAnnotation) -> PDFPage? {

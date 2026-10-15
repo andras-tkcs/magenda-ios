@@ -15,7 +15,9 @@ struct CoreTextMeasurer: TextMeasuring, @unchecked Sendable {
     /// emoji, CJK and Arabic.
     static func line(for text: String, font: CTFont) -> CTLine {
         let attributes: [NSAttributedString.Key: Any] = [
-            NSAttributedString.Key(kCTFontAttributeName as String): font
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            // Without this CTLineDraw ignores the context's fill color and draws black.
+            NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
         ]
         let string = NSAttributedString(string: text, attributes: attributes)
         return CTLineCreateWithAttributedString(string)
