@@ -46,11 +46,9 @@ final class PreviewUITests: XCTestCase {
     }
 
     @MainActor
-    func testChangingTheDayBringsBackThePlaceholderOnIPad() {
-        guard UIDevice.current.userInterfaceIdiom == .pad else {
-            // On iPhone the list is behind the pushed preview, so there is no day button to tap.
-            return
-        }
+    func testChangingTheDayBringsBackThePlaceholderOnIPad() throws {
+        // On iPhone the list is behind the pushed preview, so there is no day button to tap.
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
         let app = launch("standard")
         render(app)
 
@@ -66,6 +64,38 @@ final class PreviewUITests: XCTestCase {
             _ = placeholder.waitForExistence(timeout: 10)
         }
         XCTAssertTrue(placeholder.exists, "the placeholder never came back after \(taps) taps")
+    }
+
+    @MainActor
+    func testRenderingAgainAfterGoingBackShowsThePreviewAgainOnIPhone() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone only")
+        let app = launch("standard")
+        render(app)
+
+        // Back to the list: the Render button is on its navigation bar, not on the preview's.
+        let renderButton = app.buttons["renderButton"].firstMatch
+        let back = app.navigationBars.buttons.firstMatch
+        var taps = 0
+        while !renderButton.exists && taps < 5 {
+            if back.waitForExistence(timeout: 30) {
+                back.tap()
+            }
+            taps += 1
+            _ = renderButton.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(renderButton.exists, "the list never came back after \(taps) taps")
+
+        // Nothing changed, so the second render equals the first; the preview must still return.
+        let preview = element(app, "pdfPreview")
+        taps = 0
+        while !preview.exists && taps < 5 {
+            if renderButton.waitForExistence(timeout: 30) {
+                renderButton.tap()
+            }
+            taps += 1
+            _ = preview.waitForExistence(timeout: 30)
+        }
+        XCTAssertTrue(preview.exists, "the preview never came back after \(taps) taps")
     }
 
     @MainActor

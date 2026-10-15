@@ -36,7 +36,10 @@ struct KeychainItem: Sendable {
 
     /// Stores `data`, replacing an existing item.
     func write(_ data: Data) throws {
-        let update = [kSecValueData as String: data]
+        let update: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
         var status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
         if status == errSecItemNotFound {
             var add = query
