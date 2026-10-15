@@ -123,7 +123,9 @@ struct RenderingTests {
         }
         let pageBounds = second.bounds(for: .mediaBox)
         #expect(
-            linksToFirst.allSatisfy { pageBounds.contains($0.bounds) && $0.bounds.minY > plan.pageHeight / 2 },
+            linksToFirst.allSatisfy {
+                pageBounds.contains($0.bounds) && $0.bounds.minY > plan.pageHeight / 2
+            },
             Comment(rawValue: "overview link should sit in the header, near the top of the page"))
         let seen = second.annotations.map { "\($0.type ?? "?") \($0.bounds)" }
         #expect(!linksToFirst.isEmpty, Comment(rawValue: "page 1 annotations: \(seen)"))
