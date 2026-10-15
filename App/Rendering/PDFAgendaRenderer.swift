@@ -40,7 +40,7 @@ final class PDFAgendaRenderer: AgendaRendering, @unchecked Sendable {
                 UIGraphicsAddPDFContextDestinationAtPoint("page-\(index)", .zero)
                 drawChrome(page.chrome, in: context.cgContext, height: plan.pageHeight)
                 for operation in page.operations {
-                    draw(operation, in: context.cgContext)
+                    draw(operation, in: context.cgContext, pageHeight: plan.pageHeight)
                 }
             }
         }
@@ -58,7 +58,7 @@ final class PDFAgendaRenderer: AgendaRendering, @unchecked Sendable {
         context.restoreGState()
     }
 
-    private func draw(_ operation: DrawOperation, in context: CGContext) {
+    private func draw(_ operation: DrawOperation, in context: CGContext, pageHeight: Double) {
         switch operation {
         case .fill(let rect, let color):
             context.setFillColor(Self.cgColor(color))
@@ -76,7 +76,11 @@ final class PDFAgendaRenderer: AgendaRendering, @unchecked Sendable {
         case .text(let run):
             drawText(run, in: context)
         case .link(let rect, let targetPage):
-            UIGraphicsSetPDFContextDestinationForRect("page-\(targetPage)", Self.cgRect(rect))
+            // Link rects are taken in PDF default space (origin bottom-left), unlike the
+            // flipped drawing context, so mirror the plan's top-left rect vertically.
+            let flipped = PlanRect(
+                x0: rect.x0, y0: pageHeight - rect.y1, x1: rect.x1, y1: pageHeight - rect.y0)
+            UIGraphicsSetPDFContextDestinationForRect("page-\(targetPage)", Self.cgRect(flipped))
         }
     }
 
