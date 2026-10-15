@@ -68,7 +68,7 @@ struct SettingsView: View {
                 lookSection
                 Section {
                     NavigationLink("Binder rules") {
-                        Text("Binder rules")
+                        RulesView()
                     }
                     .accessibilityIdentifier(ID.rulesLink)
                 }
