@@ -34,6 +34,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- An app icon.
 - Sign in with Google and build your daily binder from Google Calendar and your "Claude" and
   "Claude Delegations" task lists, with fixed rules and no AI.
 - Every item that is left out shows why ("Declined", "Personal block", "No other attendees",
