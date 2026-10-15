@@ -125,3 +125,5 @@ until a later ADR supersedes it.
 | [0015](0015-appcore-may-import-observation.md) | AppCore may import the toolchain's `Observation` module | Accepted |
 | [0016](0016-agenda-selection-uses-editable-rules-not-a-language-model.md) | What goes on the agenda is decided by fixed, editable rules, never by a language model | Accepted |
 | [0017](0017-each-release-attaches-an-ad-hoc-signed-ipa.md) | A tagged release can attach an Ad Hoc signed `.ipa` | Accepted |
+| [0018](0018-the-team-id-comes-from-the-app-store-environment.md) | The Team ID comes from the `app-store` environment's `APPLE_TEAM_ID` secret, not from the repository | Accepted |
+| [0019](0019-alphas-are-tested-through-testflight-and-the-ad-hoc-ipa-is-opt-in.md) | Alphas are tested through TestFlight, and the Ad Hoc `.ipa` is opt-in | Accepted |

@@ -4,6 +4,7 @@
 
 Accepted — 2026-10-15. Implemented in `build.yml`'s `testflight` job; it runs when the repository variable
 `ADHOC_IPA` is true.
+Amended by [0019](0019-alphas-are-tested-through-testflight-and-the-ad-hoc-ipa-is-opt-in.md).
 
 ## Context
 
