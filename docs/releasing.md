@@ -84,10 +84,31 @@ A `v*` tag push starts `.github/workflows/build.yml`:
 1. **`version`** — resolves the channel, the version and the build number.
 2. **`archive`** — generates the Xcode project, archives the Release configuration unsigned, and
    checks the archive's `Info.plist` carries the version and build number it was given.
-3. **`testflight`** — archives again with automatic signing and uploads to App Store Connect, in
-   the `app-store` environment (ADR 0009).
+3. **`testflight`** — archives again with automatic signing, then, when the maintainer enables it
+   (the repository variable `ADHOC_IPA` is `true`), exports the Ad Hoc `.ipa` from that archive,
+   and uploads to App Store Connect, in the `app-store` environment (ADR 0009, ADR 0017). The
+   export runs first, so a failed export stops the release before anything is uploaded.
 4. **`github-release`** — creates the GitHub Release; for a stable tag the body is the changelog
    section, for a pre-release the entry is marked pre-release.
+
+## Installing the Ad Hoc build
+
+When the export is enabled, a tag's GitHub Release carries `Magenda-<tag>.ipa` and
+`Magenda-<tag>.ipa.sha256`. An Ad Hoc build installs only on devices registered in the developer
+account (ADR 0017).
+
+1. **Register the device.** Connect the iPad to a Mac and open Finder. Select the iPad, then click
+   the line under its name (storage and battery) until the UDID shows. Copy it, then in the
+   developer account open **Certificates, Identifiers & Profiles → Devices → +** and add it.
+2. **Cut the next tag.** The Ad Hoc profile is refreshed on every export, so the next tag's `.ipa`
+   includes the new device. A build exported before the device was registered does not.
+3. **Check the download.** In the folder holding both files:
+   `shasum -a 256 -c Magenda-<tag>.ipa.sha256`.
+4. **Install it.** Drag `Magenda-<tag>.ipa` onto the connected iPad in Finder, or install it with
+   Apple Configurator.
+
+An export with no registered device fails the release before the upload, so register a device
+before turning the export on.
 
 ## Signing and App Store Connect
 
@@ -97,7 +118,7 @@ certificates, provisioning profiles or passwords in the repository or in GitHub 
 Before the first upload:
 
 1. **The app record.** In App Store Connect, **Apps → + → New App**, with bundle ID
-   `name.felhasznalo.magenda`. Register the bundle ID first under **Certificates, Identifiers & Profiles →
+   `name.tkcs.magenda`. Register the bundle ID first under **Certificates, Identifiers & Profiles →
    Identifiers** if it is not offered.
 2. **The team.** Put the ten-character Team ID (**Membership details** in the developer account) in
    `project.yml`'s `DEVELOPMENT_TEAM`, in a PR.

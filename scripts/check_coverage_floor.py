@@ -37,6 +37,32 @@ OVERALL_FLOOR = 100.0
 MODULE_FLOORS: dict[str, float] = {
     # What the app reports about its own build; a wrong version on screen misleads every bug report.
     "AppCore/Sources/AppInfo.swift": 100.0,
+    # Text fitting and layout: a wrong cut or position puts text over the template or off the page.
+    "AppCore/Sources/Layout/TextFitter.swift": 100.0,
+    # Places the schedule, meeting and further-notes pages; an error moves text on every agenda.
+    "AppCore/Sources/Layout/AgendaLayout.swift": 100.0,
+    # The to-do grid and its omitted-task report; a wrong row height hides or overlaps tasks.
+    "AppCore/Sources/Layout/AgendaLayout+Overview.swift": 100.0,
+    # The delegated table's rows, marks and pagination.
+    "AppCore/Sources/Layout/AgendaLayout+Delegated.swift": 100.0,
+    # The check that proves no plan puts text outside its container or over other text.
+    "AppCore/Sources/Layout/LayoutAudit.swift": 100.0,
+    # Builds the sign-in and token requests; a wrong state or challenge check weakens PKCE.
+    "AppCore/Sources/Google/GoogleOAuth.swift": 100.0,
+    # Holds the tokens and refreshes them; a wrong branch signs the user out or leaks a stale token.
+    "AppCore/Sources/Google/GoogleSession.swift": 100.0,
+    # Folds and compares text; every binder rule that matches a title depends on it.
+    "AppCore/Sources/Settings/BinderText.swift": 100.0,
+    # Strips prefixes and picks the meeting-page title shown on the page.
+    "AppCore/Sources/Settings/MeetingTitle.swift": 100.0,
+    # Recognises "to be discussed" tasks and the person they name.
+    "AppCore/Sources/Settings/TaskTitle.swift": 100.0,
+    # Parses the delegated-task format read from Google Tasks, including its warnings.
+    "AppCore/Sources/Settings/DelegatedTask.swift": 100.0,
+    # Decides which events reach the agenda and why the others are left out.
+    "AppCore/Sources/Draft/EventSelection.swift": 100.0,
+    # Decides which tasks reach the to-do list and the delegated page, and in what order.
+    "AppCore/Sources/Draft/TaskSelection.swift": 100.0,
 }
 
 

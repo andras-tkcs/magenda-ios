@@ -103,7 +103,7 @@ Issues, PRs, commits, other ADRs. For a deleted source document: `git show <sha>
 
 ## Index
 
-The first ten were inherited from the template this repository started from; each still applies
+ADRs 0001–0010 were inherited from the template this repository started from; each still applies
 until a later ADR supersedes it.
 
 | # | Decision | Status |
@@ -118,3 +118,10 @@ until a later ADR supersedes it.
 | [0008](0008-code-and-docs-carry-no-project-history.md) | Code and standing docs carry no project history | Accepted |
 | [0009](0009-signing-and-upload-use-an-app-store-connect-api-key.md) | Signing and upload use Xcode's automatic signing with an App Store Connect API key held in a protected environment | Accepted |
 | [0010](0010-swift-format-from-the-toolchain-is-the-only-linter.md) | `swift format` from the toolchain is the only formatter and linter | Accepted |
+| [0011](0011-the-agenda-pdf-is-drawn-on-device-from-the-vendored-magenda-template.md) | The agenda PDF is drawn on the device from the Python Magenda's compiled template, vendored at a pinned commit | Accepted |
+| [0012](0012-text-layout-is-computed-in-appcore-and-audited.md) | Text layout is computed in AppCore against a measuring protocol into a positioned plan, and every plan is audited | Accepted |
+| [0013](0013-google-sign-in-uses-pkce-with-aswebauthenticationsession.md) | Google sign-in is OAuth 2.0 with PKCE presented by `ASWebAuthenticationSession`, with the user's own client kept in the Keychain | Accepted |
+| [0014](0014-agenda-inputs-come-live-from-google-calendar-and-google-tasks.md) | The agenda's inputs are read live from Google Calendar and Google Tasks, with task lists found by title | Accepted |
+| [0015](0015-appcore-may-import-observation.md) | AppCore may import the toolchain's `Observation` module | Accepted |
+| [0016](0016-agenda-selection-uses-editable-rules-not-a-language-model.md) | What goes on the agenda is decided by fixed, editable rules, never by a language model | Accepted |
+| [0017](0017-each-release-attaches-an-ad-hoc-signed-ipa.md) | A tagged release can attach an Ad Hoc signed `.ipa` | Accepted |

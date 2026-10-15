@@ -3,6 +3,7 @@
 ## Status
 
 Accepted — 2026-10-01. Inherited from the iOS app template.
+Amended by [ADR 0015](0015-appcore-may-import-observation.md): AppCore may also import `Observation`.
 
 ## Context
 
