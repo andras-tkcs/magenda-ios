@@ -17,7 +17,7 @@ high-value end-to-end tests cross a boundary.
 | 1 | Unit | Logic in isolation, offline | `AppCore/Tests/` (`swift test`); `AppTests/` for what only the built app can show | `tests.yml` `core` (Linux), `app` (simulators), every PR |
 | 2 | UI | The real app launches on a simulator, and a user's path through it works | `AppUITests/` (XCUITest) | `tests.yml` `app`, every PR |
 | 3 | Compatibility | Layers 1–2 on the newest and the oldest supported iOS, and on iPad | A matrix, not a test | `tests.yml` `app`, every PR |
-| 4 | Backend contract | The app's server still answers in the shape the app decodes | `AppCore/Tests/` fixtures + a live check | Add when the app has a backend; see below |
+| 4 | Backend contract | Google's responses still decode the way the app expects | `AppCore/Tests/Google/Fixtures/` | `tests.yml` `core`, every PR; no live check; see below |
 | 5 | Release archive | The Release configuration archives and carries the tag's version | `build.yml` `archive` | Tag push, and dispatched as the release pre-flight |
 | 6 | Distribution | The signed build is accepted by App Store Connect and installs from TestFlight | `build.yml` `testflight` | Tag push |
 | 7 | Manual | Real devices, real accounts, App Review, how it feels | [`release-testing.md`](release-testing.md) | Before a stable release |
@@ -27,7 +27,7 @@ high-value end-to-end tests cross a boundary.
 | Wrong logic, malformed decoding, an edge case | 1 |
 | A crash at launch, a missing accessibility identifier, a broken navigation path | 2 |
 | Works on iOS 26 / iPhone, breaks on the oldest supported iOS or on iPad | 3 |
-| The server renamed a field the app decodes | 4 |
+| Google renamed a field the app decodes | 4 |
 | Release-only compiler errors, a lost version number | 5 |
 | Signing, entitlements, a missing icon or privacy manifest rejected on upload | 6 |
 | Feels wrong, reads badly, fails on a real device's hardware | 7 |
@@ -59,11 +59,21 @@ applies it by hand (`... apply`). `... show` compares it with what is live.
 
 ## Layer 4: backend contract
 
-Add this once the app talks to a server. The decoding tests in AppCore replay recorded responses
-from `AppCore/Tests/Fixtures/`; a scheduled job on a runner the project controls calls the real
-server with a QA account and fails when a response no longer decodes. The QA credential lives on
-that runner only, never in a GitHub-hosted job or a `pull_request` workflow, and that boundary gets
-an ADR when it is set up.
+The app's only backend is Google's Calendar and Tasks REST APIs (ADR 0014). The Google decoding
+tests replay recorded responses from `AppCore/Tests/Google/Fixtures` and run on every PR with the
+rest of AppCore. No live contract check runs: the app signs in with each user's own Google client
+(ADR 0013), and there is no account for CI to use. A live account is checked by hand in
+[`release-testing.md`](release-testing.md).
+
+If a live check is ever added, its credential lives only on a runner the project controls, never in
+a GitHub-hosted job or a `pull_request` workflow, and that boundary gets an ADR.
+
+## Layout audit and binder rules
+
+`LayoutAudit` checks every render plan for text outside its container or the page, overlapping
+text and bad links (ADR 0012). It runs in AppCore with a deterministic fake font over the
+long-text fixtures, and in `AppTests` with the real fonts. The binder rules are tested in AppCore
+against the `standard` fixture, with no network and no simulator.
 
 ## Layers 5–6: release archive and distribution
 
@@ -72,7 +82,8 @@ from the commit count, and checks the archive's `Info.plist` carries both (ADR 0
 `v*` tag push and on dispatch; signing and upload are gated on a tag ref, so a dispatched run
 archives unsigned and uploads nothing. That dispatched run is the release pre-flight (ADR 0006).
 On a tag, the `testflight` job archives again with signing and uploads to App Store Connect, where
-Apple's own validation runs (ADR 0009).
+Apple's own validation runs (ADR 0009). When the maintainer turns it on, it also exports an Ad Hoc
+`.ipa` before the upload (ADR 0017).
 
 ## Layer 7: manual
 

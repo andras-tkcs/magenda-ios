@@ -14,12 +14,14 @@ write, test and extend the code.
 
 | Code | Lives in | Tested by |
 |---|---|---|
-| Logic: parsing, validation, formatting, state machines, networking clients, persistence models | `AppCore/Sources/` (a Swift package, Foundation at most) | `swift test` in `AppCore/Tests/`, on Linux and macOS |
+| Logic: parsing, validation, formatting, state machines, networking clients, persistence models | `AppCore/Sources/` (a Swift package, Foundation and Observation at most) | `swift test` in `AppCore/Tests/`, on Linux and macOS |
 | Views, navigation, app lifecycle, anything that imports SwiftUI or UIKit | `App/` | UI tests in `AppUITests/` |
 | What only the built app can show: its bundle, entitlements, launch | — | Hosted tests in `AppTests/` |
+| The vendored template: `chrome.pdf` and the fonts in `App/Resources/`, `slots.json` in `AppCore/Sources/Resources/` (ADR 0011) | Copied byte for byte from the Python Magenda; never edited | `AppCore/Tests/Layout/TemplateManifestTests.swift`, `AppTests/RenderingTests.swift` |
 
-AppCore must build and test with `swift test` on Linux (ADR 0007). It never imports SwiftUI, UIKit,
-Combine or any other Apple-only framework; if a type needs one, it belongs in `App/`, or AppCore
+AppCore must build and test with `swift test` on Linux (ADR 0007). It imports Foundation and, for
+the `@Observable` controller, Observation (ADR 0015); it never imports SwiftUI, UIKit, Combine or
+any other Apple-only framework; if a type needs one, it belongs in `App/`, or AppCore
 defines a protocol and the app supplies the Apple-specific implementation. A view computes nothing
 it could ask AppCore for.
 
@@ -50,7 +52,7 @@ it could ask AppCore for.
 
 ### Views
 
-- One screen per file in `App/`, named after what it shows (`ContentView` is the placeholder).
+- One screen per file in `App/`, named after what it shows.
 - State the view owns is `@State private`; state it is handed is a `let` or a `@Binding`. Shared
   model state is an `@Observable` type injected through the environment, not a singleton.
 - Every element a UI test reads or taps has an `accessibilityIdentifier`, declared once in the
@@ -99,10 +101,10 @@ fixes what it can.
 
 - **Swift Testing** (`import Testing`, `@Test`, `#expect`) for AppCore and the hosted app tests.
   **XCTest** only for UI tests, which Swift Testing does not drive.
-- `AppCore/Tests/` mirrors `AppCore/Sources/`: `Sources/Greeting.swift` is tested by
-  `Tests/GreetingTests.swift`.
+- `AppCore/Tests/` mirrors `AppCore/Sources/`: `Sources/Agenda/CalendarDay.swift` is tested
+  by `Tests/Agenda/CalendarDayTests.swift`.
 - Run the smallest relevant test set while developing (`swift test --package-path AppCore --filter
-  GreetingTests`), then `/dod` before opening or updating a PR. A 100% pass rate is required to
+  CalendarDayTests`), then `/dod` before opening or updating a PR. A 100% pass rate is required to
   merge.
 - Tests are offline and deterministic. No real credentials and no unmocked network calls.
 

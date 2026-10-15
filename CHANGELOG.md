@@ -34,6 +34,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- The first screen: a greeting for the name you type, and the app's version.
+- Sign in with Google and build your daily binder from Google Calendar and your "Claude" and
+  "Claude Delegations" task lists, with fixed rules and no AI.
+- Every item that is left out shows why ("Declined", "Personal block", "No other attendees",
+  "Overdue", "Check-in due" and more).
+- Editable binder rules: personal blocks, title prefixes, out-of-office words, short meeting names,
+  people for "to be discussed" tasks, and the number of look-ahead days.
+- Untick or edit any item before rendering; nothing is changed in Google.
+- Enter your own Google client on first launch; it is kept in the Keychain and never leaves the
+  device except to talk to Google.
+- Preview the PDF beside the list on iPad, and share it to Noteshelf or anywhere else.
+- Keyboard shortcuts for rendering, changing the day and reloading.
+- Choose the font and the colors of the agenda.
+- Long titles are shortened with "…" and to-dos that don't fit are listed under the preview.
+- A GitHub Release can attach a signed .ipa for registered devices, when the maintainer turns it on.
 
 [Unreleased]: https://github.com/andras-tkcs/magenda-ios/commits/main
