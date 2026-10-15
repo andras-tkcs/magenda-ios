@@ -31,6 +31,28 @@ private struct ConstantHasher: SHA256Hashing {
     }
 }
 
+/// Records every input and answers with its first 32 bytes, so each verifier has its own
+/// challenge.
+// `@unchecked Sendable` is safe because every access to `recorded` goes through `lock`.
+private final class RecordingHasher: SHA256Hashing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [Data] = []
+
+    /// Every input hashed so far, oldest first.
+    var inputs: [Data] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recorded
+    }
+
+    func sha256(_ data: Data) -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        recorded.append(data)
+        return Data(data.prefix(32))
+    }
+}
+
 private func configuration(
     _ id: String = clientID, secret: String? = nil
 ) throws -> GoogleOAuthConfiguration {
@@ -38,7 +60,7 @@ private func configuration(
 }
 
 private func session(
-    http: FakeHTTPClient, store: FakeTokenStore, configured: Bool = true,
+    http: any HTTPClient, store: FakeTokenStore, configured: Bool = true,
     hasher: any SHA256Hashing = FakeHasher()
 ) throws -> GoogleSession {
     let config = try configured ? configuration() : nil
@@ -66,6 +88,11 @@ private func tokenRequests(_ http: FakeHTTPClient) -> [HTTPRequest] {
 
 private func formBody(_ request: HTTPRequest) -> String {
     String(decoding: request.body ?? Data(), as: UTF8.self)
+}
+
+/// The value of `name` in a URL's query or a form body.
+private func parameter(_ name: String, in query: String?) -> String? {
+    URLComponents(string: "?" + (query ?? ""))?.queryItems?.first { $0.name == name }?.value
 }
 
 /// The callback Google would send for `url`'s state, with `code`.
@@ -141,11 +168,17 @@ struct GoogleSessionSendTests {
         http.enqueue(status: 200, json: refreshJSON)
         http.enqueue(status: 200, json: okJSON)
         http.enqueue(status: 200, json: okJSON)
+        let gated = GatedHTTPClient(http, gating: tokenURL)
         let store = FakeTokenStore(expiring(in: 10))
-        let google = try session(http: http, store: store)
-        async let first = google.send(apiRequest())
-        async let second = google.send(apiRequest())
-        _ = try await (first, second)
+        let google = try session(http: gated, store: store)
+        let first = Task { try await google.send(apiRequest()) }
+        await gated.waitUntilBlocked()
+        let second = Task { try await google.send(apiRequest()) }
+        // The second send has read the expiring token while the refresh is held. It cannot leave
+        // the session before it waits for that refresh, which needs the session to finish.
+        await store.waitForLoads(2)
+        await gated.release()
+        _ = try await (first.value, second.value)
         #expect(tokenRequests(http).count == 1)
         #expect(http.requests.first?.url.absoluteString == tokenURL)
         #expect(bearers(http) == ["Bearer new-access", "Bearer new-access"])
@@ -226,6 +259,43 @@ struct GoogleSessionSendTests {
         #expect(store.saveCount == 1)
     }
 
+    @Test("A sign-out while a refresh is in flight is not undone when the refresh finishes")
+    func signOutDuringRefresh() async throws {
+        let http = FakeHTTPClient()
+        http.enqueue(status: 200, json: "{}")
+        http.enqueue(status: 200, json: refreshJSON)
+        http.enqueue(status: 200, json: okJSON)
+        let gated = GatedHTTPClient(http, gating: tokenURL)
+        let store = FakeTokenStore(expiring(in: 10))
+        let google = try session(http: gated, store: store)
+        let sending = Task { try await google.send(apiRequest()) }
+        await gated.waitUntilBlocked()
+        await google.signOut()
+        await gated.release()
+        _ = try await sending.value
+        #expect(http.requests.first?.url.absoluteString == revokeURL)
+        #expect(store.tokens == nil)
+        #expect(store.saveCount == 0)
+        #expect(await google.isSignedIn() == false)
+    }
+
+    @Test("Switching clients while a refresh is in flight keeps the old client's tokens out")
+    func configureDuringRefresh() async throws {
+        let http = FakeHTTPClient()
+        http.enqueue(status: 200, json: refreshJSON)
+        http.enqueue(status: 200, json: okJSON)
+        let gated = GatedHTTPClient(http, gating: tokenURL)
+        let store = FakeTokenStore(expiring(in: 10))
+        let google = try session(http: gated, store: store)
+        let sending = Task { try await google.send(apiRequest()) }
+        await gated.waitUntilBlocked()
+        await google.configure(try configuration(otherClientID))
+        await gated.release()
+        _ = try await sending.value
+        #expect(store.tokens == nil)
+        #expect(store.saveCount == 0)
+    }
+
     @Test(
         "A non-2xx answer maps to its error",
         arguments: [
@@ -270,12 +340,17 @@ struct GoogleSessionSignInTests {
         let http = FakeHTTPClient()
         http.enqueue(status: 200, json: signInJSON)
         let store = FakeTokenStore()
-        let google = try session(http: http, store: store, hasher: ConstantHasher())
+        let hasher = RecordingHasher()
+        let google = try session(http: http, store: store, hasher: hasher)
         #expect(await google.isSignedIn() == false)
         try await google.signIn { url, scheme in
             #expect(scheme == redirectScheme)
             #expect(url.host() == "accounts.google.com")
             #expect(url.path() == "/o/oauth2/v2/auth")
+            let hashed = try #require(hasher.inputs.first)
+            let expected = GoogleOAuth.codeChallenge(
+                verifier: String(decoding: hashed, as: UTF8.self), hasher: RecordingHasher())
+            #expect(parameter("code_challenge", in: url.query()) == expected)
             return try callback(for: url, code: "code/with+chars")
         }
         let exchange = try #require(http.requests.first)
@@ -284,7 +359,9 @@ struct GoogleSessionSignInTests {
         let body = formBody(exchange)
         #expect(body.hasPrefix("code=code%2Fwith%2Bchars&client_id="))
         #expect(body.contains("grant_type=authorization_code"))
-        #expect(body.contains("code_verifier="))
+        // The verifier sent with the code is the one whose hash became the challenge.
+        let verifier = try #require(parameter("code_verifier", in: body))
+        #expect(hasher.inputs == [Data(verifier.utf8)])
         #expect(
             store.tokens
                 == OAuthTokens(

@@ -9,8 +9,8 @@ private let budapest = TimeZone(identifier: "Europe/Budapest") ?? .gmt
 private let sep30 = CalendarDay(isoString: "2026-09-30") ?? CalendarDay.today(in: .gmt, now: .now)
 private let eventsBase = "https://www.googleapis.com/calendar/v3/calendars/"
 private let eventsQuery =
-    "?timeMin=2026-09-29T22:00:00Z&timeMax=2026-09-30T22:00:00Z&singleEvents=true"
-    + "&orderBy=startTime&maxResults=250&timeZone=Europe/Budapest"
+    "?timeMin=2026-09-29T22%3A00%3A00Z&timeMax=2026-09-30T22%3A00%3A00Z&singleEvents=true"
+    + "&orderBy=startTime&maxResults=250&timeZone=Europe%2FBudapest"
 
 private struct Unreachable: Error, Equatable {}
 
@@ -111,6 +111,24 @@ struct GoogleEventsTests {
         let second = try #require(sender.requests.last).url.absoluteString
         let expected = eventsBase + "ada@example.com/events" + eventsQuery
         #expect(second == expected + "&pageToken=page-two-token")
+    }
+
+    @Test("A plus sign and other reserved characters in query values are percent-encoded")
+    func escapedQueryValues() async throws {
+        let sender = FakeSender()
+        sender.enqueue(json: #"{"items": [], "nextPageToken": "a+b/c=d&e"}"#)
+        sender.enqueue(json: #"{"items": []}"#)
+        let zone = try #require(TimeZone(identifier: "Etc/GMT+5"))
+        _ = try await GoogleCalendarClient(sender: sender).events(
+            calendarID: "ada@example.com", on: sep30, timeZone: zone)
+        let first = try #require(sender.requests.first).url.absoluteString
+        #expect(first.hasSuffix("&timeZone=Etc%2FGMT%2B5"))
+        #expect(!first.contains("+"))
+        let second = try #require(sender.requests.last).url.absoluteString
+        #expect(second.hasSuffix("&timeZone=Etc%2FGMT%2B5&pageToken=a%2Bb%2Fc%3Dd%26e"))
+        let items = URLComponents(string: second)?.queryItems ?? []
+        #expect(items.first { $0.name == "pageToken" }?.value == "a+b/c=d&e")
+        #expect(items.first { $0.name == "timeZone" }?.value == "Etc/GMT+5")
     }
 
     @Test("Paging stops after ten pages even when Google keeps offering more")

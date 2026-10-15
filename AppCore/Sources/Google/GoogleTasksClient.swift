@@ -14,7 +14,7 @@ public struct GoogleTasksClient: Sendable {
         let pages = try await GoogleAPI.pages(
             TaskListsPage.self, sender: sender,
             url: GoogleAPI.url(host: "tasks.googleapis.com", path: "tasks/v1/users/@me/lists"),
-            query: [URLQueryItem(name: "maxResults", value: "100")],
+            query: ["maxResults": "100"],
             nextPageToken: \.nextPageToken)
         return pages.flatMap { $0.items ?? [] }.map { GoogleTaskList(id: $0.id, title: $0.title) }
     }
@@ -26,9 +26,9 @@ public struct GoogleTasksClient: Sendable {
             url: GoogleAPI.url(host: "tasks.googleapis.com", path: "tasks/v1/lists")
                 .appending(path: listID).appending(path: "tasks"),
             query: [
-                URLQueryItem(name: "showCompleted", value: "false"),
-                URLQueryItem(name: "showHidden", value: "false"),
-                URLQueryItem(name: "maxResults", value: "100"),
+                "showCompleted": "false",
+                "showHidden": "false",
+                "maxResults": "100",
             ], nextPageToken: \.nextPageToken)
         return pages.flatMap { $0.items ?? [] }.map { item in
             GoogleTask(

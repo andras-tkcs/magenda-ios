@@ -189,7 +189,8 @@ enum GoogleAPI {
     static let maxPages = 10
 
     /// `https://<host>` followed by `path`. Callers append IDs with `appending(path:)`, never by
-    /// writing them into a string, so a `#` or `/` in an ID is percent-encoded.
+    /// writing them into a string, so a `#` or `?` in an ID is percent-encoded. A `/` stays a
+    /// path separator; no Calendar or Tasks ID contains one.
     static func url(host: String, path: String) -> URL {
         var components = URLComponents()
         components.scheme = "https"
@@ -205,18 +206,18 @@ enum GoogleAPI {
 
     /// Fetches `url` with `query`, then each following page, decoding every body as `Page`.
     static func pages<Page: Decodable>(
-        _ type: Page.Type, sender: any AuthorizedHTTPSending, url: URL, query: [URLQueryItem],
-        nextPageToken: (Page) -> String?
+        _ type: Page.Type, sender: any AuthorizedHTTPSending, url: URL,
+        query: KeyValuePairs<String, String>, nextPageToken: (Page) -> String?
     ) async throws -> [Page] {
         var result: [Page] = []
         var token: String?
         for _ in 0..<maxPages {
-            var items = query
+            var items = Array(query)
             if let token {
-                items.append(URLQueryItem(name: "pageToken", value: token))
+                items.append((key: "pageToken", value: token))
             }
             let request = HTTPRequest(
-                method: .get, url: url.appending(queryItems: items), headers: [:], body: nil)
+                method: .get, url: withQuery(items, on: url), headers: [:], body: nil)
             let response = try await sender.send(request)
             let page: Page
             do {
@@ -229,6 +230,40 @@ enum GoogleAPI {
                 break
             }
             token = next
+        }
+        return result
+    }
+
+    /// `url` with `items` as its query, every name and value escaped down to the unreserved
+    /// characters. `appending(queryItems:)` would leave a `+` as it is, and Google reads a `+` in
+    /// a query as a space, which breaks a time zone such as `Etc/GMT+5` or a page token.
+    static func withQuery(_ items: [(key: String, value: String)], on url: URL) -> URL {
+        let pairs = items.map { escaped($0.key) + "=" + escaped($0.value) }
+        let query = pairs.joined(separator: "&")
+        // `url` is always one `url(host:path:)` built, so the components and their URL exist; as
+        // there, replacing it rather than falling back leaves no branch that never runs.
+        var result = url
+        if var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.percentEncodedQuery = query
+            if let built = components.url {
+                result = built
+            }
+        }
+        return result
+    }
+
+    private static let unreserved = Set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~".utf8)
+
+    /// `text` with every byte outside the unreserved characters percent-encoded.
+    static func escaped(_ text: String) -> String {
+        var result = ""
+        for byte in text.utf8 {
+            if unreserved.contains(byte) {
+                result.append(Character(Unicode.Scalar(byte)))
+            } else {
+                result += String(format: "%%%02X", UInt32(byte))
+            }
         }
         return result
     }

@@ -103,6 +103,9 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
     private let hasher: any SHA256Hashing
     private let now: @Sendable () -> Date
     private var refreshTask: Task<OAuthTokens, Error>?
+    // Bumped whenever the stored tokens are replaced or removed, so a refresh that was already
+    // running cannot store its tokens over the change.
+    private var tokenGeneration = 0
 
     /// Creates a session for `configuration`, with `nil` until the person enters a client.
     public init(
@@ -120,6 +123,7 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
     /// different client ID (or none) deletes them, without revoking; a new secret keeps them.
     public func configure(_ configuration: GoogleOAuthConfiguration?) {
         if configuration?.clientID != self.configuration?.clientID {
+            tokenGeneration += 1
             try? tokenStore.delete()
         }
         self.configuration = configuration
@@ -162,6 +166,7 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
             over: http)
         let tokens = try GoogleOAuth.tokens(
             from: response, previousRefreshToken: nil, requireScopes: true, now: now())
+        tokenGeneration += 1
         do {
             try tokenStore.save(tokens)
         } catch {
@@ -202,6 +207,7 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
 
     /// Revokes the refresh token, ignoring any failure, then deletes the stored tokens.
     public func signOut() async {
+        tokenGeneration += 1
         if let tokens = try? tokenStore.load() {
             _ = try? await http.send(GoogleOAuth.revokeRequest(token: tokens.refreshToken))
         }
@@ -216,20 +222,28 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
     }
 
     // Callers that need a refresh while one is in flight wait for it instead of starting another,
-    // so a burst of requests spends the refresh token once.
+    // so a burst of requests spends the refresh token once. The caller that started it stores the
+    // result, unless a sign-in, sign-out or client change replaced the tokens in the meantime.
+    // The request already in flight still uses the refreshed token.
     private func refreshed(
         _ tokens: OAuthTokens, configuration: GoogleOAuthConfiguration
     ) async throws -> OAuthTokens {
         if let refreshTask {
             return try await refreshTask.value
         }
+        let generation = tokenGeneration
         let task = Task { [http, tokenStore, now] in
             try await Self.refresh(
                 tokens, configuration: configuration, http: http, store: tokenStore, now: now)
         }
         refreshTask = task
         defer { refreshTask = nil }
-        return try await task.value
+        let refreshed = try await task.value
+        if generation == tokenGeneration {
+            // A token that cannot be stored still works for now; the next send refreshes again.
+            try? tokenStore.save(refreshed)
+        }
+        return refreshed
     }
 
     private static func refresh(
@@ -240,9 +254,8 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
             GoogleOAuth.refreshRequest(
                 refreshToken: tokens.refreshToken, configuration: configuration),
             over: http)
-        let refreshed: OAuthTokens
         do {
-            refreshed = try GoogleOAuth.tokens(
+            return try GoogleOAuth.tokens(
                 from: response, previousRefreshToken: tokens.refreshToken, requireScopes: false,
                 now: now())
         } catch {
@@ -251,9 +264,6 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
             }
             throw error
         }
-        // A token that cannot be stored still works for now; the next send refreshes again.
-        try? store.save(refreshed)
-        return refreshed
     }
 
     private func authorized(_ request: HTTPRequest, _ tokens: OAuthTokens) -> HTTPRequest {

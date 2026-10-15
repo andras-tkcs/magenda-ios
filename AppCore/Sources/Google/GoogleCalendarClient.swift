@@ -16,8 +16,8 @@ public struct GoogleCalendarClient: Sendable {
             url: GoogleAPI.url(
                 host: "www.googleapis.com", path: "calendar/v3/users/me/calendarList"),
             query: [
-                URLQueryItem(name: "minAccessRole", value: "reader"),
-                URLQueryItem(name: "maxResults", value: "250"),
+                "minAccessRole": "reader",
+                "maxResults": "250",
             ], nextPageToken: \.nextPageToken)
         return pages.flatMap { $0.items ?? [] }.map { item in
             GoogleCalendar(
@@ -42,12 +42,12 @@ public struct GoogleCalendarClient: Sendable {
             url: GoogleAPI.url(host: "www.googleapis.com", path: "calendar/v3/calendars")
                 .appending(path: calendarID).appending(path: "events"),
             query: [
-                URLQueryItem(name: "timeMin", value: utc.string(from: start)),
-                URLQueryItem(name: "timeMax", value: utc.string(from: end)),
-                URLQueryItem(name: "singleEvents", value: "true"),
-                URLQueryItem(name: "orderBy", value: "startTime"),
-                URLQueryItem(name: "maxResults", value: "250"),
-                URLQueryItem(name: "timeZone", value: timeZone.identifier),
+                "timeMin": utc.string(from: start),
+                "timeMax": utc.string(from: end),
+                "singleEvents": "true",
+                "orderBy": "startTime",
+                "maxResults": "250",
+                "timeZone": timeZone.identifier,
             ], nextPageToken: \.nextPageToken)
         let whole = ISO8601DateFormatter()
         let fractional = ISO8601DateFormatter()
