@@ -129,13 +129,14 @@ private func make(
     credentials: any ClientCredentialsStore = InMemoryClientCredentialsStore(validCredentials),
     settings: AgendaSettings = AgendaSettings(),
     renderer: FakeRenderer = FakeRenderer(),
+    rendering: (any AgendaRendering)? = nil,
     today: CalendarDay = tuesday
 ) throws -> Context {
     let store = InMemorySettingsStore(settings)
     let controller = AgendaController(
         account: account, data: data, settingsStore: store, credentials: credentials,
-        measurer: FakeTextMeasurer(), renderer: renderer, manifest: try TemplateManifest.bundled(),
-        timeZone: budapest, today: today)
+        measurer: FakeTextMeasurer(), renderer: rendering ?? renderer,
+        manifest: try TemplateManifest.bundled(), timeZone: budapest, today: today)
     return Context(
         controller: controller, account: account, settingsStore: store, credentials: credentials,
         renderer: renderer)
@@ -204,6 +205,23 @@ struct AgendaControllerTests {
         #expect(signedOut.controller.draft == nil)
     }
 
+    @Test("a second start, as from a second window, keeps the draft and the PDF")
+    func startTwice() async throws {
+        let counting = CountingDataSource(FixtureGoogleDataSource(.standard))
+        let context = try make(data: counting)
+        await context.controller.start()
+        let taskID = try #require(context.controller.draft?.tasks.first?.id)
+        context.controller.updateDraft { $0.setIncluded(false, forTask: taskID) }
+        await context.controller.render()
+        let rendered = try #require(context.controller.rendered)
+        let draft = context.controller.draft
+        await context.controller.start()
+        #expect(await counting.loads == 1)
+        #expect(context.controller.status == .ready)
+        #expect(context.controller.draft == draft)
+        #expect(context.controller.rendered == rendered)
+    }
+
     @Test("a client ID that is not one is refused with the client-ID message")
     func saveBadClientID() async throws {
         let context = try make(credentials: InMemoryClientCredentialsStore())
@@ -252,6 +270,23 @@ struct AgendaControllerTests {
         #expect(saved)
         #expect(context.controller.status == .ready)
         #expect(context.controller.draft?.date == wednesday)
+    }
+
+    @Test("saving a client drops a load that was still running for the previous one")
+    func saveClientDropsRunningLoad() async throws {
+        let gated = GatedDataSource(FixtureGoogleDataSource(.standard))
+        let context = try make(data: gated, account: FixtureGoogleAccount(signedIn: false))
+        await context.controller.start()
+        let loading = Task { await context.controller.setDay(date("2026-10-01")) }
+        await gated.waitUntilBlocked()
+        let saved = await context.controller.saveClientCredentials(
+            clientID: validClientID, clientSecret: "")
+        #expect(saved)
+        await gated.release()
+        await loading.value
+        #expect(context.controller.status == .signedOut)
+        #expect(context.controller.draft == nil)
+        #expect(context.controller.calendars.isEmpty)
     }
 
     @Test("a store that cannot save gives the Keychain message")
@@ -606,6 +641,57 @@ struct AgendaControllerTests {
         #expect(context.controller.status == .ready)
         #expect(context.controller.rendered == nil)
         #expect(context.controller.message == "Couldn't create the PDF. Try again.")
+    }
+
+    @Test("a load during a render wins, and the stale PDF is dropped")
+    func loadDuringRender() async throws {
+        let gated = GatedRenderer()
+        let context = try make(rendering: gated)
+        await context.controller.start()
+        let rendering = Task { await context.controller.render() }
+        await gated.waitUntilBlocked()
+        #expect(context.controller.status == .rendering)
+        await context.controller.goToNextWorkingDay()
+        await gated.release()
+        await rendering.value
+        #expect(gated.base.fileNames == ["2026-09-30.pdf"])
+        #expect(context.controller.day == date("2026-10-01"))
+        #expect(context.controller.draft?.date == date("2026-10-01"))
+        #expect(context.controller.status == .ready)
+        #expect(context.controller.rendered == nil)
+    }
+
+    @Test("a sign-out during a render stays signed out with nothing rendered")
+    func signOutDuringRender() async throws {
+        let gated = GatedRenderer()
+        let context = try make(rendering: gated)
+        await context.controller.start()
+        let rendering = Task { await context.controller.render() }
+        await gated.waitUntilBlocked()
+        await context.controller.signOut()
+        await gated.release()
+        await rendering.value
+        #expect(context.controller.status == .signedOut)
+        #expect(context.controller.draft == nil)
+        #expect(context.controller.rendered == nil)
+    }
+
+    @Test("an edit during a render makes the draft ready again and drops the stale PDF")
+    func editDuringRender() async throws {
+        let gated = GatedRenderer(FakeRenderer(fails: true))
+        let context = try make(rendering: gated)
+        await context.controller.start()
+        let rendering = Task { await context.controller.render() }
+        await gated.waitUntilBlocked()
+        let taskID = try #require(context.controller.draft?.tasks.first?.id)
+        context.controller.updateDraft { $0.setIncluded(false, forTask: taskID) }
+        #expect(context.controller.status == .ready)
+        await gated.release()
+        await rendering.value
+        #expect(context.controller.status == .ready)
+        #expect(context.controller.rendered == nil)
+        #expect(context.controller.message == nil)
+        #expect(context.controller.draft?.tasks.first?.isIncluded == false)
     }
 
     @Test("render without a draft does nothing")

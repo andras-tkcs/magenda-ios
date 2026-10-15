@@ -1,5 +1,5 @@
-// A `TokenStore` for tests: holds tokens in memory, counts saves and deletes, and can be told to
-// fail.
+// A `TokenStore` for tests: holds tokens in memory, counts loads, saves and deletes, lets a test
+// wait for a number of loads, and can be told to fail.
 
 import AppCore
 import Foundation
@@ -10,6 +10,8 @@ final class FakeTokenStore: TokenStore, @unchecked Sendable {
 
     private let lock = NSLock()
     private var stored: OAuthTokens?
+    private var loads = 0
+    private var loadWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
     private var saves = 0
     private var deletes = 0
     private let failsOnLoad: Bool
@@ -31,6 +33,22 @@ final class FakeTokenStore: TokenStore, @unchecked Sendable {
         locked { stored }
     }
 
+    /// Returns once `load` has been called at least `count` times.
+    func waitForLoads(_ count: Int) async {
+        await withCheckedContinuation { continuation in
+            let reached = locked {
+                if loads >= count {
+                    return true
+                }
+                loadWaiters.append((count, continuation))
+                return false
+            }
+            if reached {
+                continuation.resume()
+            }
+        }
+    }
+
     /// How many times `save` was called, including calls that failed.
     var saveCount: Int {
         locked { saves }
@@ -43,6 +61,14 @@ final class FakeTokenStore: TokenStore, @unchecked Sendable {
 
     func load() throws -> OAuthTokens? {
         try locked {
+            loads += 1
+            loadWaiters.removeAll { waiter in
+                guard waiter.count <= loads else {
+                    return false
+                }
+                waiter.continuation.resume()
+                return true
+            }
             if failsOnLoad {
                 throw Failure()
             }

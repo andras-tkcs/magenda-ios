@@ -76,6 +76,8 @@ public final class AgendaController {
     @ObservationIgnored private let manifest: TemplateManifest
     @ObservationIgnored private let timeZone: TimeZone
     @ObservationIgnored private var loadGeneration = 0
+    @ObservationIgnored private var renderGeneration = 0
+    @ObservationIgnored private var hasStarted = false
 
     /// Whether the draft carries a weekend or out-of-office notice, so the screen offers the next
     /// working day.
@@ -105,8 +107,13 @@ public final class AgendaController {
         settings = settingsStore.load()
     }
 
-    /// Reads the stored client, and loads the day when someone is signed in.
+    /// Reads the stored client, and loads the day when someone is signed in. Only the first call
+    /// does anything, so a second window showing the controller keeps its draft and PDF.
     public func start() async {
+        guard !hasStarted else {
+            return
+        }
+        hasStarted = true
         let configuration = (try? credentials.load())?.configuration
         await account.configure(configuration)
         clientID = configuration?.clientID
@@ -186,7 +193,7 @@ public final class AgendaController {
         let generation = loadGeneration
         status = .loading
         message = nil
-        rendered = nil
+        invalidateRendered()
         let outcome: Result<Loaded, any Error>
         do {
             outcome = .success(try await fetch())
@@ -232,7 +239,7 @@ public final class AgendaController {
         change(&after)
         settings = after
         settingsStore.save(after)
-        rendered = nil
+        invalidateRendered()
         let readsDifferently =
             after.calendarIDs != before.calendarIDs
             || after.todoListTitle != before.todoListTitle
@@ -249,7 +256,7 @@ public final class AgendaController {
             change(&edited)
             draft = edited
         }
-        rendered = nil
+        invalidateRendered()
     }
 
     /// Saves `title` as the short name of the meeting that event `id` belongs to, and applies it
@@ -262,25 +269,38 @@ public final class AgendaController {
         settings.rules.shortNames[key] = name.isEmpty ? nil : name
         settingsStore.save(settings)
         draft?.applyShortName(name, key: key)
-        rendered = nil
+        invalidateRendered()
     }
 
-    /// Lays out the draft and writes the PDF.
+    /// Lays out the draft and writes the PDF. A load, sign-out or edit while it runs makes the
+    /// PDF stale, so it is then dropped and the status left to whatever changed it.
     public func render() async {
         guard let draft else {
             return
         }
+        renderGeneration += 1
+        let generation = renderGeneration
+        let fileName = day.isoString + ".pdf"
         status = .rendering
         message = nil
         let layout = AgendaLayout(manifest: manifest, measurer: measurer, theme: settings.theme)
         let content = draft.content()
         let plan = await Task.detached { layout.plan(for: content) }.value
+        let outcome: Result<URL, any Error>
         do {
-            let url = try await renderer.render(plan, fileName: day.isoString + ".pdf")
+            outcome = .success(try await renderer.render(plan, fileName: fileName))
+        } catch {
+            outcome = .failure(error)
+        }
+        guard generation == renderGeneration else {
+            return
+        }
+        switch outcome {
+        case .success(let url):
             rendered = RenderedAgenda(
                 url: url, pageCount: plan.pages.count,
                 omittedTasks: plan.omittedTodoItems.map(\.text))
-        } catch {
+        case .failure:
             message = "Couldn't create the PDF. Try again."
         }
         status = .ready
@@ -296,11 +316,23 @@ public final class AgendaController {
         error as? GoogleAPIError ?? .unexpectedResponse
     }
 
+    // Also drops a load still running, so it cannot bring back what was cleared.
     private func clearLoadedState() {
+        loadGeneration += 1
         draft = nil
         calendars = []
         taskLists = []
+        invalidateRendered()
+    }
+
+    // Forgets the PDF and makes a render still running drop its result. An edit during a render
+    // leaves nothing being written, so the draft is ready again.
+    private func invalidateRendered() {
+        renderGeneration += 1
         rendered = nil
+        if status == .rendering {
+            status = .ready
+        }
     }
 
     private func resumeSession() async {
