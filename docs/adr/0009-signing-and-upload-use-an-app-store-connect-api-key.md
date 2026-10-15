@@ -3,6 +3,7 @@
 ## Status
 
 Accepted — 2026-10-01. Inherited from the iOS app template.
+Amended by [0018](0018-the-team-id-comes-from-the-app-store-environment.md).
 
 ## Context
 

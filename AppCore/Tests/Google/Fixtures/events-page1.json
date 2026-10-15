@@ -1,0 +1,53 @@
+{
+  "kind": "calendar#events",
+  "summary": "Ada's work",
+  "timeZone": "Europe/Budapest",
+  "nextPageToken": "page-two-token",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "evt-standup-0930",
+      "iCalUID": "standup-series@example.com",
+      "recurringEventId": "standup-series",
+      "status": "confirmed",
+      "summary": "Platform standup",
+      "eventType": "default",
+      "start": { "dateTime": "2026-09-30T09:30:00+02:00", "timeZone": "Europe/Budapest" },
+      "end": { "dateTime": "2026-09-30T09:45:00+02:00", "timeZone": "Europe/Budapest" },
+      "attendees": [
+        {
+          "email": "ada@example.com",
+          "displayName": "Ada Lovelace",
+          "self": true,
+          "responseStatus": "accepted"
+        },
+        {
+          "email": "grace@example.com",
+          "displayName": "Grace Hopper",
+          "responseStatus": "tentative"
+        },
+        {
+          "email": "room-12@resource.calendar.google.com",
+          "displayName": "Room 12",
+          "resource": true,
+          "responseStatus": "accepted"
+        },
+        {
+          "email": "Annex-3@Resource.Calendar.Google.com",
+          "responseStatus": "needsAction"
+        },
+        { "displayName": "Mailing list without an address" }
+      ]
+    },
+    {
+      "kind": "calendar#event",
+      "id": "evt-review-1100",
+      "iCalUID": "review-1100@example.com",
+      "status": "tentative",
+      "summary": "Design review",
+      "eventType": "default",
+      "start": { "dateTime": "2026-09-30T11:00:00.250+02:00" },
+      "end": { "dateTime": "2026-09-30T12:00:00.250+02:00" }
+    }
+  ]
+}

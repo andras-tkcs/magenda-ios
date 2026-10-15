@@ -13,7 +13,11 @@ A check stays manual only when automation cannot reliably decide pass or fail:
 - hardware the simulator does not have or fakes (camera, push notifications, biometrics, real
   network conditions);
 - a first-run permission prompt's wording, which iOS renders;
-- App Review and the App Store listing.
+- App Review and the App Store listing;
+- real Google sign-in and real account data, which CI has no account for (ADR 0013): sign in with
+  your own client, render a day and share it into Noteshelf;
+- the comparison of the app's agenda with a binder built by the old Claude workflow while that
+  workflow still runs.
 
 Nothing is added to this list unless it meets that bar. Do not rerun the automated suite by hand
 because a release is being cut.
