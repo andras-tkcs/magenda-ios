@@ -86,6 +86,8 @@ def _load(report: dict) -> tuple[float | None, dict[str, float]]:
         if rel is None:
             continue
         lines = entry["summary"]["lines"]
+        if lines["covered"] < lines["count"]:  # TEMP-DEBUG
+            print("UNCOVERED", rel, [(g[0], g[1]) for g in entry.get("segments", []) if g[3] and g[2] == 0 and g[4]])  # TEMP-DEBUG
         covered += lines["covered"]
         total += lines["count"]
         per_file[rel] = 100.0 if lines["count"] == 0 else 100.0 * lines["covered"] / lines["count"]

@@ -127,6 +127,16 @@ struct AgendaControllerBinderTests {
                 == "Couldn't save the binder. Free some space on this device and try again.")
     }
 
+    @Test("a new session starts without handwriting when it cannot be read")
+    func unreadableInkAtRender() async throws {
+        let store = FailingBinderStore(.unreadable, failing: [.ink])
+        let context = try make(binderStore: store)
+        await context.controller.start()
+        await context.controller.render()
+        let binder = try #require(context.controller.binder)
+        #expect(binder.ink.isEmpty)
+    }
+
     @Test("a binder that cannot be saved keeps the previous session")
     func saveDayFailsKeepsSession() async throws {
         let store = FailingBinderStore(.unwritable, failing: [.saveDay])
