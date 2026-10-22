@@ -42,7 +42,11 @@ and on dispatch. A 100% pass rate is required to merge.
 | `core` (Ubuntu) | `swift test` in AppCore with coverage, then `scripts/check_coverage_floor.py` |
 | `lint` (Ubuntu) | `swift format lint --strict` |
 | `scripts` (Ubuntu) | `python3 -m unittest discover -s scripts/tests`, including the no-project-history guard |
-| `app (iphone, newest)`, `app (iphone, oldest)`, `app (ipad, newest)` (macOS) | `xcodegen generate`, then the hosted app tests and the UI tests on a simulator `scripts/simulator.py` picks |
+| `app (iphone, newest)`, `app (iphone, oldest)`, `app (ipad, newest)` (macOS) | `xcodegen generate`, then the hosted app tests on a simulator `scripts/simulator.py` picks |
+| `ui (<family>, <runtime>, <shard>)` (macOS), nine jobs | The same build, then one shard of the UI tests on the same three simulators: `edit-screen`, `settings`, and `rest` (every UI test class not in another shard, so a new class runs there) |
+
+The UI tests run as three parallel shards per device, so a failed shard is re-run on its own
+("Re-run failed jobs") instead of repeating every UI test.
 
 `scripts/simulator.py` chooses devices by family and runtime rather than by name, because names
 change with every Xcode. `oldest` means the oldest installed runtime at or above the deployment
