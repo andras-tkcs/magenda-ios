@@ -2,7 +2,8 @@
 
 An iPad-first app that builds the daily binder from Google Calendar and Google Tasks. Sign in with
 Google, pick a day, review what the app selected and why, untick or edit anything, render the
-agenda as a PDF, preview it beside the list and share it to Noteshelf or anywhere else. The rules
+agenda as a PDF, preview it beside the list (on iPad, open it as a binder you write in) and share
+it to Noteshelf or anywhere else. The rules
 are fixed and editable, and no AI is involved (ADR 0016). The app also runs on iPhone.
 
 ## What goes on the agenda
@@ -47,7 +48,19 @@ none is chosen)
   invited to an included meeting that day. A name that differs from the attendee's first name is
   matched under Settings → Binder rules → People. Otherwise it is listed unticked with the reason.
 - A task's notes take one line; a task that does not fit the list is left off the PDF and listed in
-  a banner under the preview.
+  a banner under the preview (on iPad, under the binder's toolbar).
+
+## Binder (iPad)
+
+On iPad, Render opens the day's binder: the same pages as the PDF, drawn in the app, with Apple
+Pencil handwriting on each one. The toolbar has black, blue, red and green pens, an eraser, undo and
+redo, buttons that jump to the overview, the delegated tasks and the notes, and Add page, which puts
+a blank copy of the current page after it. Tapping a link on a page follows it. Share PDF shares the
+day with your handwriting on its pages.
+
+Handwriting is saved on the device per page. Rendering the day again keeps it on its page, and a
+meeting page you wrote on stays even when the meeting has left the agenda. Once a day is started, it
+opens without a network connection. The iPhone shows the PDF preview (ADR 0020, ADR 0021).
 
 ## Delegated tasks
 
@@ -133,11 +146,11 @@ swift test --package-path AppCore
 | Path | What it is |
 |---|---|
 | `App/` | The SwiftUI app: views, navigation, assets |
-| `App/Screens/` | One SwiftUI screen per file, and the Agenda menu's keyboard shortcuts |
-| `App/Rendering/` | CoreText measuring and the PDF renderer that executes AppCore's render plan |
+| `App/Screens/` | One SwiftUI screen per file, including the iPad binder, and the Agenda menu's keyboard shortcuts |
+| `App/Rendering/` | CoreText measuring, `PageDrawer`, which draws a page on screen and into the PDF, and the PDF renderer that executes AppCore's render plan |
 | `App/Platform/` | The Keychain, `UserDefaults`, HTTP and hashing behind AppCore's protocols |
 | `App/Resources/` | The vendored template `chrome.pdf` and the OFL fonts (ADR 0011) |
-| `AppCore/` | The app's logic, as a Swift package with its own tests: agenda model, layout, Google clients, settings and binder rules, draft building, controller |
+| `AppCore/` | The app's logic, as a Swift package with its own tests: agenda model, layout, Google clients, settings and binder rules, draft building, the binder's days and pages, controller |
 | `AppTests/` | Tests that run inside the built app on a simulator |
 | `AppUITests/` | UI tests that drive the app on a simulator |
 | `project.yml` | The Xcode project's specification (XcodeGen) |

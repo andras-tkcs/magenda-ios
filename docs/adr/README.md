@@ -127,3 +127,5 @@ until a later ADR supersedes it.
 | [0017](0017-each-release-attaches-an-ad-hoc-signed-ipa.md) | A tagged release can attach an Ad Hoc signed `.ipa` | Accepted |
 | [0018](0018-the-team-id-comes-from-the-app-store-environment.md) | The Team ID comes from the `app-store` environment's `APPLE_TEAM_ID` secret, not from the repository | Accepted |
 | [0019](0019-alphas-are-tested-through-testflight-and-the-ad-hoc-ipa-is-opt-in.md) | Alphas are tested through TestFlight, and the Ad Hoc `.ipa` is opt-in | Accepted |
+| [0020](0020-on-ipad-the-agenda-is-a-binder-of-native-pages-with-pencilkit-ink.md) | On iPad the agenda is a binder of native pages with PencilKit ink, and the PDF is only the export | Accepted |
+| [0021](0021-a-binder-day-is-stored-as-a-content-snapshot-and-ink-per-page-key.md) | A binder day is stored as a content snapshot and ink per page key | Accepted |
