@@ -117,9 +117,10 @@ public struct BinderLayout: Sendable {
     /// Step 6: every link points at the composed index of the page it pointed at in the plan its
     /// page came from; a link to a page that is not shown is dropped.
     private func remapLinks(_ composed: [ComposedPage], origins: [RenderPlan]) -> [PagePlan] {
-        let positions = Dictionary(
-            composed.enumerated().map { ($1.page.key, $0) },
-            uniquingKeysWith: { first, _ in first })
+        var positions: [PageKey: Int] = [:]
+        for (index, entry) in composed.enumerated() where positions[entry.page.key] == nil {
+            positions[entry.page.key] = index
+        }
         return composed.map { entry in
             let pages = origins[entry.origin].pages
             let operations = entry.page.operations.compactMap { operation -> DrawOperation? in
