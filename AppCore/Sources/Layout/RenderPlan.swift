@@ -182,4 +182,20 @@ public struct RenderPlan: Equatable, Sendable {
         self.pages = pages
         self.omittedTodoItems = omittedTodoItems
     }
+
+    /// The target page of the last link on page `index` whose area holds `point` (edges
+    /// included), or nil when there is none or the page does not exist.
+    public func linkTarget(at point: PlanPoint, onPage index: Int) -> Int? {
+        guard pages.indices.contains(index) else {
+            return nil
+        }
+        for operation in pages[index].operations.reversed() {
+            if case .link(let rect, let target) = operation,
+                point.x >= rect.x0, point.x <= rect.x1, point.y >= rect.y0, point.y <= rect.y1
+            {
+                return target
+            }
+        }
+        return nil
+    }
 }
