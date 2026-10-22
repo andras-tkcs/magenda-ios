@@ -21,28 +21,28 @@ five-day deletion of old days are out of scope.
 Checked on `main` at `1dd2030`.
 
 - The pipeline runs one way and is rebuilt on every load: `GoogleDataSource` → `AgendaBuilder` →
-  `AgendaDraft` → `AgendaDraft.content()` (`AppCore/Sources/Draft/AgendaDraft.swift:100`) →
+  `AgendaDraft` → `AgendaDraft.content()` (`AppCore/Sources/Draft/AgendaDraft.swift:101`) →
   `AgendaLayout.plan(for:)` (`AppCore/Sources/Layout/AgendaLayout.swift:16`) → `RenderPlan` →
-  `PDFAgendaRenderer.render` (`App/Rendering/PDFAgendaRenderer.swift:25`) → `PreviewView`
+  `PDFAgendaRenderer.render` (`App/Rendering/PDFAgendaRenderer.swift:27`) → `PreviewView`
   (`App/Screens/PreviewView.swift`) in a read-only `PDFView` with a share button.
 - Page order is overview, delegated pages (0…n), one page per meeting (or one blank meeting page),
   further-notes page (`AgendaLayout.swift:16-31`). Pages are addressed only by index; links are
-  `.link(PlanRect, targetPage: Int)` (`AppCore/Sources/Layout/RenderPlan.swift:150`), added in
+  `.link(PlanRect, targetPage: Int)` (`AppCore/Sources/Layout/RenderPlan.swift:145`), added in
   `AgendaLayout+Links.swift`.
-- `PagePlan` (`RenderPlan.swift:154`) has `chrome` and `operations` and no identity.
+- `PagePlan` (`RenderPlan.swift:149`) has `chrome` and `operations` and no identity.
   `AgendaContent.meetings` is `[String]` of titles (`AppCore/Sources/Agenda/AgendaContent.swift:79`);
   the event IDs (`calendarID|eventID`, stable) are lost in `content()`.
 - `AgendaContent`, `TodoItem`, `ScheduleEntry`, `DelegatedItem` and `Theme`
   (`AppCore/Sources/Layout/ThemeColors.swift:138`) are not `Codable`. `CalendarDay`, `Cadence`,
   `FontPack` and `ThemeColors` are.
 - `AgendaController` (`AppCore/Sources/Controller/AgendaController.swift`, 390 lines) owns load,
-  draft, render. `render()` (line 285) lays out in a detached task and writes the PDF to the
+  draft, render. `render()` (line 277) lays out in a detached task and writes the PDF to the
   temporary directory. Nothing but settings (UserDefaults) and tokens (Keychain) is stored.
 - `AgendaRendering` (`AgendaController.swift:24`) has one method, `render(_:fileName:)`; fakes are
   `AppCore/Tests/Support/FakeRenderer.swift` and `GatedRenderer.swift`.
 - `PDFAgendaRenderer` draws chrome (`drawChrome`) and operations (`draw(_:in:pageHeight:)`) only
   into a PDF context.
-- iPad detail column: `AgendaView.detail` (`App/Screens/AgendaView.swift:205`) shows
+- iPad detail column: `AgendaView.detail` (`App/Screens/AgendaView.swift:191`) shows
   `PreviewView` or the `previewPlaceholder`.
 - Tests: AppCore is gated at **100% overall line coverage** (`OVERALL_FLOOR = 100.0` in
   `scripts/check_coverage_floor.py`), so every new AppCore line needs a test. UI tests waiting for
@@ -163,9 +163,12 @@ public struct BinderLayout: Sendable {
    order) every pending extra with `after == k`: a page with key `.extra(id)`, the `chrome` and
    `operations` of the composed page whose key is `source`, and that page's origin plan; then do the
    same after `.extra(id)`. An extra whose `source` is not in the list is dropped.
-5. Extras still pending after the walk (their `after` page is gone) whose `source` is in the list:
-   in array order, insert each right after the last page of its source's run (the source page and
-   the extras directly following it), then emit its own chain as in step 4.
+5. Extras still pending after the walk (their `after` page is gone): take only the *roots*, the
+   pending extras whose `after` is not another pending extra, in array order. Drop a root whose
+   `source` is not in the list; insert any other right after the last page of its source's run
+   (the source page and the extras directly following it), then emit its chain as in step 4.
+   This step is defensive: `addPage` and `rebased` never leave a dangling `after` with a live
+   source, so its test builds such a day by hand.
 6. Links: on every composed page replace `.link(rect, targetPage: t)` with
    `.link(rect, targetPage: u)`, where `u` is the composed index of the key of page `t` in the
    page's origin plan; drop the operation when `t` is out of range or the key is not composed.
@@ -216,14 +219,22 @@ Google data, joined with `URL.appending(path:)`):
   when empty).
 - All writes are `.atomic`; directories are created with `withIntermediateDirectories: true`.
   Any write or directory failure throws `.unwritable`. A `day.json` or `index.json` that exists
-  but cannot be read or decoded throws `.unreadable`. An index entry whose key does not parse or
-  whose file is missing is skipped. `saveInk` with empty data removes the file and the entry.
+  but cannot be read or decoded throws `.unreadable` (also from `saveInk`, which reads the index
+  first). An index entry whose key does not parse, whose file name does not match
+  `^page-[0-9]+\.pkdata$`, or whose file is missing is skipped (fail closed). Saving again for a
+  key that has an entry rewrites that entry's file. `saveInk` with empty data removes the file and
+  the entry, and is a no-op for a key with no entry. Each writing method wraps its body in one
+  `do { … } catch let error as BinderStoreError { throw error } catch { throw
+  BinderStoreError.unwritable }`, so every write failure is reachable from one "path is a regular
+  file" test under the 100% floor.
 - It never reads file attributes or timestamps (that would need a privacy-manifest reason).
 - `FileManager.default` is fetched inside each method, not stored.
 
-The app passes `<Application Support>/Binder` (`FileManager.default.url(for:
-.applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)`), not the
-temporary directory. Fixture launches use `InMemoryBinderStore()`.
+The app passes `URL.applicationSupportDirectory.appending(path: "Binder")` (does not throw; the
+store creates folders on write), not the temporary directory. Fixture launches use
+`InMemoryBinderStore()`, or, with the launch arguments `-MagendaBinderStoreFile <name>`, a
+`FileBinderStore` at `FileManager.default.temporaryDirectory.appending(path: <name>)` so a UI test
+can relaunch onto the same store (the test passes a fresh UUID per test).
 
 ### D5. Binder session and controller
 
@@ -238,18 +249,20 @@ public final class BinderSession {
     public private(set) var plan: RenderPlan
     public private(set) var ink: [PageKey: Data]
     public private(set) var message: String?
-    public var inkedKeys: Set<PageKey>                 // keys with non-empty ink
+    public var inkedKeys: Set<PageKey> { Set(ink.filter { !$0.value.isEmpty }.keys) }
     public func index(of key: PageKey) -> Int?         // in plan.pages
     public func setInk(_ data: Data, on key: PageKey)
     public func addPage(after key: PageKey) -> PageKey // the new page's key
+    func replace(day: BinderDay, plan: RenderPlan)    // internal; render updates in place
     init(day: BinderDay, plan: RenderPlan, ink: [PageKey: Data], store: any BinderStore,
          layout: BinderLayout, makeID: @escaping @Sendable () -> String)
 }
 ```
 
 - `setInk`: no-op when unchanged; empty data removes the entry; saves through
-  `store.saveInk` synchronously; on failure `message = "Couldn't save your handwriting. Free some
-  space on this device."`; on success `message = nil`.
+  `store.saveInk` synchronously; on `.unwritable` `message = "Couldn't save your handwriting.
+  Free some space on this device."`, on `.unreadable` `message = "Couldn't save your
+  handwriting: this day's saved binder can't be read."`; on success `message = nil`.
 - `addPage(after:)`: `id = makeID()`, `day.addPage(after:id:)`, `plan = layout.plan(for: day)`,
   `store.saveDay(day)`; on failure `message = "Couldn't save the new page. Free some space on this
   device."`. Returns `.extra(id)`.
@@ -264,17 +277,25 @@ public final class BinderSession {
   `BinderLayout.plan(for:)`, or `nil` when nothing is stored. A thrown error sets `binder = nil`
   and `message = "Couldn't read the saved binder for this day."`. This happens before the network
   fetch, so a started day shows even when the fetch fails (offline).
-- `render()`: inside the existing detached task also compute the binder day — `rebased` onto
-  `draft.content()` with `settings.theme` and the open session's `inkedKeys` when `binder?.date ==
-  day`, else `BinderDay(content:theme:)` — and its `BinderLayout` plan. After the existing
-  generation check: `binderStore.saveDay`; on success `binder` becomes a new session with that day,
-  plan and the previous session's `ink` (or `[:]`); on failure `message = "Couldn't save the
-  binder. Free some space on this device and try again."` Then the existing PDF outcome handling
-  (its failure message wins).
+- `render()`: on the main actor, before the detached task, capture `base = binder?.date == day ?
+  binder?.day : nil` and `inked = binder?.inkedKeys ?? []`. Inside the existing detached task
+  also compute the binder day — `rebased(base, onto: draft.content(), theme: settings.theme,
+  inkedKeys: inked)` when `base` is set, else `BinderDay(content:theme:)` — and its `BinderLayout`
+  plan. After the existing generation check, back on the main actor: if an open session's `day`
+  is no longer equal to `base` (a page was added or ink written while laying out), redo the
+  rebase and plan synchronously from the session's current `day` and `inkedKeys`. Then
+  `binderStore.saveDay`. On success, when a session for `day` is open, update it **in place**
+  with an internal `replace(day:plan:)` (keeps the same object and its `ink`, so views keep
+  saving into it); otherwise create a new session with `ink: (try? binderStore.ink(on: day)) ??
+  [:]`. On failure keep the previous session unchanged and set
+  `message = "Couldn't save the binder. Free some space on this device and try again."` Then the
+  existing PDF outcome handling (its failure message wins).
 - `public func exportBinder() async`: with a binder, `renderer.render(binder.plan, ink:
   binder.plan.pages.map { binder.ink[$0.key] }, fileName: binder.date.isoString + ".pdf")` →
   `binderExport`; on failure `message = "Couldn't create the PDF. Try again."`. Status unchanged.
-- `public func clearBinderExport()` sets `binderExport = nil`.
+- `public func clearBinderExport()` sets `binderExport = nil`. The export writes the same
+  `Agendas/<iso>.pdf` path as the plain render; on iPad the plain PDF is not shown, so that is
+  harmless.
 - `clearLoadedState()` also sets `binder = nil` and `binderExport = nil`.
 - `AgendaRendering` becomes `func render(_ plan: RenderPlan, ink: [Data?], fileName: String)
   async throws -> URL` (`ink[i]` is page *i*'s PencilKit data; a missing index means none), with a
@@ -291,7 +312,7 @@ public final class BinderSession {
 - Same file: `extension EnvironmentValues { @Entry var pageDrawer: PageDrawer? = nil;
   @Entry var allowsFingerDrawing = false }`.
 - `PDFAgendaRenderer.init(drawer: PageDrawer)`; `render(_:ink:fileName:)` draws each page with the
-  drawer, then its ink: `PKDrawing(data:)`, imaged with `drawing.image(from: page bounds, scale:
+  drawer, then its ink: `PKDrawing(data:)` (data that does not decode is skipped for that page), imaged with `drawing.image(from: page bounds, scale:
   3)` **inside `UITraitCollection(userInterfaceStyle: .light).performAsCurrent`** (otherwise dark
   mode turns black ink white), drawn into the page bounds; then the link destinations as today.
 - `AppEnvironment.makeServices(arguments:bundle:) throws -> AppServices` replaces
@@ -313,7 +334,12 @@ public final class BinderSession {
   pageHeight, contentMode: .fit)`, with `.scrollTargetLayout()` and `.scrollPosition(id:
   $visibleKey)` (`@State private var visibleKey: PageKey?`), padding 16, background
   `Color(.secondarySystemBackground)`. Free scrolling, no snapping, no zoom.
-  - Each page: `.accessibilityIdentifier("binderPage.<index>")`, label from its key ("Overview",
+  - `BinderView.ID`: `binderView`, `binderPageIndicator`, `binderShareButton`, `static func
+    binderPage(_ n: Int) -> String { "binderPage.\(n)" }`, plus the D8 toolbar identifiers.
+  - After the last page, bottom content margin `.contentMargins(.bottom, 600, for:
+    .scrollContent)`, so the last page can scroll to the top and `scrollPosition` reports it.
+  - Each page: `.accessibilityElement(children: .ignore)`, then
+    `.accessibilityIdentifier(ID.binderPage(index))`, label from its key ("Overview",
     "Delegated tasks, page <i+1>", "Meeting notes", "Notes", "Added page"), value "Handwritten"
     when `binder.ink[key] != nil`, else "Blank".
   - The scroll view: `.accessibilityIdentifier("binderView")`.
@@ -326,19 +352,23 @@ public final class BinderSession {
   - Toolbar `.primaryAction`: Button `Label("Share PDF", systemImage: "square.and.arrow.up")`,
     identifier `binderShareButton`, runs `controller.exportBinder()`; a sheet presented while
     `controller.binderExport != nil` shows `ActivityView(url:)` (new `App/Screens/ActivityView.swift`,
-    a `UIViewControllerRepresentable` around `UIActivityViewController`), dismiss calls
-    `clearBinderExport()`.
+    a `UIViewControllerRepresentable` around `UIActivityViewController` whose
+    `completionWithItemsHandler` calls an `onDone` closure); both `onDone` and the sheet's
+    `onDismiss` call `clearBinderExport()`, so no empty sheet stays behind.
 - `App/Screens/BinderPageView.swift`: a `UIViewRepresentable` around `BinderPageUIView: UIView`
   holding a `PageBackgroundView` (its `draw(_:)` scales the context by `bounds.width / pageWidth`
   and calls `PageDrawer.draw`; `contentMode = .redraw`; white background) and a `PKCanvasView` on
   top, both filling the bounds. Canvas: `backgroundColor = .clear`, `isOpaque = false`,
   `overrideUserInterfaceStyle = .light`, `drawingPolicy = allowsFingerDrawing ? .anyInput :
-  .pencilOnly`, `isScrollEnabled = false`, `contentSize` = the page size in points, and in
-  `layoutSubviews` `minimumZoomScale = maximumZoomScale = zoomScale = bounds.width / pageWidth`, so
-  strokes are stored in page points whatever the view's size. The coordinator applies `ink`
-  only when it differs from the last data it saw, with a flag that makes the delegate ignore the
-  resulting `canvasViewDrawingDidChange`; a real change reports `drawing.strokes.isEmpty ? Data() :
-  drawing.dataRepresentation()` through `onInkChange`.
+  .pencilOnly`, `isScrollEnabled = false`. In `layoutSubviews`, only when `scale = bounds.width / pageWidth`
+  differs from the last applied scale: first `minimumZoomScale = maximumZoomScale = zoomScale =
+  scale`, then `contentSize = CGSize(width: pageWidth * scale, height: pageHeight * scale)` (as
+  Apple's PencilKitDraw sample does), so strokes are stored in page points whatever the view's
+  size. The coordinator refreshes its parent (and so `onInkChange`) in every `updateUIView`. It
+  applies `ink` only when it differs from its "last data", which it sets both when it applies ink
+  and when it reports ink; a flag makes the delegate ignore the `canvasViewDrawingDidChange` that
+  applying causes. Ink that does not decode shows an empty drawing. A real change reports
+  `drawing.strokes.isEmpty ? Data() : drawing.dataRepresentation()` through `onInkChange`.
 
 ### D8. Tools, navigation, links and added pages
 
@@ -351,7 +381,7 @@ public final class BinderSession {
   `.link` on that page whose rect contains the point (edges included); `nil` for none or an
   index out of range.
 - `App/Screens/BinderToolbar.swift`, shown in `BinderView`'s top inset above the banners, one
-  row: Overview, Delegated (only when the plan has `.delegated(0)`), Notes | four pen buttons |
+  row inside a horizontal `ScrollView` (so it works at the largest Dynamic Type size): Overview, Delegated (only when the plan has `.delegated(0)`), Notes | four pen buttons |
   Eraser | Undo, Redo | Add page.
 
   | Button | Identifier | Accessibility label | Action |
@@ -399,11 +429,15 @@ public final class BinderSession {
 - **0020** — On iPad the agenda is a binder of native pages: each page of the render plan is drawn
   in the app with a PencilKit canvas on top, and the PDF is only the export, with the ink
   composited in. (Rejects PDFView overlays and PDF annotations, Apple's tool picker, ink on iPhone.)
+  Amends ADR 0011: `PageDrawer` now draws the template page, both on screen and into the PDF;
+  0011's Status gains "Amended by ADR 0020".
 - **0021** — A binder day is stored on the device in Application Support as the content snapshot
   and theme, plus opaque PencilKit data per stable page key in generated files behind an index;
   re-rendering rebases the day and keeps pages that carry ink. (Rejects index-addressed pages,
   storing the plan, one ink file per day, key-derived file names, Core Data / SwiftData, locking
-  a day.)
+  a day.) It notes that it qualifies ADR 0014's "the agenda needs a network connection to load"
+  (a started day opens offline) and that the user's Google-derived content now sits on the device
+  in Application Support, which is included in device backups.
 
 ## Manual steps
 
@@ -427,6 +461,8 @@ end-of-day path. Step-by-step page: see `manual_steps_artifact` in the manifest.
   can confirm a day is done (Stage 2). Accepted for now.
 - **Snapshot format.** `BinderDay.formatVersion` is 1; a later change to `AgendaContent`'s fields
   must bump it or decode old days. Not a Stage 1 problem.
+- **Duplicate meeting IDs** would duplicate a `PageKey` and a `ForEach` id. `content()` takes IDs
+  from distinct draft events, so it cannot happen; `LayoutAudit` reports it in tests.
 - If a test file named in a brief does not exist or a symbol has moved, the worker stops with
   `status=blocked` instead of guessing.
 
@@ -444,12 +480,12 @@ manual_after:
     title: Write in the binder with an Apple Pencil on a real iPad
     why: The simulator has no Pencil, pressure or palm rejection; CI draws only with a finger in test mode.
   - id: ma2-offline-and-relaunch
-    title: Reopen a started day after a relaunch and with no connection
-    why: Proves the Application Support store on a real device and the offline path, which CI only fakes in memory.
+    title: Reopen a started day with no connection on a real iPad
+    why: CI relaunches onto a file store in the simulator (BinderUITests) but cannot take a real device offline or use its Application Support container.
   - id: ma3-share-inked-pdf
     title: Share the inked PDF to Drive and run the end-of-day step on it
     why: Checks ink position and colour in the exported PDF in the real end-of-day path.
-verify_after_merge:
+verify_after_merge:   # no Swift toolchain in the cloud container: after every merge, dispatch tests.yml on the feature branch and read all jobs (core, lint, scripts, the three app jobs)
   - swift test --package-path AppCore
   - python3 -m unittest discover -s scripts/tests
 final_checks:
@@ -461,7 +497,7 @@ phases:
   - id: p1-page-keys
     title: Stable page keys, meeting IDs and Codable content
     depends_on: []
-    complexity: M
+    complexity: M   # ten source files, but eight of them change by a few lines each
     touches:
       - AppCore/Sources/Layout/PageKey.swift
       - AppCore/Sources/Layout/RenderPlan.swift
@@ -610,8 +646,8 @@ phases:
       3. Add "AppCore/Sources/Binder/BinderStore.swift": 100.0 to MODULE_FLOORS with the comment
          "# Saves handwriting and the day's snapshot; a wrong branch loses ink."
       4. No CHANGELOG entry. Run /dod via a dispatched tests.yml.
-      Stop with status=blocked if FileManager behaves differently on Linux and macOS for a case
-      above (the core job runs Linux; the app jobs run AppCore inside the app on macOS).
+      Stop with status=blocked if a case above cannot be made to pass on Linux without changing
+      D4's behaviour (Apple's FileManager is exercised later by a hosted test in p5).
     acceptance:
       - tests.yml core job green with the coverage floor passing, including the BinderStore.swift floor
       - tests.yml lint and scripts jobs green
@@ -642,8 +678,14 @@ phases:
       3. Tests support: FakeRenderer implements `render(_:ink:fileName:)` and records `inks:
          [[Data?]]`; GatedRenderer forwards `ink`. New FailingBinderStore (throws a chosen
          BinderStoreError from chosen methods, otherwise in memory).
-      4. AgendaControllerTests.swift: `make(...)` gains `binderStore: any BinderStore =
-         InMemoryBinderStore()` and passes a deterministic `makeID` (a counter: "id-1", "id-2").
+      4. AgendaControllerTests.swift: remove `private` from `budapest`, `validClientID`,
+         `validCredentials`, `date(_:)`, `tuesday`, `wednesday`, `Failure`, `FailingDataSource`,
+         `Context`, `make(...)` and `started(...)` so the new test file can use them; `Context`
+         gains `let binderStore: any BinderStore`; `make(...)` gains `binderStore: any
+         BinderStore = InMemoryBinderStore()` and passes `makeID: CountingIDs().next`, where
+         `CountingIDs` is a new `final class ... : @unchecked Sendable` in
+         AppCore/Tests/Support/FailingBinderStore.swift guarding its counter with an `NSLock`
+         and returning "id-1", "id-2", ….
       5. New BinderSessionTests: setInk saves, ignores unchanged data, removes on empty data, sets
          and clears `message`; addPage returns `.extra("id-1")`, puts it after the page, saves
          the day, and sets the message when saving fails; index(of:); inkedKeys.
@@ -661,9 +703,13 @@ phases:
            clearBinderExport; signOut clears binder and binderExport.
          - a render overtaken by a load (GatedRenderer, as the existing generation tests) saves
            no binder.
+         - rendering again with a session open updates the same object (`===`) and keeps its
+           ink; addPage while a render is held by GatedRenderer keeps the added page in the
+           saved day after the render finishes; a failing saveDay keeps the previous session.
       7. App: PDFAgendaRenderer implements `render(_:ink:fileName:)` and ignores `ink` for now
          (the next phase composites it). AppEnvironment passes `FileBinderStore(directory:
-         <Application Support>/Binder)` for live use and `InMemoryBinderStore()` for fixtures.
+         URL.applicationSupportDirectory.appending(path: "Binder"))` for live use and
+         `InMemoryBinderStore()` for fixtures (the file-store launch argument comes in p6).
       8. No CHANGELOG entry yet. Run /dod via a dispatched tests.yml; the app jobs must be green.
       Stop with status=blocked if an existing AgendaControllerTests test changes outcome.
     acceptance:
@@ -682,6 +728,7 @@ phases:
       - App/AppEnvironment.swift
       - App/MagendaApp.swift
       - AppTests/RenderingTests.swift
+      - AppTests/PlatformTests.swift
     brief: |
       Implement Design D6 exactly.
       1. Create App/Rendering/PageDrawer.swift; move the drawing helpers out of
@@ -693,22 +740,28 @@ phases:
          Update every `#Preview` that calls `AppEnvironment.previewController()` only if it
          stops compiling.
       4. AppTests/RenderingTests.swift:
-         - change the missingTemplate test to construct `PageDrawer(library:bundle:)`.
+         - change the missingTemplate test (line 73) to construct `PageDrawer(library:bundle:)`,
+           and the other `PDFAgendaRenderer(library:bundle:)` calls (lines 110, 154, 163) to
+           `PDFAgendaRenderer(drawer: try PageDrawer(library:bundle:))`.
          - "Ink is drawn onto its own page": render AgendaContentFixtures.typical's plan with
            `ink: [nil, data]` where data is a PKDrawing of one stroke
            `PKStroke(ink: PKInk(.pen, color: .red), path: PKStrokePath(controlPoints: points,
            creationDate: Date()))`, points from (100, 400) to (500, 400) every 20 pt, each
            `PKStrokePoint(location:, timeOffset: 0, size: CGSize(width: 10, height: 10),
            opacity: 1, force: 1, azimuth: 0, altitude: .pi / 2)`. Rasterize PDF pages 1 and 2
-           at 1x into a UIGraphicsImageRenderer (white fill, flip, `page.draw(with: .mediaBox,
-           to:)`) and read the pixel at (300, 400): on page 2 red > 180 and green < 90; on page 1
-           not (red > 180 and green < 90).
+           into a UIGraphicsImageRenderer with `format.scale = 1` (white fill, flip,
+           `page.draw(with: .mediaBox, to:)`) and read the pixel at (300, 400). Render the same
+           plan once more with `ink: []`. Page 2 with ink: red > 180 and green < 90, and it
+           differs from page 2 without ink; page 1 is the same pixel with and without ink.
          - the same with a black stroke while `UITraitCollection(userInterfaceStyle:
            .dark).performAsCurrent` wraps the render: the pixel on page 2 has red, green and blue
            all < 80.
          - "PageDrawer draws a page into a bitmap": draw page 0 of the typical plan into a 595x842
            bitmap; at least one pixel is not white.
-      5. No CHANGELOG entry yet. Dispatch tests.yml; all app jobs green.
+         - ink whose data is not a PKDrawing renders the page without error, identical to no ink.
+      5. AppTests/PlatformTests.swift: one hosted test running FileBinderStore in a fresh
+         temporary directory on the simulator: saveDay/day, saveInk/ink, replace, delete.
+      6. No CHANGELOG entry yet. Dispatch tests.yml; all app jobs green.
       Stop with status=blocked if PKDrawing images come out empty in the hosted test on the
       simulator (report the job log), instead of changing the compositing approach.
     acceptance:
@@ -729,6 +782,7 @@ phases:
       - App/Screens/ActivityView.swift
       - App/Screens/PreviewView.swift
       - App/Screens/AgendaView.swift
+      - App/AppEnvironment.swift
       - AppUITests/BinderUITests.swift
       - AppUITests/PreviewUITests.swift
       - AppUITests/AgendaEditUITests.swift
@@ -750,9 +804,11 @@ phases:
          indicator, banners, Share PDF and its sheet. `#Preview` uses
          `AppEnvironment.previewServices()` after a render.
       5. AgendaView.detail per D7 (iPad binder or placeholder; iPhone unchanged).
+         AppEnvironment: the `-MagendaBinderStoreFile <name>` launch argument from D4.
       6. UI tests. In every file listed in touches that waits for "pdfPreview", wait instead for
-         `UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"` (a private
-         static `previewID` per file), and where it checks "shareButton", for `.pad ?
+         `UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"`, written
+         per file as `@MainActor private static var previewID: String { … }` (computed, because
+         `UIDevice.current` is main-actor isolated), and where it checks "shareButton", for `.pad ?
          "binderShareButton" : "shareButton"`. PreviewUITests' iPhone-only test keeps
          "pdfPreview". New AppUITests/BinderUITests.swift (XCTest, file comment like
          PreviewUITests, each test `XCTSkipUnless(... == .pad, "iPad only")`):
@@ -765,6 +821,12 @@ phases:
            previousDayButton until `binderView` exists; `binderPage.0` value is "Handwritten".
          - testOverflowShowsTheOmittedTasksBannerOverTheBinder: render "overflow";
            `omittedTasksBanner` exists.
+         - testAFingerScrollsTheBinder: render "overflow" (no finger-drawing argument); after at
+           most three `swipeUp()`s on binderView the indicator no longer reads "Page 1 of …".
+         - testHandwritingSurvivesARelaunch: launch "standard" with "-MagendaFingerDrawing" and
+           "-MagendaBinderStoreFile", UUID().uuidString; render; draw as above; wait for
+           "Handwritten"; `app.terminate()`; launch again with the same arguments;
+           `binderView` appears without tapping Render, and `binderPage.0` is "Handwritten".
       7. No CHANGELOG entry yet (the retirement phase writes it). Dispatch tests.yml; all app
          jobs green. Never skip, disable or loosen an existing test to get there.
       Stop with status=blocked when: a finger drag in test mode does not change the page value;
@@ -774,7 +836,7 @@ phases:
       bounds). Report what the job log showed.
     acceptance:
       - tests.yml app (iphone, newest), app (iphone, oldest), app (ipad, newest) green
-      - BinderUITests' three tests passed on app (ipad, newest) and skipped on the iPhone jobs
+      - BinderUITests' five tests passed on app (ipad, newest) and skipped on the iPhone jobs
       - tests.yml lint job green
       - grep -n "overrideUserInterfaceStyle = .light" App/Screens/BinderPageView.swift finds one line
 
@@ -831,6 +893,7 @@ phases:
       - docs/adr/0020-on-ipad-the-agenda-is-a-binder-of-native-pages-with-pencilkit-ink.md
       - docs/adr/0021-a-binder-day-is-stored-as-a-content-snapshot-and-ink-per-page-key.md
       - docs/adr/README.md
+      - docs/adr/0011-the-agenda-pdf-is-drawn-on-device-from-the-vendored-magenda-template.md
       - README.md
       - docs/release-testing.md
       - docs/testing-policy.md
@@ -843,18 +906,27 @@ phases:
          (0021), Alternatives from "Rejected", Consequences (0021: storage grows until Stage 2's
          export confirms a day; the format version; a started day opens offline), Verification
          naming the source and test files. Status "Accepted — <today>. Implemented." Link only
-         to source files, ADRs and commits, never to this plan.
+         to source files, ADRs and commits, never to this plan. 0020's Status adds "Amends ADR
+         0011."; append "Amended by [ADR 0020](0020-….md): the template page is drawn by
+         `PageDrawer`." to ADR 0011's Status section (the only edit allowed there). 0021 covers
+         ADR 0014's offline qualification and on-device storage in backups, per the ADRs
+         section. Neither ADR mentions stages, later phases or the deletion of old days.
       2. Add both to the index table in docs/adr/README.md.
       3. README.md: a "Binder (iPad)" section after "What goes on the agenda" describing Render
          opening the binder, the toolbar, Add page, Share PDF, ink kept per page on re-render,
          offline once started, and that the iPhone shows the PDF preview; extend the "Layout"
-         table rows for App/Screens and AppCore to mention the binder.
-      4. docs/release-testing.md: under "What stays manual" add "handwriting with a real Apple
+         table rows for App/Screens and AppCore to mention the binder, and App/Rendering to
+         mention `PageDrawer`. Fix README.md:5 ("preview it beside the list and share it to
+         Noteshelf") and README.md:50 ("a banner under the preview") so they hold on iPad too.
+         No mention of stages or later work.
+      4. docs/release-testing.md: change line 18's "render a day and share it into Noteshelf" to
+         "render a day and share it (on iPad, from the binder)"; under "What stays manual" add "handwriting with a real Apple
          Pencil on an iPad (pressure, palm rejection), which the simulator does not have"; under
          "Human checks" add "- [ ] On an iPad with an Apple Pencil, write on a binder page,
          relaunch, and the handwriting is still there."
-      5. docs/testing-policy.md, "Layout audit and binder rules": one sentence that binder plans
-         (added and retained pages) are audited in AppCore too (BinderLayoutTests).
+      5. docs/testing-policy.md, "Layout audit and binder rules": one sentence that binder pages
+         (added and retained pages) are audited in AppCore too (BinderLayoutTests); say "binder
+         pages", since "binder rules" there means the selection rules.
       6. CHANGELOG.md under "## [Unreleased]" → "### Added" (create the subheading if absent):
          - "On iPad, Render opens the day's binder: write on its pages with Apple Pencil, and the
            handwriting is saved with the day, also offline once the day is started."
@@ -873,5 +945,6 @@ phases:
       - grep -n "0020\|0021" docs/adr/README.md finds both index rows
       - grep -rn "binder-ink-plan" . --exclude-dir=.git returns nothing
       - python3 -m unittest discover -s scripts/tests passes
-      - grep -n "^## \[[0-9]" CHANGELOG.md shows no new version heading, and "### Added" under [Unreleased] has the four lines
+      - git diff origin/main -- CHANGELOG.md adds no line starting "## [", and "### Added" under [Unreleased] has the four lines
+      - grep -n "Amended by \[ADR 0020\]" docs/adr/0011-*.md finds one line
 ```
