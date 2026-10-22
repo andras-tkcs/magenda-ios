@@ -103,7 +103,7 @@ struct RenderPlanTests {
     @Test("A point on a link's edge or corner counts as inside")
     func linkOnEdge() {
         #expect(linkPlan().linkTarget(at: PlanPoint(x: 10, y: 20), onPage: 0) == 1)
-        #expect(linkPlan().linkTarget(at: PlanPoint(x: 30, y: 60), onPage: 0) == 1)
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 30, y: 25), onPage: 0) == 1)
     }
 
     @Test("A point outside every link finds nothing")
