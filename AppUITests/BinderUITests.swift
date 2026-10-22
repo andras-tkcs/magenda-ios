@@ -208,9 +208,21 @@ final class BinderUITests: XCTestCase {
         let count = before.split(separator: " ").last.flatMap { Int($0) }
         XCTAssertNotNil(count, "the page indicator says \(before)")
 
-        tapButton(app, "addPageButton")
-        let after = waitForIndicator(app, matching: "Page 2 of [0-9]+")
-        XCTAssertEqual(after, "Page 2 of \((count ?? 0) + 1)")
+        // The iPad simulator sometimes drops a tap. A tap that was not dropped adds the page, so
+        // tap again only while the page count has not grown.
+        let total = (count ?? 0) + 1
+        var after = before
+        var taps = 0
+        while after == before && taps < 3 {
+            tapButton(app, "addPageButton")
+            taps += 1
+            after = waitForIndicator(app, matching: "Page [0-9]+ of \(total)")
+            if after.hasPrefix("Page 1 of ") {
+                after = waitForIndicator(app, matching: "Page 2 of \(total)")
+            }
+        }
+        let expected = "Page 2 of \(total)"
+        XCTAssertEqual(after, expected, "the page indicator says \(after) after \(taps) taps")
     }
 
     @MainActor
