@@ -6,9 +6,9 @@ import Testing
 
 @Suite("Agenda content")
 struct AgendaContentTests {
-    @Test("Content survives a JSON round trip", arguments: [
-        AgendaContentFixtures.typical, AgendaContentFixtures.longText,
-    ])
+    @Test(
+        "Content survives a JSON round trip",
+        arguments: [AgendaContentFixtures.typical, AgendaContentFixtures.longText])
     func codable(_ content: AgendaContent) throws {
         let data = try JSONEncoder().encode(content)
         #expect(try JSONDecoder().decode(AgendaContent.self, from: data) == content)

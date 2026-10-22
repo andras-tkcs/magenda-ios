@@ -35,7 +35,9 @@ struct PageKeyTests {
 
     @Test(
         "Malformed strings have no key",
-        arguments: ["", "delegated:x", "delegated:-1", "extra:", "overview:x", "notes:x", "unknown"])
+        arguments: [
+            "", "delegated:x", "delegated:-1", "extra:", "overview:x", "notes:x", "unknown",
+        ])
     func malformed(_ text: String) {
         #expect(PageKey(storageString: text) == nil)
     }

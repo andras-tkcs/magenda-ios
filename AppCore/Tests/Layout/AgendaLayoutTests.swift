@@ -52,10 +52,11 @@ struct AgendaLayoutTests {
         #expect(
             try layout().plan(for: withIDs).pages.map(\.key)
                 == [.overview, .meeting("x"), .meeting("y"), .notes])
+        let hash = "#"
         let withoutIDs = try content(meetings: ["A", "B"])
         #expect(
             try layout().plan(for: withoutIDs).pages.map(\.key)
-                == [.overview, .meeting("#0"), .meeting("#1"), .notes])
+                == [.overview, .meeting("\(hash)0"), .meeting("\(hash)1"), .notes])
     }
 
     @Test("Each meeting gets its own page between the overview and the notes page")

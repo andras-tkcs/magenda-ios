@@ -65,7 +65,9 @@ public enum LayoutAudit {
                 }
                 return nil
             }
-            return (containment + overlaps + links + duplicate).map { LayoutViolation(page: index, kind: $0) }
+            return (containment + overlaps + links + duplicate).map {
+                LayoutViolation(page: index, kind: $0)
+            }
         }
     }
 

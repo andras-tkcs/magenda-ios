@@ -25,7 +25,9 @@ public struct AgendaLayout: Sendable {
         return RenderPlan(
             pageWidth: manifest.pageWidth, pageHeight: manifest.pageHeight,
             pages: addingLinks(
-                to: pages.map { PagePlan(key: $0.key, chrome: $0.chrome, operations: $0.operations + header) },
+                to: pages.map {
+                    PagePlan(key: $0.key, chrome: $0.chrome, operations: $0.operations + header)
+                },
                 schedule: content.schedule, delegatedPageCount: delegated.count),
             omittedTodoItems: overview.omitted)
     }
@@ -138,7 +140,8 @@ public struct AgendaLayout: Sendable {
                         x0: box.x0, y0: box.y0, x1: TemplateGeometry.meetingTitleRight, y1: box.y1),
                     alignment: .left)
             }
-        return PagePlan(key: key, chrome: .meeting, operations: (label + titleRuns).map { .text($0) })
+        return PagePlan(
+            key: key, chrome: .meeting, operations: (label + titleRuns).map { .text($0) })
     }
 
     private func furtherNotesPage() -> PagePlan {
