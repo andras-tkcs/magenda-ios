@@ -67,7 +67,8 @@ struct BinderStoreTests {
     @Test("A new day has no handwriting", arguments: Kind.allCases)
     func newDayHasNoInk(kind: Kind) throws {
         try withStore(kind) { store in
-            #expect(try store.ink(on: try Self.date()).isEmpty)
+            let date = try Self.date()
+            #expect(try store.ink(on: date).isEmpty)
         }
     }
 
@@ -81,7 +82,8 @@ struct BinderStoreTests {
             try store.saveInk(Data([3]), for: .overview, on: date)
             #expect(try store.ink(on: date) == [meetingKey: Data([1, 2]), .overview: Data([3])])
             try store.saveInk(Data([4, 5, 6]), for: meetingKey, on: date)
-            #expect(try store.ink(on: date) == [meetingKey: Data([4, 5, 6]), .overview: Data([3])])
+            let replaced: [PageKey: Data] = [meetingKey: Data([4, 5, 6]), .overview: Data([3])]
+            #expect(try store.ink(on: date) == replaced)
             try store.saveInk(Data(), for: meetingKey, on: date)
             #expect(try store.ink(on: date) == [.overview: Data([3])])
             try store.saveInk(Data(), for: .notes, on: date)
@@ -92,11 +94,12 @@ struct BinderStoreTests {
     @Test("Two days do not see each other's handwriting", arguments: Kind.allCases)
     func daysAreSeparate(kind: Kind) throws {
         try withStore(kind) { store in
-            try store.saveInk(Data([1]), for: .overview, on: try Self.date(29))
-            try store.saveInk(Data([2]), for: .overview, on: try Self.date(30))
-            #expect(try store.ink(on: try Self.date(29)) == [.overview: Data([1])])
-            #expect(try store.ink(on: try Self.date(30)) == [.overview: Data([2])])
-            #expect(try store.ink(on: try Self.date(28)).isEmpty)
+            let (first, second, third) = (try Self.date(29), try Self.date(30), try Self.date(28))
+            try store.saveInk(Data([1]), for: .overview, on: first)
+            try store.saveInk(Data([2]), for: .overview, on: second)
+            #expect(try store.ink(on: first) == [.overview: Data([1])])
+            #expect(try store.ink(on: second) == [.overview: Data([2])])
+            #expect(try store.ink(on: third).isEmpty)
         }
     }
 
@@ -138,7 +141,8 @@ struct BinderStoreTests {
             try Data([8]).write(to: inkFolder.appending(path: "page-1.pkdata"))
             try Data([9]).write(to: inkFolder.appending(path: "page-1.txt"))
             let store = FileBinderStore(directory: directory)
-            #expect(try store.ink(on: try Self.date()) == [.overview: Data([7])])
+            let date = try Self.date()
+            #expect(try store.ink(on: date) == [.overview: Data([7])])
         }
     }
 
@@ -147,11 +151,10 @@ struct BinderStoreTests {
         try withDirectory { directory in
             try Data([0]).write(to: directory)
             let store = FileBinderStore(directory: directory)
+            let day = try Self.binderDay()
+            #expect(throws: BinderStoreError.unwritable) { try store.saveDay(day) }
             #expect(throws: BinderStoreError.unwritable) {
-                try store.saveDay(try Self.binderDay())
-            }
-            #expect(throws: BinderStoreError.unwritable) {
-                try store.saveInk(Data([1]), for: .overview, on: try Self.date())
+                try store.saveInk(Data([1]), for: .overview, on: day.date)
             }
         }
     }
@@ -164,7 +167,8 @@ struct BinderStoreTests {
                 #"{"overview": "page-7.pkdata", "notes": "page-2.pkdata"}"#,
                 to: inkFolder.appending(path: "index.json"))
             let store = FileBinderStore(directory: directory)
-            try store.saveInk(Data([1]), for: .delegated(0), on: try Self.date())
+            let date = try Self.date()
+            try store.saveInk(Data([1]), for: .delegated(0), on: date)
             let index = try JSONDecoder().decode(
                 [String: String].self,
                 from: Data(contentsOf: inkFolder.appending(path: "index.json")))
@@ -197,8 +201,9 @@ struct BinderStoreTests {
     func writesOnlyUnderDirectory() throws {
         try withDirectory { directory in
             let store = FileBinderStore(directory: directory)
-            try store.saveDay(try Self.binderDay())
-            try store.saveInk(Data([1]), for: meetingKey, on: try Self.date())
+            let day = try Self.binderDay()
+            try store.saveDay(day)
+            try store.saveInk(Data([1]), for: meetingKey, on: day.date)
             let paths = try FileManager.default.subpathsOfDirectory(atPath: directory.path)
             #expect(
                 Set(paths) == [
