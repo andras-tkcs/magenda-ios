@@ -9,7 +9,9 @@ import AppCore
 import CoreText
 import Foundation
 import PDFKit
+import PencilKit
 import Testing
+import UIKit
 
 @testable import Magenda
 
@@ -70,7 +72,7 @@ struct RenderingTests {
         let library = try loadLibrary()
         let bundle = Bundle(for: TestBundleToken.self)
         #expect(throws: FontLibraryError.missingTemplate) {
-            try PDFAgendaRenderer(library: library, bundle: bundle)
+            try PageDrawer(library: library, bundle: bundle)
         }
     }
 
@@ -107,7 +109,7 @@ struct RenderingTests {
     func typicalPDF() async throws {
         let library = try loadLibrary()
         let plan = try makePlan(AgendaContentFixtures.typical, library: library)
-        let renderer = try PDFAgendaRenderer(library: library, bundle: .main)
+        let renderer = PDFAgendaRenderer(drawer: try PageDrawer(library: library, bundle: .main))
         let url = try await renderer.render(plan, fileName: "rendering-tests-typical.pdf")
 
         let document = try #require(PDFDocument(url: url))
@@ -151,7 +153,7 @@ struct RenderingTests {
     func overflowPDF() async throws {
         let library = try loadLibrary()
         let plan = try makePlan(AgendaContentFixtures.overflow, library: library)
-        let renderer = try PDFAgendaRenderer(library: library, bundle: .main)
+        let renderer = PDFAgendaRenderer(drawer: try PageDrawer(library: library, bundle: .main))
         let url = try await renderer.render(plan, fileName: "rendering-tests-overflow.pdf")
         let document = try #require(PDFDocument(url: url))
         #expect(document.pageCount == plan.pages.count)
@@ -160,7 +162,7 @@ struct RenderingTests {
     @Test("Theme colors reach the PDF's text, and the default look has none of them")
     func themeColorsAreDrawn() async throws {
         let library = try loadLibrary()
-        let renderer = try PDFAgendaRenderer(library: library, bundle: .main)
+        let renderer = PDFAgendaRenderer(drawer: try PageDrawer(library: library, bundle: .main))
         let magenta = RGBColor(red: 255, green: 0, blue: 255)
         let custom = ThemeColors(
             weekend: magenta, heading: magenta, label: magenta, accent: magenta, notes: magenta)
@@ -177,6 +179,158 @@ struct RenderingTests {
 
         #expect(plain == 0, Comment(rawValue: "default page: \(plain) magenta pixels"))
         #expect(themed > 50, Comment(rawValue: "themed page: \(themed) magenta pixels"))
+    }
+
+    @Test("Ink is drawn onto its own page")
+    func inkIsDrawn() async throws {
+        let library = try loadLibrary()
+        let plan = try makePlan(AgendaContentFixtures.typical, library: library)
+        let renderer = PDFAgendaRenderer(drawer: try PageDrawer(library: library, bundle: .main))
+        let data = Self.strokeData(color: .red)
+
+        let inked = try await renderer.render(
+            plan, ink: [nil, data], fileName: "rendering-tests-ink.pdf")
+        let plain = try await renderer.render(
+            plan, ink: [], fileName: "rendering-tests-no-ink.pdf")
+
+        let inkedSecond = try Self.pixel(of: inked, page: 1)
+        let plainSecond = try Self.pixel(of: plain, page: 1)
+        #expect(inkedSecond.red > 180, Comment(rawValue: "\(inkedSecond)"))
+        #expect(inkedSecond.green < 90, Comment(rawValue: "\(inkedSecond)"))
+        #expect(inkedSecond != plainSecond)
+        let inkedFirst = try Self.pixel(of: inked, page: 0)
+        let plainFirst = try Self.pixel(of: plain, page: 0)
+        #expect(inkedFirst == plainFirst)
+    }
+
+    @Test("Black ink stays black while a dark trait collection is current")
+    func inkStaysBlackInDarkMode() throws {
+        let library = try loadLibrary()
+        let plan = try makePlan(AgendaContentFixtures.typical, library: library)
+        let renderer = PDFAgendaRenderer(drawer: try PageDrawer(library: library, bundle: .main))
+        let data = Self.strokeData(color: .black)
+
+        var written: Result<URL, Error>?
+        UITraitCollection(userInterfaceStyle: .dark).performAsCurrent {
+            written = Result {
+                try renderer.write(
+                    plan, ink: [nil, data], fileName: "rendering-tests-dark-ink.pdf")
+            }
+        }
+        let url = try #require(written).get()
+        let pixel = try Self.pixel(of: url, page: 1)
+        #expect(
+            pixel.red < 80 && pixel.green < 80 && pixel.blue < 80,
+            Comment(rawValue: "\(pixel)"))
+    }
+
+    @Test("PageDrawer draws a page into a bitmap")
+    func pageDrawerDrawsABitmap() throws {
+        let library = try loadLibrary()
+        let plan = try makePlan(AgendaContentFixtures.typical, library: library)
+        let drawer = try PageDrawer(library: library, bundle: .main)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 595, height: 842), format: format)
+            .image { context in
+                UIColor.white.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 595, height: 842))
+                drawer.draw(plan.pages[0], in: context.cgContext, pageHeight: 842)
+            }
+        let bytes = try #require(Self.rgba(of: image))
+        let drawn = stride(from: 0, to: bytes.count, by: 4).contains { offset in
+            bytes[offset] != 255 || bytes[offset + 1] != 255 || bytes[offset + 2] != 255
+        }
+        #expect(drawn)
+    }
+
+    @Test("Ink that is not a drawing leaves the page as it is")
+    func undecodableInkIsSkipped() async throws {
+        let library = try loadLibrary()
+        let plan = try makePlan(AgendaContentFixtures.typical, library: library)
+        let renderer = PDFAgendaRenderer(drawer: try PageDrawer(library: library, bundle: .main))
+
+        let garbage = try await renderer.render(
+            plan, ink: [nil, Data("not a drawing".utf8)], fileName: "rendering-tests-garbage.pdf")
+        let plain = try await renderer.render(
+            plan, ink: [], fileName: "rendering-tests-garbage-plain.pdf")
+
+        let garbageBytes = try Self.pageBytes(of: garbage, page: 1)
+        let plainBytes = try Self.pageBytes(of: plain, page: 1)
+        #expect(garbageBytes == plainBytes)
+    }
+
+    /// A drawing of one horizontal pen stroke from (100, 400) to (500, 400), as PencilKit data.
+    private static func strokeData(color: UIColor) -> Data {
+        let points = stride(from: 100.0, through: 500.0, by: 20.0).map { x in
+            PKStrokePoint(
+                location: CGPoint(x: x, y: 400), timeOffset: 0,
+                size: CGSize(width: 10, height: 10), opacity: 1, force: 1, azimuth: 0,
+                altitude: .pi / 2)
+        }
+        let stroke = PKStroke(
+            ink: PKInk(.pen, color: color),
+            path: PKStrokePath(controlPoints: points, creationDate: Date()))
+        return PKDrawing(strokes: [stroke]).dataRepresentation()
+    }
+
+    private struct Pixel: Equatable {
+        let red: Int
+        let green: Int
+        let blue: Int
+    }
+
+    /// The pixel at (300, 400) of `page` of the PDF at `url`, rasterized at scale 1.
+    private static func pixel(of url: URL, page index: Int) throws -> Pixel {
+        let image = try rasterize(url, page: index)
+        let cgImage = try #require(image.cgImage)
+        let bytes = try #require(rgba(of: image))
+        let offset = (400 * cgImage.width + 300) * 4
+        return Pixel(
+            red: Int(bytes[offset]), green: Int(bytes[offset + 1]), blue: Int(bytes[offset + 2]))
+    }
+
+    private static func pageBytes(of url: URL, page index: Int) throws -> [UInt8] {
+        try #require(rgba(of: try rasterize(url, page: index)))
+    }
+
+    /// Page `index` of the PDF at `url` on white, at scale 1.
+    private static func rasterize(_ url: URL, page index: Int) throws -> UIImage {
+        let document = try #require(PDFDocument(url: url))
+        let page = try #require(document.page(at: index))
+        let box = page.bounds(for: .mediaBox)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: box.size, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: box.size))
+            context.cgContext.translateBy(x: 0, y: box.height)
+            context.cgContext.scaleBy(x: 1, y: -1)
+            page.draw(with: .mediaBox, to: context.cgContext)
+        }
+    }
+
+    /// The image's pixels as RGBA bytes, top row first.
+    private static func rgba(of image: UIImage) -> [UInt8]? {
+        guard let cgImage = image.cgImage else {
+            return nil
+        }
+        let width = cgImage.width
+        let height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard
+                let context = CGContext(
+                    data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                    bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else {
+                return false
+            }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return drawn ? pixels : nil
     }
 
     /// The number of nearly-magenta pixels on the first page, rasterized at twice its size.
