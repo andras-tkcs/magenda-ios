@@ -7,25 +7,27 @@ struct MagendaApp: App {
     private let appInfo = AppInfo(infoDictionary: Bundle.main.infoDictionary)
 
     /// `nil` when the bundled template or fonts could not be loaded.
-    @State private var controller: AgendaController?
+    @State private var services: AppServices?
 
     init() {
-        _controller = State(
-            initialValue: try? AppEnvironment.makeController(
+        _services = State(
+            initialValue: try? AppEnvironment.makeServices(
                 arguments: ProcessInfo.processInfo.arguments, bundle: .main))
     }
 
     var body: some Scene {
         WindowGroup {
-            if let controller {
+            if let services {
                 RootView(appInfo: appInfo)
-                    .environment(controller)
-                    .task { await controller.start() }
+                    .environment(services.controller)
+                    .environment(\.pageDrawer, services.pageDrawer)
+                    .environment(\.allowsFingerDrawing, services.allowsFingerDrawing)
+                    .task { await services.controller.start() }
             } else {
                 Text("Couldn't load the agenda template. Reinstall Magenda.")
                     .accessibilityIdentifier("templateError")
             }
         }
-        .commands { AgendaCommands(controller: controller) }
+        .commands { AgendaCommands(controller: services?.controller) }
     }
 }

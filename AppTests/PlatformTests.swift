@@ -1,5 +1,5 @@
 // The adapters that connect AppCore's protocols to Apple frameworks: Keychain, CryptoKit and
-// UserDefaults. Hosted, because the Keychain needs the app's keychain-access group.
+// UserDefaults, and the binder's files. Hosted, because the Keychain needs the app's keychain-access group.
 
 import AppCore
 import Foundation
@@ -83,5 +83,39 @@ struct PlatformTests {
             .replacingOccurrences(of: "=", with: "")
         #expect(digest.count == 32)
         #expect(challenge == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+    }
+
+    @Test("The binder store saves, replaces and deletes days and handwriting")
+    func binderStoreRoundTrip() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "binder-store-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FileBinderStore(directory: directory)
+        let content = AgendaContentFixtures.typical
+        let day = BinderDay(content: content, theme: Theme())
+
+        #expect(try store.day(content.date) == nil)
+        try store.saveDay(day)
+        #expect(try store.day(content.date) == day)
+
+        let extra = ExtraPage(id: "a", after: .overview, source: .notes)
+        let replacement = BinderDay(content: content, theme: Theme(), extras: [extra])
+        try store.saveDay(replacement)
+        #expect(try store.day(content.date) == replacement)
+
+        #expect(try store.ink(on: content.date).isEmpty)
+        try store.saveInk(Data("first".utf8), for: .overview, on: content.date)
+        try store.saveInk(Data("notes".utf8), for: .notes, on: content.date)
+        #expect(try store.ink(on: content.date).count == 2)
+        #expect(try store.ink(on: content.date)[.overview] == Data("first".utf8))
+
+        try store.saveInk(Data("second".utf8), for: .overview, on: content.date)
+        #expect(try store.ink(on: content.date)[.overview] == Data("second".utf8))
+        #expect(try store.ink(on: content.date)[.notes] == Data("notes".utf8))
+
+        try store.saveInk(Data(), for: .overview, on: content.date)
+        let remaining = try store.ink(on: content.date)
+        #expect(remaining[.overview] == nil)
+        #expect(remaining[.notes] == Data("notes".utf8))
     }
 }
