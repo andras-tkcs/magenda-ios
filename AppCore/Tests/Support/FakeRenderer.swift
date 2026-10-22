@@ -13,6 +13,7 @@ final class FakeRenderer: AgendaRendering, @unchecked Sendable {
 
     private let lock = NSLock()
     private var recordedPlans: [RenderPlan] = []
+    private var recordedInks: [[Data?]] = []
     private var recordedFileNames: [String] = []
 
     init(url: URL = URL(fileURLWithPath: "/tmp/agenda.pdf"), fails: Bool = false) {
@@ -25,22 +26,28 @@ final class FakeRenderer: AgendaRendering, @unchecked Sendable {
         locked { recordedPlans }
     }
 
+    /// The handwriting passed with every render so far, oldest first.
+    var inks: [[Data?]] {
+        locked { recordedInks }
+    }
+
     /// The file name of every render so far, oldest first.
     var fileNames: [String] {
         locked { recordedFileNames }
     }
 
-    func render(_ plan: RenderPlan, fileName: String) async throws -> URL {
-        record(plan, fileName)
+    func render(_ plan: RenderPlan, ink: [Data?], fileName: String) async throws -> URL {
+        record(plan, ink, fileName)
         if fails {
             throw Failure()
         }
         return url
     }
 
-    private func record(_ plan: RenderPlan, _ fileName: String) {
+    private func record(_ plan: RenderPlan, _ ink: [Data?], _ fileName: String) {
         locked {
             recordedPlans.append(plan)
+            recordedInks.append(ink)
             recordedFileNames.append(fileName)
         }
     }

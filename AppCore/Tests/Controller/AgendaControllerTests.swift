@@ -6,18 +6,18 @@ import Testing
 
 @testable import AppCore
 
-private let budapest = TimeZone(identifier: "Europe/Budapest") ?? .gmt
-private let validClientID = "123456789012-abc123.apps.googleusercontent.com"
-private let validCredentials = GoogleClientCredentials(clientID: validClientID, clientSecret: nil)
+let budapest = TimeZone(identifier: "Europe/Budapest") ?? .gmt
+let validClientID = "123456789012-abc123.apps.googleusercontent.com"
+let validCredentials = GoogleClientCredentials(clientID: validClientID, clientSecret: nil)
 
-private func date(_ iso: String) -> CalendarDay {
+func date(_ iso: String) -> CalendarDay {
     CalendarDay(isoString: iso) ?? .today(in: .gmt, now: Date(timeIntervalSince1970: 0))
 }
 
-private let tuesday = date("2026-09-29")
-private let wednesday = date("2026-09-30")
+let tuesday = date("2026-09-29")
+let wednesday = date("2026-09-30")
 
-private struct Failure: Error {}
+struct Failure: Error {}
 
 private struct FailingCredentialsStore: ClientCredentialsStore {
     var stored: GoogleClientCredentials?
@@ -63,7 +63,7 @@ private actor ThrowingAccount: GoogleAccount {
     func signOut() {}
 }
 
-private struct FailingDataSource: GoogleDataSource {
+struct FailingDataSource: GoogleDataSource {
     let error: any Error
 
     func calendars() async throws -> [GoogleCalendar] {
@@ -114,36 +114,39 @@ private actor CountingDataSource: GoogleDataSource {
 }
 
 @MainActor
-private struct Context {
+struct Context {
     let controller: AgendaController
     let account: any GoogleAccount
     let settingsStore: InMemorySettingsStore
     let credentials: any ClientCredentialsStore
     let renderer: FakeRenderer
+    let binderStore: any BinderStore
 }
 
 @MainActor
-private func make(
+func make(
     data: any GoogleDataSource = FixtureGoogleDataSource(.standard),
     account: any GoogleAccount = FixtureGoogleAccount(signedIn: true),
     credentials: any ClientCredentialsStore = InMemoryClientCredentialsStore(validCredentials),
     settings: AgendaSettings = AgendaSettings(),
     renderer: FakeRenderer = FakeRenderer(),
     rendering: (any AgendaRendering)? = nil,
+    binderStore: any BinderStore = InMemoryBinderStore(),
     today: CalendarDay = tuesday
 ) throws -> Context {
     let store = InMemorySettingsStore(settings)
     let controller = AgendaController(
         account: account, data: data, settingsStore: store, credentials: credentials,
         measurer: FakeTextMeasurer(), renderer: rendering ?? renderer,
-        manifest: try TemplateManifest.bundled(), timeZone: budapest, today: today)
+        binderStore: binderStore, manifest: try TemplateManifest.bundled(), timeZone: budapest,
+        today: today, makeID: CountingIDs().next)
     return Context(
         controller: controller, account: account, settingsStore: store, credentials: credentials,
-        renderer: renderer)
+        renderer: renderer, binderStore: binderStore)
 }
 
 @MainActor
-private func started(_ fixture: GoogleFixture, settings: AgendaSettings = AgendaSettings())
+func started(_ fixture: GoogleFixture, settings: AgendaSettings = AgendaSettings())
     async throws -> Context
 {
     let context = try make(data: FixtureGoogleDataSource(fixture), settings: settings)

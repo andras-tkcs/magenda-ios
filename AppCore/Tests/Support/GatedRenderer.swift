@@ -31,12 +31,12 @@ actor GatedRenderer: AgendaRendering {
         gate = nil
     }
 
-    func render(_ plan: RenderPlan, fileName: String) async throws -> URL {
+    func render(_ plan: RenderPlan, ink: [Data?], fileName: String) async throws -> URL {
         renders += 1
         if renders == 1 {
             await block()
         }
-        return try await base.render(plan, fileName: fileName)
+        return try await base.render(plan, ink: ink, fileName: fileName)
     }
 
     private func block() async {
