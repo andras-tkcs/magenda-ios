@@ -63,6 +63,8 @@ MODULE_FLOORS: dict[str, float] = {
     "AppCore/Sources/Draft/EventSelection.swift": 100.0,
     # Decides which tasks reach the to-do list and the delegated page, and in what order.
     "AppCore/Sources/Draft/TaskSelection.swift": 100.0,
+    # Places added and kept pages and remaps links; an error puts handwriting on the wrong page.
+    "AppCore/Sources/Binder/BinderLayout.swift": 100.0,
 }
 
 
