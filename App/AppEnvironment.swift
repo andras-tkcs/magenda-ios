@@ -28,8 +28,8 @@ enum AppEnvironment {
                 data: FixtureGoogleDataSource(fixture),
                 settingsStore: InMemorySettingsStore(AgendaSettings()),
                 credentials: InMemoryClientCredentialsStore(credentials),
-                measurer: measurer, renderer: renderer, manifest: manifest,
-                timeZone: timeZone,
+                measurer: measurer, renderer: renderer, binderStore: InMemoryBinderStore(),
+                manifest: manifest, timeZone: timeZone,
                 today: CalendarDay(isoString: fixtureToday)
                     ?? CalendarDay.today(in: timeZone, now: Date()))
         }
@@ -44,8 +44,11 @@ enum AppEnvironment {
                 tasks: GoogleTasksClient(sender: session)),
             settingsStore: UserDefaultsSettingsStore(defaults: .standard),
             credentials: KeychainClientCredentialsStore(),
-            measurer: measurer, renderer: renderer, manifest: manifest,
-            timeZone: timeZone, today: CalendarDay.today(in: timeZone, now: Date()))
+            measurer: measurer, renderer: renderer,
+            binderStore: FileBinderStore(
+                directory: URL.applicationSupportDirectory.appending(path: "Binder")),
+            manifest: manifest, timeZone: timeZone,
+            today: CalendarDay.today(in: timeZone, now: Date()))
     }
 
     /// A fixture-backed controller for SwiftUI previews; `nil` when the bundle lacks the template.

@@ -24,7 +24,7 @@ final class PDFAgendaRenderer: AgendaRendering, @unchecked Sendable {
         template = document
     }
 
-    func render(_ plan: RenderPlan, fileName: String) async throws -> URL {
+    func render(_ plan: RenderPlan, ink: [Data?], fileName: String) async throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "Agendas", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
