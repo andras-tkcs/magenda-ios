@@ -132,7 +132,9 @@ struct BinderLayoutTests {
                 .overview, .meeting("a"), .meeting("b"), .meeting("old"), .meeting("older"),
                 .notes,
             ])
-        #expect(plan.pages[1] == layout.plan(for: binder()).pages[1])
+        let base = layout.plan(for: binder())
+        #expect(texts(plan.pages[1]) == texts(base.pages[1]))
+        #expect(targets(plan.pages[1]) == [0, 5])
     }
 
     @Test("An added page whose page is gone follows its source's run; one without source goes")
