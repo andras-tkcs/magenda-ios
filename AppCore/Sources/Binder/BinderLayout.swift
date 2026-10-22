@@ -59,8 +59,9 @@ public struct BinderLayout: Sendable {
             else { continue }
             let after = result.lastIndex { $0.page.chrome == page.chrome }.map { $0 + 1 }
             let notes = result.firstIndex { $0.page.key == .notes }
-            result.insert(
-                ComposedPage(page: page, origin: origin), at: after ?? notes ?? result.count)
+            if let index = after ?? notes {
+                result.insert(ComposedPage(page: page, origin: origin), at: index)
+            }
         }
         return result
     }
@@ -70,25 +71,26 @@ public struct BinderLayout: Sendable {
     private func insertExtras(
         _ extras: [ExtraPage], into pages: [ComposedPage]
     ) -> [ComposedPage] {
-        let live = extras.filter { extra in pages.contains { $0.page.key == extra.source } }
+        let live = extras.compactMap { extra in
+            pages.first { $0.page.key == extra.source }.map { (extra: extra, source: $0) }
+        }
         var emitted = Set<Int>()
 
-        func copy(of extra: ExtraPage) -> ComposedPage {
-            let source = pages.first { $0.page.key == extra.source }
-            return ComposedPage(
+        func copy(of entry: (extra: ExtraPage, source: ComposedPage)) -> ComposedPage {
+            ComposedPage(
                 page: PagePlan(
-                    key: .extra(extra.id), chrome: source?.page.chrome ?? .meeting,
-                    operations: source?.page.operations ?? []),
-                origin: source?.origin ?? 0)
+                    key: .extra(entry.extra.id), chrome: entry.source.page.chrome,
+                    operations: entry.source.page.operations),
+                origin: entry.source.origin)
         }
 
         func chains(following key: PageKey) -> [ComposedPage] {
             var result: [ComposedPage] = []
-            for (index, extra) in live.enumerated()
-            where !emitted.contains(index) && extra.after == key {
+            for (index, entry) in live.enumerated()
+            where !emitted.contains(index) && entry.extra.after == key {
                 emitted.insert(index)
-                result.append(copy(of: extra))
-                result += chains(following: .extra(extra.id))
+                result.append(copy(of: entry))
+                result += chains(following: .extra(entry.extra.id))
             }
             return result
         }
@@ -97,15 +99,17 @@ public struct BinderLayout: Sendable {
         let pending = live.enumerated().filter { !emitted.contains($0.offset) }
         let roots = pending.filter { root in
             !pending.contains {
-                $0.offset != root.offset && .extra($0.element.id) == root.element.after
+                $0.offset != root.offset && .extra($0.element.extra.id) == root.element.extra.after
             }
         }
         for (_, root) in roots {
-            let chain = [copy(of: root)] + chains(following: .extra(root.id))
-            let start = result.firstIndex { $0.page.key == root.source } ?? result.count - 1
-            var end = start + 1
-            while end < result.count, case .extra = result[end].page.key { end += 1 }
-            result.insert(contentsOf: chain, at: end)
+            let chain = [copy(of: root)] + chains(following: .extra(root.extra.id))
+            let start = result.firstIndex { $0.page.key == root.extra.source }
+            if let start {
+                var end = start + 1
+                while end < result.count, case .extra = result[end].page.key { end += 1 }
+                result.insert(contentsOf: chain, at: end)
+            }
         }
         return result
     }
@@ -117,12 +121,12 @@ public struct BinderLayout: Sendable {
             composed.enumerated().map { ($1.page.key, $0) },
             uniquingKeysWith: { first, _ in first })
         return composed.map { entry in
-            let origin = origins[entry.origin]
-            let operations = entry.page.operations.flatMap { operation -> [DrawOperation] in
-                guard case .link(let rect, let target) = operation else { return [operation] }
-                let key = origin.pages.indices.contains(target) ? origin.pages[target].key : nil
-                return key.flatMap { positions[$0] }
-                    .map { [.link(rect, targetPage: $0)] } ?? []
+            let pages = origins[entry.origin].pages
+            let operations = entry.page.operations.compactMap { operation -> DrawOperation? in
+                guard case .link(let rect, let target) = operation else { return operation }
+                return pages.enumerated().first { $0.offset == target }
+                    .flatMap { positions[$0.element.key] }
+                    .map { .link(rect, targetPage: $0) }
             }
             return PagePlan(key: entry.page.key, chrome: entry.page.chrome, operations: operations)
         }
