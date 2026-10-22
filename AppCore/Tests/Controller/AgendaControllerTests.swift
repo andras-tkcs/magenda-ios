@@ -6,7 +6,7 @@ import Testing
 
 @testable import AppCore
 
-let budapest = TimeZone(identifier: "Europe/Budapest") ?? .gmt
+private let budapest = TimeZone(identifier: "Europe/Budapest") ?? .gmt
 let validClientID = "123456789012-abc123.apps.googleusercontent.com"
 let validCredentials = GoogleClientCredentials(clientID: validClientID, clientSecret: nil)
 
