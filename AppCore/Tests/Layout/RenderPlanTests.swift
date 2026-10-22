@@ -81,4 +81,52 @@ struct RenderPlanTests {
         #expect(plan.pages[0].operations.count == 2)
         #expect(plan.omittedTodoItems == [omitted])
     }
+
+    private func linkPlan() -> RenderPlan {
+        let linked = PagePlan(
+            key: .overview, chrome: .overview,
+            operations: [
+                .fill(rect, .white),
+                .link(rect, targetPage: 1),
+                .link(PlanRect(x0: 20, y0: 30, x1: 50, y1: 70), targetPage: 2),
+            ])
+        let plain = PagePlan(key: .notes, chrome: .furtherNotes, operations: [.fill(rect, .white)])
+        return RenderPlan(
+            pageWidth: 100, pageHeight: 200, pages: [linked, plain], omittedTodoItems: [])
+    }
+
+    @Test("A point inside a link finds its target")
+    func linkInside() {
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 12, y: 25), onPage: 0) == 1)
+    }
+
+    @Test("A point on a link's edge or corner counts as inside")
+    func linkOnEdge() {
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 10, y: 20), onPage: 0) == 1)
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 30, y: 60), onPage: 0) == 1)
+    }
+
+    @Test("A point outside every link finds nothing")
+    func linkOutside() {
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 9.9, y: 25), onPage: 0) == nil)
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 25, y: 19.9), onPage: 0) == nil)
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 51, y: 25), onPage: 0) == nil)
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 25, y: 71), onPage: 0) == nil)
+    }
+
+    @Test("Where links overlap, the last one wins")
+    func linkOverlap() {
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 25, y: 40), onPage: 0) == 2)
+    }
+
+    @Test("A page that does not exist has no link")
+    func linkPageOutOfRange() {
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 12, y: 25), onPage: 2) == nil)
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 12, y: 25), onPage: -1) == nil)
+    }
+
+    @Test("A page without links has no target")
+    func linkNone() {
+        #expect(linkPlan().linkTarget(at: PlanPoint(x: 12, y: 25), onPage: 1) == nil)
+    }
 }

@@ -1,5 +1,5 @@
-// The binder on iPad: its pages, the page indicator, handwriting kept with its day and across a
-// relaunch, and the omitted-tasks banner.
+// The binder on iPad: its pages, the page indicator, the pen, eraser, undo and page buttons,
+// handwriting kept with its day and across a relaunch, and the omitted-tasks banner.
 //
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `AgendaView.ID` and
 // `BinderView.ID`, never by their visible text; a page's value says whether it carries ink.
@@ -156,5 +156,104 @@ final class BinderUITests: XCTestCase {
         XCTAssertTrue(
             relaunchedPage.waitForExistence(timeout: 30), "the first page never appeared")
         XCTAssertEqual(relaunchedPage.value as? String, "Handwritten")
+    }
+
+    /// Taps the button `identifier` once it exists.
+    @MainActor
+    private func tapButton(_ app: XCUIApplication, _ identifier: String) {
+        let button = element(app, identifier)
+        XCTAssertTrue(button.waitForExistence(timeout: 30), "\(identifier) never appeared")
+        button.tap()
+    }
+
+    /// Waits up to 10 seconds for the page indicator's label to match `pattern`; returns the
+    /// final label.
+    @MainActor
+    private func waitForIndicator(_ app: XCUIApplication, matching pattern: String) -> String {
+        let indicator = element(app, "binderPageIndicator")
+        let matches = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label MATCHES %@", pattern), object: indicator)
+        _ = XCTWaiter().wait(for: [matches], timeout: 10)
+        return indicator.label
+    }
+
+    @MainActor
+    func testNotesAndOverviewButtonsMoveBetweenPages() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard")
+        render(app)
+
+        tapButton(app, "binderNotesButton")
+        let atNotes = waitForIndicator(app, matching: #"Page ([0-9]+) of \1"#)
+        XCTAssertNotNil(
+            atNotes.range(of: #"^Page ([0-9]+) of \1$"#, options: .regularExpression),
+            "the page indicator says \(atNotes) after Notes")
+
+        tapButton(app, "binderOverviewButton")
+        let atOverview = waitForIndicator(app, matching: #"Page 1 of [0-9]+"#)
+        XCTAssertNotNil(
+            atOverview.range(of: #"^Page 1 of [0-9]+$"#, options: .regularExpression),
+            "the page indicator says \(atOverview) after Overview")
+    }
+
+    @MainActor
+    func testAddPageAddsAPageAfterTheCurrentOne() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard")
+        render(app)
+
+        let indicator = element(app, "binderPageIndicator")
+        XCTAssertTrue(indicator.waitForExistence(timeout: 30), "the page indicator never appeared")
+        let before = indicator.label
+        let count = before.split(separator: " ").last.flatMap { Int($0) }
+        XCTAssertNotNil(count, "the page indicator says \(before)")
+
+        tapButton(app, "addPageButton")
+        let after = waitForIndicator(app, matching: "Page 2 of [0-9]+")
+        XCTAssertEqual(after, "Page 2 of \((count ?? 0) + 1)")
+    }
+
+    @MainActor
+    func testUndoAndRedoAffectTheLastDrawing() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard", extra: ["-MagendaFingerDrawing"])
+        render(app)
+
+        let page = element(app, "binderPage.0")
+        XCTAssertTrue(page.waitForExistence(timeout: 30), "the first page never appeared")
+        draw(on: page)
+        XCTAssertEqual(waitForValue(page, "Handwritten"), "Handwritten", "the stroke was not saved")
+
+        tapButton(app, "undoButton")
+        XCTAssertEqual(waitForValue(page, "Blank"), "Blank", "undo did not remove the stroke")
+
+        tapButton(app, "redoButton")
+        XCTAssertEqual(waitForValue(page, "Handwritten"), "Handwritten", "redo did not restore it")
+    }
+
+    @MainActor
+    func testPickingAPenSelectsIt() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard")
+        render(app)
+
+        let black = element(app, "penButton.black")
+        let red = element(app, "penButton.red")
+        let eraser = element(app, "eraserButton")
+        XCTAssertTrue(black.waitForExistence(timeout: 30), "the pens never appeared")
+        XCTAssertTrue(black.isSelected, "black is not the pen to start with")
+
+        red.tap()
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isSelected == true"), object: red)
+        _ = XCTWaiter().wait(for: [selected], timeout: 10)
+        XCTAssertTrue(red.isSelected, "the red pen was not selected")
+        XCTAssertFalse(black.isSelected, "the black pen is still selected")
+
+        eraser.tap()
+        let erasing = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isSelected == true"), object: eraser)
+        _ = XCTWaiter().wait(for: [erasing], timeout: 10)
+        XCTAssertTrue(eraser.isSelected, "the eraser was not selected")
     }
 }
