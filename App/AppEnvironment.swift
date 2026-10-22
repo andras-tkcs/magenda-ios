@@ -37,7 +37,8 @@ enum AppEnvironment {
                 data: FixtureGoogleDataSource(fixture),
                 settingsStore: InMemorySettingsStore(AgendaSettings()),
                 credentials: InMemoryClientCredentialsStore(credentials),
-                measurer: measurer, renderer: renderer, binderStore: InMemoryBinderStore(),
+                measurer: measurer, renderer: renderer,
+                binderStore: fixtureBinderStore(arguments: arguments),
                 manifest: manifest, timeZone: timeZone,
                 today: CalendarDay(isoString: fixtureToday)
                     ?? CalendarDay.today(in: timeZone, now: Date()))
@@ -63,6 +64,17 @@ enum AppEnvironment {
             today: CalendarDay.today(in: timeZone, now: Date()))
         return AppServices(
             controller: controller, pageDrawer: drawer, allowsFingerDrawing: allowsFingerDrawing)
+    }
+
+    /// The binder store of a fixture launch: in memory, or with `-MagendaBinderStoreFile <name>`
+    /// a file store in the temporary directory, so a UI test can relaunch onto the same store.
+    private static func fixtureBinderStore(arguments: [String]) -> any BinderStore {
+        let rest = arguments.drop { $0 != "-MagendaBinderStoreFile" }.dropFirst()
+        guard let name = rest.first else {
+            return InMemoryBinderStore()
+        }
+        return FileBinderStore(
+            directory: FileManager.default.temporaryDirectory.appending(path: name))
     }
 
     /// Fixture-backed services for SwiftUI previews; `nil` when the bundle lacks the template.
