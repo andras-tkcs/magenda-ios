@@ -1,10 +1,31 @@
 // AppCore's agenda content model: cadence labels, to-do items and the delegated-page order.
 
 import AppCore
+import Foundation
 import Testing
 
 @Suite("Agenda content")
 struct AgendaContentTests {
+    @Test(
+        "Content survives a JSON round trip",
+        arguments: [AgendaContentFixtures.typical, AgendaContentFixtures.longText])
+    func codable(_ content: AgendaContent) throws {
+        let data = try JSONEncoder().encode(content)
+        #expect(try JSONDecoder().decode(AgendaContent.self, from: data) == content)
+    }
+
+    @Test("Meeting IDs default to none and are kept")
+    func meetingIDs() throws {
+        let date = try #require(CalendarDay(year: 2026, month: 10, day: 1))
+        let plain = AgendaContent(
+            date: date, todoItems: [], schedule: [], meetings: ["A"], delegated: [])
+        #expect(plain.meetingIDs.isEmpty)
+        let keyed = AgendaContent(
+            date: date, todoItems: [], schedule: [], meetings: ["A"], meetingIDs: ["x"],
+            delegated: [])
+        #expect(keyed.meetingIDs == ["x"])
+    }
+
     @Test("Cadences have display labels")
     func cadenceLabels() {
         #expect(Cadence.allCases.map(\.label) == ["Daily", "Weekly", "Monthly"])

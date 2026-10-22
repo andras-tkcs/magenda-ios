@@ -63,6 +63,13 @@ struct ThemeColorsTests {
         #expect(mixed.label == ThemeColors.default.label)
     }
 
+    @Test("A theme survives a JSON round trip")
+    func themeCodable() throws {
+        let theme = Theme(fontPack: .allCases.last ?? .outfit, colors: .default)
+        let data = try JSONEncoder().encode(theme)
+        #expect(try JSONDecoder().decode(Theme.self, from: data) == theme)
+    }
+
     @Test("A theme defaults to Outfit and the default colors")
     func themeDefaults() {
         let theme = Theme()

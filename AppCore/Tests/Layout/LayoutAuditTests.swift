@@ -22,7 +22,9 @@ struct LayoutAuditTests {
     private func plan(_ pages: [[DrawOperation]]) -> RenderPlan {
         RenderPlan(
             pageWidth: 200, pageHeight: 300,
-            pages: pages.map { PagePlan(chrome: .overview, operations: $0) },
+            pages: pages.enumerated().map { index, operations in
+                PagePlan(key: .extra("\(index)"), chrome: .overview, operations: operations)
+            },
             omittedTodoItems: [])
     }
 
@@ -35,6 +37,18 @@ struct LayoutAuditTests {
             .link(container, targetPage: 1),
         ]
         #expect(LayoutAudit.violations(in: plan([operations, []])).isEmpty)
+    }
+
+    @Test("A repeated page key is flagged on the repeat")
+    func duplicateKey() {
+        let page = PagePlan(key: .notes, chrome: .furtherNotes, operations: [])
+        let repeated = RenderPlan(
+            pageWidth: 200, pageHeight: 300, pages: [page, page, page], omittedTodoItems: [])
+        #expect(
+            LayoutAudit.violations(in: repeated) == [
+                LayoutViolation(page: 1, kind: .duplicatePageKey(.notes)),
+                LayoutViolation(page: 2, kind: .duplicatePageKey(.notes)),
+            ])
     }
 
     @Test("A plan with no pages is flagged")

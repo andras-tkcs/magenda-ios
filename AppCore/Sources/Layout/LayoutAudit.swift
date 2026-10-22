@@ -12,6 +12,8 @@ public struct LayoutViolation: Equatable, Sendable {
         case badLinkTarget(Int)
         /// The plan has no pages.
         case noPages
+        /// A page repeats the key of an earlier page.
+        case duplicatePageKey(PageKey)
     }
 
     /// The index of the page the problem is on.
@@ -37,7 +39,10 @@ public enum LayoutAudit {
             return [LayoutViolation(page: 0, kind: .noPages)]
         }
         let pageRect = PlanRect(x0: 0, y0: 0, x1: plan.pageWidth, y1: plan.pageHeight)
+        var seen = Set<PageKey>()
         return plan.pages.enumerated().flatMap { index, page in
+            let duplicate: [LayoutViolation.Kind] =
+                seen.insert(page.key).inserted ? [] : [.duplicatePageKey(page.key)]
             let runs = page.operations.compactMap { operation -> TextRun? in
                 if case .text(let run) = operation {
                     return run
@@ -60,7 +65,9 @@ public enum LayoutAudit {
                 }
                 return nil
             }
-            return (containment + overlaps + links).map { LayoutViolation(page: index, kind: $0) }
+            return (containment + overlaps + links + duplicate).map {
+                LayoutViolation(page: index, kind: $0)
+            }
         }
     }
 

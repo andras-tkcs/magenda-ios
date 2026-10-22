@@ -135,7 +135,7 @@ public struct ThemeColors: Equatable, Codable, Sendable {
 }
 
 /// The font family and colors the agenda is rendered with.
-public struct Theme: Equatable, Sendable {
+public struct Theme: Equatable, Codable, Sendable {
     /// The font family.
     public var fontPack: FontPack
     /// The colors.
