@@ -3,10 +3,16 @@
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `AgendaView.ID` and
 // `RowID`.
 
+import UIKit
 import XCTest
 
 final class LongTextUITests: XCTestCase {
     private static let largestSize = "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge"
+
+    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
+    @MainActor private static var previewID: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
+    }
 
     @MainActor
     func testRowsFitTheWindowAtTheDefaultSize() {
@@ -51,7 +57,7 @@ final class LongTextUITests: XCTestCase {
         XCTAssertTrue(render.isHittable, "the Render button can't be tapped")
         render.tap()
         XCTAssertTrue(
-            app.descendants(matching: .any)["pdfPreview"].waitForExistence(timeout: 30),
+            app.descendants(matching: .any)[Self.previewID].waitForExistence(timeout: 30),
             "the preview never appeared")
     }
 
