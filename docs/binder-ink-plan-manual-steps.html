@@ -1,0 +1,200 @@
+<title>Binder Ink Device Checks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: one reading column; each check is a numbered block of steps with a checkbox per step. */
+  :root {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --fg: #17202b;
+    --muted: #586374;
+    --line: #d9dee6;
+    --ink: #1f5fd1;
+    --ink-soft: #e6eefc;
+    --done: #1e8c45;
+    --code-bg: #eef1f5;
+    --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151c; --surface: #18202a; --fg: #e5eaf1; --muted: #9aa6b6; --line: #2b3542;
+      --ink: #7ea6f2; --ink-soft: #1b2a44; --done: #5cc483; --code-bg: #1f2833; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151c; --surface: #18202a; --fg: #e5eaf1; --muted: #9aa6b6; --line: #2b3542;
+    --ink: #7ea6f2; --ink-soft: #1b2a44; --done: #5cc483; --code-bg: #1f2833; color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 46rem; margin: 0 auto; padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 28px;
+  }
+  header { display: grid; gap: 10px; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0; text-wrap: balance; }
+  h2 { font-size: 22px; margin: 0; text-wrap: balance; }
+  h3 { font-size: 18px; margin: 0; text-wrap: balance; }
+  p { margin: 0; max-width: 65ch; }
+  a { color: var(--ink); }
+  a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  code { font-family: var(--font-mono); font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .summary { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--muted); font-size: 14px; }
+  .progress { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--fg); }
+  button.reset { font: inherit; font-size: 14px; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .part { display: grid; gap: 18px; }
+  .part-head { display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .note { color: var(--muted); font-size: 15px; }
+  .check { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+  .check-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; justify-content: space-between; }
+  .check-id { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+  .time { font-size: 13px; color: var(--ink); background: var(--ink-soft); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: step; }
+  ol.steps li { counter-increment: step; display: grid; grid-template-columns: 22px 1.6em 1fr; gap: 8px; align-items: start; }
+  ol.steps li::before { content: counter(step) "."; grid-column: 2; grid-row: 1; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+  ol.steps input { grid-column: 1; grid-row: 1; margin: 4px 0 0; width: 18px; height: 18px; accent-color: var(--done); }
+  ol.steps label { grid-column: 3; grid-row: 1; min-width: 0; cursor: pointer; }
+  ol.steps input:checked ~ label { color: var(--muted); }
+  .see { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .outcome { border-top: 1px dashed var(--line); padding-top: 12px; display: grid; gap: 6px; font-size: 15px; }
+  .outcome strong { font-weight: 600; }
+  pre { margin: 0; background: var(--code-bg); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; }
+  @media (prefers-reduced-motion: no-preference) { ol.steps label { transition: color .15s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Magenda · binder ink · feature/binder-ink</div>
+    <h1>Device checks for the iPad binder</h1>
+    <p>Nothing is needed before implementation. These three checks come after the last phase merges and before the feature PR merges. They need a real iPad and an Apple Pencil, which CI does not have.</p>
+    <div class="summary">
+      <span class="progress" id="progress">0 of 0 steps done</span>
+      <button class="reset" id="reset" type="button">Clear all ticks</button>
+    </div>
+  </header>
+
+  <section class="part" aria-labelledby="before">
+    <div class="part-head">
+      <h2 id="before">Before implementation</h2>
+      <p class="note">Nothing to do. You can run <code>/implement</code> straight away.</p>
+    </div>
+  </section>
+
+  <section class="part" aria-labelledby="after">
+    <div class="part-head">
+      <h2 id="after">After implementation</h2>
+      <p class="note">Do these once the feature PR is open and its checks are green. Paste each check's result line into the PR's <strong>Manual verification</strong> section.</p>
+    </div>
+
+    <article class="check" data-check="ma0">
+      <div class="check-head">
+        <h3>0. Put the feature build on your iPad</h3>
+        <span class="time">about 10 min</span>
+      </div>
+      <p class="note">The feature branch is not tagged, so there is no TestFlight build of it. Build it from your Mac.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma0-1"><label for="ma0-1">On the iPad, turn on Developer Mode: <strong>Settings › Privacy &amp; Security › Developer Mode</strong>, then restart when asked. <a href="https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device" target="_blank" rel="noopener">Apple's steps</a>.<span class="see">Skip if it is already on.</span></label></li>
+        <li><input type="checkbox" id="ma0-2"><label for="ma0-2">In your Mac checkout, run <code>git fetch origin &amp;&amp; git checkout feature/binder-ink</code>. The branch is on <a href="https://github.com/andras-tkcs/magenda-ios/tree/feature/binder-ink" target="_blank" rel="noopener">GitHub</a>.</label></li>
+        <li><input type="checkbox" id="ma0-3"><label for="ma0-3">Run <code>xcodegen generate &amp;&amp; open Magenda.xcodeproj</code>, as in the README's <a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/binder-ink/README.md#build-and-run" target="_blank" rel="noopener">Build and run</a>.</label></li>
+        <li><input type="checkbox" id="ma0-4"><label for="ma0-4">Connect the iPad, pick it as the run destination, and in the Magenda target's <strong>Signing &amp; Capabilities</strong> choose your team if Xcode asks. Press ⌘R.<span class="see">You see: Magenda opens on the iPad. It replaces the TestFlight install and keeps your Google client and sign-in.</span></label></li>
+        <li><input type="checkbox" id="ma0-5"><label for="ma0-5">Sign in if asked, pick a working day, and tap <strong>Render</strong>.<span class="see">You see: the right-hand column shows the day's pages, with "Page 1 of N" at the bottom.</span></label></li>
+      </ol>
+    </article>
+
+    <article class="check" data-check="ma1">
+      <div class="check-head">
+        <h3>1. Write in the binder with an Apple Pencil</h3>
+        <span class="time">about 20 min</span>
+      </div>
+      <p class="check-id">ma1-pencil-on-ipad</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma1-1"><label for="ma1-1">Write a few lines on the overview with the Pencil while your palm rests on the screen.<span class="see">You see: only the Pencil leaves marks; the palm leaves none.</span></label></li>
+        <li><input type="checkbox" id="ma1-2"><label for="ma1-2">Drag a finger up and down over the pages.<span class="see">You see: the pages scroll, and the finger draws nothing.</span></label></li>
+        <li><input type="checkbox" id="ma1-3"><label for="ma1-3">Write with each pen: black, blue, red, green. Then pick the eraser and rub out part of a line.<span class="see">You see: each color as picked; the eraser removes only what it touches.</span></label></li>
+        <li><input type="checkbox" id="ma1-4"><label for="ma1-4">Tap <strong>Undo</strong> twice, then <strong>Redo</strong> once.<span class="see">You see: the last two changes go away, then the first of them comes back.</span></label></li>
+        <li><input type="checkbox" id="ma1-5"><label for="ma1-5">With a finger, tap a schedule entry on the overview that has a meeting page, then tap <strong>Go to notes</strong>, <strong>Go to overview</strong> and, if shown, <strong>Go to delegated tasks</strong>.<span class="see">You see: each jumps to the right page and the page indicator follows.</span></label></li>
+        <li><input type="checkbox" id="ma1-6"><label for="ma1-6">On a meeting page, tap <strong>Add page</strong>.<span class="see">You see: a blank page with the same meeting title right after it, and the page count goes up by one.</span></label></li>
+        <li><input type="checkbox" id="ma1-7"><label for="ma1-7">Rotate the iPad to landscape and back.<span class="see">You see: the handwriting stays on the same printed lines.</span></label></li>
+        <li><input type="checkbox" id="ma1-8"><label for="ma1-8">Turn on Dark Mode in Control Center.<span class="see">You see: the pages stay white and black ink stays black.</span></label></li>
+      </ol>
+      <div class="outcome">
+        <p><strong>Report back</strong> in the PR, one line:</p>
+        <pre>ma1-pencil-on-ipad: PASS (or FAIL: step N, what happened)</pre>
+      </div>
+    </article>
+
+    <article class="check" data-check="ma2">
+      <div class="check-head">
+        <h3>2. Reopen a started day after a relaunch and offline</h3>
+        <span class="time">about 10 min</span>
+      </div>
+      <p class="check-id">ma2-offline-and-relaunch</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma2-1"><label for="ma2-1">With handwriting on the day, swipe Magenda away in the app switcher and open it again.<span class="see">You see: the same day's binder with all its handwriting and added pages.</span></label></li>
+        <li><input type="checkbox" id="ma2-2"><label for="ma2-2">Turn on Airplane Mode (and Wi-Fi off), swipe Magenda away, and open it again.<span class="see">You see: the list shows that Google could not be reached, and the binder still shows with its handwriting.</span></label></li>
+        <li><input type="checkbox" id="ma2-3"><label for="ma2-3">Write a few more words while offline, swipe the app away, open it again.<span class="see">You see: the new words are there.</span></label></li>
+        <li><input type="checkbox" id="ma2-4"><label for="ma2-4">Turn Airplane Mode off, pull down on the list to reload, and tap <strong>Render</strong>.<span class="see">You see: the handwriting is still on its pages.</span></label></li>
+        <li><input type="checkbox" id="ma2-5"><label for="ma2-5">In the list, switch off a meeting whose page you wrote on, and tap <strong>Render</strong>.<span class="see">You see: that meeting page stays, now after the other meeting pages, with its handwriting.</span></label></li>
+      </ol>
+      <div class="outcome">
+        <p><strong>Report back</strong> in the PR, one line:</p>
+        <pre>ma2-offline-and-relaunch: PASS (or FAIL: step N, what happened)</pre>
+      </div>
+    </article>
+
+    <article class="check" data-check="ma3">
+      <div class="check-head">
+        <h3>3. Share the inked PDF and run the end-of-day step</h3>
+        <span class="time">about 15 min</span>
+      </div>
+      <p class="check-id">ma3-share-inked-pdf</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma3-1"><label for="ma3-1">In the binder, tap <strong>Share PDF</strong>.<span class="see">You see: the share sheet, with a PDF named after the day (for example <code>2026-10-23.pdf</code>).</span></label></li>
+        <li><input type="checkbox" id="ma3-2"><label for="ma3-2">Pick <strong>Drive</strong> and save it to the folder your end-of-day step reads.</label></li>
+        <li><input type="checkbox" id="ma3-3"><label for="ma3-3">Open the PDF from Drive on another screen.<span class="see">You see: every page, the handwriting on the right pages and in the right places, in its colors, and the added pages in order.</span></label></li>
+        <li><input type="checkbox" id="ma3-4"><label for="ma3-4">With Dark Mode still on, share again and open the new PDF.<span class="see">You see: black ink is black, not white.</span></label></li>
+        <li><input type="checkbox" id="ma3-5"><label for="ma3-5">Run your end-of-day Claude Code step on that PDF as you do today.<span class="see">You see: the memo picks up the handwriting as it did from Noteshelf's export.</span></label></li>
+      </ol>
+      <div class="outcome">
+        <p><strong>Report back</strong> in the PR, one line:</p>
+        <pre>ma3-share-inked-pdf: PASS (or FAIL: step N, what happened)</pre>
+      </div>
+    </article>
+  </section>
+</div>
+
+<script>
+  (function () {
+    var KEY = "binder-ink-manual-steps";
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('ol.steps input[type="checkbox"]'));
+    var progress = document.getElementById("progress");
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { saved = {}; }
+    function update() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      progress.textContent = done + " of " + boxes.length + " steps done";
+    }
+    function persist() {
+      var state = {};
+      boxes.forEach(function (b) { if (b.checked) state[b.id] = true; });
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    boxes.forEach(function (b) {
+      b.checked = !!saved[b.id];
+      b.addEventListener("change", function () { persist(); update(); });
+    });
+    document.getElementById("reset").addEventListener("click", function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      persist(); update();
+    });
+    update();
+  })();
+</script>
