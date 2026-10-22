@@ -1,5 +1,6 @@
 // The adapters that connect AppCore's protocols to Apple frameworks: Keychain, CryptoKit and
-// UserDefaults, and the binder's files. Hosted, because the Keychain needs the app's keychain-access group.
+// UserDefaults, and the binder's files. Hosted, because the Keychain needs the app's
+// keychain-access group.
 
 import AppCore
 import Foundation
