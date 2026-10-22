@@ -79,6 +79,16 @@ struct AgendaLayoutDelegatedTests {
         }
     }
 
+    @Test("Delegated pages are keyed by their index")
+    func pageKeys() throws {
+        let many = (0..<30).map { item("Task \($0)") }
+        let plan = try plan(many)
+        let keys = plan.pages.filter { $0.chrome == .delegated }.map(\.key)
+        #expect(keys.count > 1)
+        #expect(keys == (0..<keys.count).map { .delegated($0) })
+        #expect(plan.pages.first?.key == .overview)
+    }
+
     @Test("Items are drawn in page order and numbered from 1")
     func order() throws {
         let items = [

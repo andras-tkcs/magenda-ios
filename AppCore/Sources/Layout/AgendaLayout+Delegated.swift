@@ -30,7 +30,7 @@ extension AgendaLayout {
         var number = 0
         return groups.enumerated().map { index, group in
             let page = delegatedPage(
-                group, firstNumber: number + 1, isLast: index == groups.count - 1)
+                group, index: index, firstNumber: number + 1, isLast: index == groups.count - 1)
             number += group.count
             return page
         }
@@ -88,7 +88,9 @@ extension AgendaLayout {
         return (texts, indents)
     }
 
-    private func delegatedPage(_ rows: [DelegatedRow], firstNumber: Int, isLast: Bool) -> PagePlan {
+    private func delegatedPage(
+        _ rows: [DelegatedRow], index: Int, firstNumber: Int, isLast: Bool
+    ) -> PagePlan {
         let columns = TemplateGeometry.delegatedColumns
         let left = manifest.delegatedTableTopLeft.x
         let numberX1 = left + columns.number
@@ -156,6 +158,6 @@ extension AgendaLayout {
                     from: PlanPoint(x: left, y: top), to: PlanPoint(x: right, y: top), .black,
                     lineWidth: TemplateGeometry.delegatedThinBorder))
         }
-        return PagePlan(chrome: .delegated, operations: operations)
+        return PagePlan(key: .delegated(index), chrome: .delegated, operations: operations)
     }
 }

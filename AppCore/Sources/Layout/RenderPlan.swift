@@ -147,13 +147,16 @@ public enum DrawOperation: Equatable, Sendable {
 
 /// One page of a plan.
 public struct PagePlan: Equatable, Sendable {
+    /// Which page of the binder it is.
+    public let key: PageKey
     /// The template page it is drawn on.
     public let chrome: ChromePage
     /// What to draw, in order.
     public var operations: [DrawOperation]
 
     /// Creates a page plan.
-    public init(chrome: ChromePage, operations: [DrawOperation]) {
+    public init(key: PageKey, chrome: ChromePage, operations: [DrawOperation]) {
+        self.key = key
         self.chrome = chrome
         self.operations = operations
     }

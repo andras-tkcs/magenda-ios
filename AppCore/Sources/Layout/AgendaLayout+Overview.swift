@@ -8,7 +8,7 @@ extension AgendaLayout {
         operations += todo.operations
         operations += scheduleOperations(for: content.schedule)
         operations += nextFourWeeksOperations(from: content.date)
-        return (PagePlan(chrome: .overview, operations: operations), todo.omitted)
+        return (PagePlan(key: .overview, chrome: .overview, operations: operations), todo.omitted)
     }
 
     private struct TodoRow {

@@ -17,13 +17,15 @@ public struct AgendaLayout: Sendable {
         let overview = overviewPage(for: content)
         let delegated = delegatedPages(for: content)
         var pages = [overview.page] + delegated
-        pages += meetingTitles(of: content).map { meetingPage(title: $0) }
+        pages += meetingTitles(of: content).enumerated().map { index, title in
+            meetingPage(title: title, key: meetingKey(at: index, in: content))
+        }
         pages.append(furtherNotesPage())
         let header = headerOperations(for: content.date)
         return RenderPlan(
             pageWidth: manifest.pageWidth, pageHeight: manifest.pageHeight,
             pages: addingLinks(
-                to: pages.map { PagePlan(chrome: $0.chrome, operations: $0.operations + header) },
+                to: pages.map { PagePlan(key: $0.key, chrome: $0.chrome, operations: $0.operations + header) },
                 schedule: content.schedule, delegatedPageCount: delegated.count),
             omittedTodoItems: overview.omitted)
     }
@@ -112,7 +114,15 @@ public struct AgendaLayout: Sendable {
         content.meetings.isEmpty ? [""] : content.meetings
     }
 
-    private func meetingPage(title: String) -> PagePlan {
+    /// The key of meeting page `index`: its event ID, else its position; a day without meetings
+    /// has the one blank page.
+    private func meetingKey(at index: Int, in content: AgendaContent) -> PageKey {
+        if content.meetings.isEmpty { return .meeting("") }
+        let hasID = index < content.meetingIDs.count
+        return .meeting(hasID ? content.meetingIDs[index] : "#\(index)")
+    }
+
+    private func meetingPage(title: String, key: PageKey) -> PagePlan {
         let label = labelRuns(of: slots(on: "meeting_unit"))
         let titleRuns = ["meeting.title"].compactMap { manifest.slot($0) }
             .flatMap { slot -> [TextRun] in
@@ -128,11 +138,11 @@ public struct AgendaLayout: Sendable {
                         x0: box.x0, y0: box.y0, x1: TemplateGeometry.meetingTitleRight, y1: box.y1),
                     alignment: .left)
             }
-        return PagePlan(chrome: .meeting, operations: (label + titleRuns).map { .text($0) })
+        return PagePlan(key: key, chrome: .meeting, operations: (label + titleRuns).map { .text($0) })
     }
 
     private func furtherNotesPage() -> PagePlan {
         let label = labelRuns(of: slots(on: "further_notes"))
-        return PagePlan(chrome: .furtherNotes, operations: label.map { .text($0) })
+        return PagePlan(key: .notes, chrome: .furtherNotes, operations: label.map { .text($0) })
     }
 }

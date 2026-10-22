@@ -16,7 +16,7 @@ extension AgendaLayout {
             if index == 0 {
                 links += scheduleLinks(on: page, entries: schedule, offset: 1 + delegatedPageCount)
             }
-            return PagePlan(chrome: page.chrome, operations: page.operations + links)
+            return PagePlan(key: page.key, chrome: page.chrome, operations: page.operations + links)
         }
     }
 

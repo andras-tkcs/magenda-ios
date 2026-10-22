@@ -156,6 +156,7 @@ struct AgendaDraftTests {
         let content = value.content()
         #expect(content.date == day)
         #expect(content.meetings == ["Sync", "Review"])
+        #expect(content.meetingIDs == ["primary|a", "primary|d"])
         #expect(content.schedule.map(\.slot) == [2, 12, 14])
         #expect(content.schedule.map(\.text) == ["REMINDER // Sync", "Focus", "Review"])
         #expect(content.schedule.map(\.meetingIndex) == [0, nil, 1])

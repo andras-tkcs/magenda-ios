@@ -72,7 +72,7 @@ struct RenderPlanTests {
 
     @Test("Plans hold their pages and omitted items")
     func plan() {
-        var page = PagePlan(chrome: .meeting, operations: [.fill(rect, .white)])
+        var page = PagePlan(key: .meeting("a"), chrome: .meeting, operations: [.fill(rect, .white)])
         page.operations.append(.link(rect, targetPage: 1))
         let omitted = TodoItem(text: "t", notes: "", due: "")
         let plan = RenderPlan(
