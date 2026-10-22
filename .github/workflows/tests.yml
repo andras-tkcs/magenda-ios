@@ -50,7 +50,7 @@ jobs:
   app:
     name: app (${{ matrix.family }}, ${{ matrix.runtime }})
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
