@@ -239,4 +239,22 @@ struct AgendaControllerBinderTests {
         #expect(saved == binder.day)
         #expect(binder.index(of: key) == 1)
     }
+
+    @Test("without an injected ID source, added pages still get distinct IDs")
+    func defaultIDs() async throws {
+        let store = InMemoryBinderStore()
+        try store.saveDay(storedDay("2026-09-30"))
+        let controller = AgendaController(
+            account: FixtureGoogleAccount(signedIn: true),
+            data: FixtureGoogleDataSource(.standard),
+            settingsStore: InMemorySettingsStore(AgendaSettings()),
+            credentials: InMemoryClientCredentialsStore(validCredentials),
+            measurer: FakeTextMeasurer(), renderer: FakeRenderer(), binderStore: store,
+            manifest: try TemplateManifest.bundled(), timeZone: .gmt, today: tuesday)
+        await controller.start()
+        let binder = try #require(controller.binder)
+        let first = binder.addPage(after: .overview)
+        let second = binder.addPage(after: .overview)
+        #expect(first != second)
+    }
 }
