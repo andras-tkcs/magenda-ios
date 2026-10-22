@@ -65,6 +65,8 @@ MODULE_FLOORS: dict[str, float] = {
     "AppCore/Sources/Draft/TaskSelection.swift": 100.0,
     # Places added and kept pages and remaps links; an error puts handwriting on the wrong page.
     "AppCore/Sources/Binder/BinderLayout.swift": 100.0,
+    # Saves handwriting and the day's snapshot; a wrong branch loses ink.
+    "AppCore/Sources/Binder/BinderStore.swift": 100.0,
 }
 
 
