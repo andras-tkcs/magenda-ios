@@ -131,9 +131,17 @@ final class BinderUITests: XCTestCase {
             binder.swipeLeft(velocity: .fast)
             swipes += 1
         }
+        // Where the pages are tells a swipe that did not move them from one that moved them
+        // without the indicator following.
+        var pages: [String] = []
+        for index in 0..<3 {
+            let page = element(app, "binderPage.\(index)")
+            pages.append(page.exists ? "\(page.frame)" : "none")
+        }
         XCTAssertFalse(
             indicator.label.hasPrefix("Page 1 of "),
-            "a finger did not turn the page: the indicator still says \(indicator.label)")
+            "a finger did not turn the page: the indicator still says \(indicator.label); "
+                + "the binder is at \(binder.frame), its first pages at \(pages)")
     }
 
     @MainActor
