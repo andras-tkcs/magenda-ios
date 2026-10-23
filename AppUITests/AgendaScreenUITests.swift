@@ -102,6 +102,10 @@ final class AgendaScreenUITests: XCTestCase {
         let app = launch("standard")
         let picker = app.datePickers["datePicker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 30), "the date picker never appeared")
+        // The picker exists a moment before its button carries the date.
+        let shown = expectation(
+            for: NSPredicate { _, _ in !self.shownDate(picker).isEmpty }, evaluatedWith: nil)
+        wait(for: [shown], timeout: 10)
         let before = shownDate(picker)
         XCTAssertFalse(before.isEmpty, "the date picker shows no date")
 
