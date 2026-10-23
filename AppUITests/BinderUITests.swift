@@ -112,9 +112,18 @@ final class BinderUITests: XCTestCase {
         let app = launch("overflow")
         render(app)
 
+        let banner = element(app, "omittedTasksBanner")
+        XCTAssertTrue(banner.waitForExistence(timeout: 30), "the banner never appeared")
+
+        // A long banner leaves less room, and the page is fitted to it, not hidden under it.
+        let binder = element(app, "binderView")
+        let page = element(app, "binderPage.0")
+        XCTAssertTrue(page.waitForExistence(timeout: 30), "the first page never appeared")
+        XCTAssertGreaterThanOrEqual(
+            page.frame.minY, banner.frame.maxY, "the page \(page.frame) sits under the banner")
         XCTAssertTrue(
-            element(app, "omittedTasksBanner").waitForExistence(timeout: 30),
-            "the banner never appeared")
+            binder.frame.contains(page.frame),
+            "the page \(page.frame) is not inside the binder \(binder.frame)")
     }
 
     @MainActor

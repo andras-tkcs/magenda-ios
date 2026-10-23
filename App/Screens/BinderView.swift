@@ -84,6 +84,70 @@ struct BinderView: View {
 
     var body: some View {
         let plan = binder.plan
+        // The bars and the page indicator are stacked around the pages instead of inset into the
+        // scroll view, so a page is fitted to the room they leave, even under a long banner, and a
+        // swipe in that room reaches the pages.
+        VStack(spacing: 0) {
+            BinderToolbar(
+                tool: $tool,
+                hasDelegatedPage: plan.pages.contains { $0.key == .delegated(0) },
+                canUndo: binder.canUndo, canRedo: binder.canRedo,
+                goToOverview: { scroll(to: .overview) },
+                goToDelegated: { scroll(to: .delegated(0)) },
+                goToNotes: { scroll(to: .notes) },
+                undo: { reveal(binder.undo()) }, redo: { reveal(binder.redo()) },
+                addPage: addPage,
+                canDeletePage: visibleKey.map { binder.canDelete($0) } ?? false,
+                deletePage: { confirmsDelete = true })
+            if !plan.omittedTodoItems.isEmpty {
+                OmittedTasksBanner(tasks: plan.omittedTodoItems.map(\.text))
+            }
+            if let message = binder.message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.bar)
+            }
+            pages(plan)
+            Text("Page \(visibleIndex + 1) of \(plan.pages.count)")
+                .font(.footnote.monospacedDigit())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .accessibilityIdentifier(ID.binderPageIndicator)
+                .padding(.bottom, 8)
+        }
+        .background(Color(.secondarySystemBackground))
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await controller.exportBinder() }
+                } label: {
+                    Label("Share PDF", systemImage: "square.and.arrow.up")
+                }
+                .accessibilityIdentifier(ID.binderShareButton)
+            }
+        }
+        .sheet(isPresented: showsShareSheet, onDismiss: { controller.clearBinderExport() }) {
+            if let url = controller.binderExport {
+                ActivityView(url: url, onDone: { controller.clearBinderExport() })
+            }
+        }
+        .alert("Delete this page?", isPresented: $confirmsDelete) {
+            Button("Delete", role: .destructive, action: deleteVisiblePage)
+                .accessibilityIdentifier(ID.confirmDeletePageButton)
+            Button("Cancel", role: .cancel) {}
+                .accessibilityIdentifier(ID.cancelDeletePageButton)
+        } message: {
+            Text("The page and its handwriting will be removed. This can't be undone.")
+        }
+    }
+
+    /// The pages side by side, one whole page per screen.
+    private func pages(_ plan: RenderPlan) -> some View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(Array(plan.pages.enumerated()), id: \.element.key) { index, page in
@@ -114,65 +178,6 @@ struct BinderView: View {
         .scrollIndicators(.hidden)
         .scrollPosition(id: $visibleKey)
         .accessibilityIdentifier(ID.binderView)
-        .background(Color(.secondarySystemBackground))
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                BinderToolbar(
-                    tool: $tool,
-                    hasDelegatedPage: plan.pages.contains { $0.key == .delegated(0) },
-                    canUndo: binder.canUndo, canRedo: binder.canRedo,
-                    goToOverview: { scroll(to: .overview) },
-                    goToDelegated: { scroll(to: .delegated(0)) },
-                    goToNotes: { scroll(to: .notes) },
-                    undo: { reveal(binder.undo()) }, redo: { reveal(binder.redo()) },
-                    addPage: addPage,
-                    canDeletePage: visibleKey.map { binder.canDelete($0) } ?? false,
-                    deletePage: { confirmsDelete = true })
-                if !plan.omittedTodoItems.isEmpty {
-                    OmittedTasksBanner(tasks: plan.omittedTodoItems.map(\.text))
-                }
-                if let message = binder.message {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.bar)
-                }
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            Text("Page \(visibleIndex + 1) of \(plan.pages.count)")
-                .font(.footnote.monospacedDigit())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.regularMaterial, in: Capsule())
-                .accessibilityIdentifier(ID.binderPageIndicator)
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    Task { await controller.exportBinder() }
-                } label: {
-                    Label("Share PDF", systemImage: "square.and.arrow.up")
-                }
-                .accessibilityIdentifier(ID.binderShareButton)
-            }
-        }
-        .sheet(isPresented: showsShareSheet, onDismiss: { controller.clearBinderExport() }) {
-            if let url = controller.binderExport {
-                ActivityView(url: url, onDone: { controller.clearBinderExport() })
-            }
-        }
-        .alert("Delete this page?", isPresented: $confirmsDelete) {
-            Button("Delete", role: .destructive, action: deleteVisiblePage)
-                .accessibilityIdentifier(ID.confirmDeletePageButton)
-            Button("Cancel", role: .cancel) {}
-                .accessibilityIdentifier(ID.cancelDeletePageButton)
-        } message: {
-            Text("The page and its handwriting will be removed. This can't be undone.")
-        }
     }
 
     /// What VoiceOver calls the page with `key`.
