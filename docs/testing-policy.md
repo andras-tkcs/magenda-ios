@@ -57,7 +57,8 @@ which one it used instead.
 
 **Coverage is a ratchet** over AppCore (ADR 0007). `scripts/check_coverage_floor.py` fails if
 AppCore's line coverage, or any file on its list, drops below its recorded floor. Raise a floor in
-the PR that raises its coverage; lowering one is a regression, not a config edit.
+the PR that raises its coverage; lowering one is a regression, not a config edit. A failing file is
+reported with the lines where its never-run regions begin.
 
 **Required checks.** `REQUIRED_STATUS_CHECKS` in `scripts/update_branch_protection.py` is the
 reviewed list. Update it in the PR that adds, renames or removes one of those jobs; a maintainer

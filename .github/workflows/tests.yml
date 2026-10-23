@@ -21,22 +21,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Show the toolchain
         run: swift --version
-      - name: Coverage repeat probe (temporary)
-        run: |
-          pass=0; fail=0
-          report="$(swift test --package-path AppCore --show-codecov-path)"
-          for i in $(seq 1 60); do
-            rm -rf "$(dirname "$report")"
-            if ! swift test --package-path AppCore --enable-code-coverage > "$RUNNER_TEMP/test-$i.log" 2>&1; then
-              echo "run $i: swift test failed"; tail -20 "$RUNNER_TEMP/test-$i.log"; fail=$((fail+1)); continue
-            fi
-            if python3 scripts/check_coverage_floor.py "$report" > "$RUNNER_TEMP/floor-$i.log" 2>&1; then
-              pass=$((pass+1))
-            else
-              fail=$((fail+1)); echo "run $i: floor failed"; grep -E "FAIL|zero-count|is at|error" "$RUNNER_TEMP/floor-$i.log" || true
-            fi
-          done
-          echo "PROBE: $pass passed, $fail failed of 60"
       - name: Test AppCore (100% pass rate required)
         run: swift test --package-path AppCore --enable-code-coverage
       - name: Enforce coverage floor
