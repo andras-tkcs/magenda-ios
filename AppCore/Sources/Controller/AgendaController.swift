@@ -340,6 +340,27 @@ public final class AgendaController {
         status = .ready
     }
 
+    /// Deletes the day's handwriting and added pages and renders the day fresh, as if it had never
+    /// been started.
+    public func startOver() async {
+        guard let draft else {
+            return
+        }
+        do {
+            for key in try binderStore.ink(on: day).keys {
+                try binderStore.saveInk(Data(), for: key, on: day)
+            }
+            try binderStore.saveDay(BinderDay(content: draft.content(), theme: settings.theme))
+        } catch {
+            message =
+                "Couldn't delete this day's handwriting. Free some space on this device and try again."
+            return
+        }
+        binder = nil
+        binderExport = nil
+        await render()
+    }
+
     /// Writes the PDF of the open binder, with its handwriting on each page, and keeps it in
     /// `binderExport`.
     public func exportBinder() async {

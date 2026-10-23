@@ -13,6 +13,9 @@ struct AgendaView: View {
         static let nextDayButton = "nextDayButton"
         static let settingsButton = "settingsButton"
         static let renderButton = "renderButton"
+        static let startOverButton = "startOverButton"
+        static let confirmStartOverButton = "confirmStartOverButton"
+        static let cancelStartOverButton = "cancelStartOverButton"
         static let nextWorkingDayButton = "nextWorkingDayButton"
         static let loadingIndicator = "loadingIndicator"
         static let errorMessage = "errorMessage"
@@ -31,6 +34,7 @@ struct AgendaView: View {
     @State private var preferredColumn = NavigationSplitViewColumn.sidebar
     @State private var showsSettings = false
     @State private var editing: EditTarget?
+    @State private var confirmsStartOver = false
 
     private var canRender: Bool {
         controller.status == .ready && controller.draft != nil
@@ -67,6 +71,18 @@ struct AgendaView: View {
         }
         .sheet(item: $editing) { target in
             editSheet(for: target)
+        }
+        .alert("Start this day over?", isPresented: $confirmsStartOver) {
+            Button("Start Over", role: .destructive) {
+                Task { await controller.startOver() }
+            }
+            .accessibilityIdentifier(ID.confirmStartOverButton)
+            Button("Cancel", role: .cancel) {}
+                .accessibilityIdentifier(ID.cancelStartOverButton)
+        } message: {
+            Text(
+                "All your notes on this day will be deleted: the handwriting and the pages you added. The binder is then rendered again from your calendar and tasks. This can't be undone."
+            )
         }
         .onChange(of: controller.rendered) { _, rendered in
             if rendered != nil {
@@ -214,6 +230,16 @@ struct AgendaView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        if UIDevice.current.userInterfaceIdiom == .pad, controller.binder != nil {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Start Over", systemImage: "arrow.counterclockwise") {
+                    confirmsStartOver = true
+                }
+                .disabled(!canRender)
+                .accessibilityLabel("Start this day over")
+                .accessibilityIdentifier(ID.startOverButton)
+            }
+        }
         ToolbarItem(placement: .primaryAction) {
             Button("Render") {
                 Task { await controller.render() }
