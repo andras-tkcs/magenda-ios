@@ -244,6 +244,40 @@ final class BinderUITests: XCTestCase {
     }
 
     @MainActor
+    func testUndoRevertsAPageThatScrolledAway() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard", extra: ["-MagendaFingerDrawing"])
+        render(app)
+
+        let undo = element(app, "undoButton")
+        XCTAssertTrue(undo.waitForExistence(timeout: 30), "the Undo button never appeared")
+        XCTAssertFalse(undo.isEnabled, "undo is enabled before anything was drawn")
+
+        let page = element(app, "binderPage.0")
+        XCTAssertTrue(page.waitForExistence(timeout: 30), "the first page never appeared")
+        draw(on: page)
+        XCTAssertEqual(waitForValue(page, "Handwritten"), "Handwritten", "the stroke was not saved")
+
+        tapButton(app, "binderNotesButton")
+        let atNotes = waitForIndicator(app, matching: #"Page ([0-9]+) of \1"#)
+        XCTAssertNotNil(
+            atNotes.range(of: #"^Page ([0-9]+) of \1$"#, options: .regularExpression),
+            "the notes button did not scroll to the last page: \(atNotes)")
+        XCTAssertFalse(atNotes.hasPrefix("Page 1 of "), "the first page is still the visible one")
+
+        tapButton(app, "undoButton")
+        let back = waitForIndicator(app, matching: #"Page 1 of [0-9]+"#)
+        XCTAssertNotNil(
+            back.range(of: #"^Page 1 of [0-9]+$"#, options: .regularExpression),
+            "undo did not scroll back to the first page: \(back)")
+        let again = element(app, "binderPage.0")
+        XCTAssertTrue(again.waitForExistence(timeout: 30), "the first page never came back")
+        XCTAssertEqual(
+            waitForValue(again, "Blank"), "Blank",
+            "undo did not reach the page that scrolled away")
+    }
+
+    @MainActor
     func testPickingAPenSelectsIt() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
         let app = launch("standard")

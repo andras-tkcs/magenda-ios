@@ -119,4 +119,20 @@ struct PlatformTests {
         #expect(remaining[.overview] == nil)
         #expect(remaining[.notes] == Data("notes".utf8))
     }
+
+    @Test("The binder store writes with complete-unless-open protection")
+    func protectedBinderStoreRoundTrip() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "binder-store-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FileBinderStore(directory: directory, protection: FileProtection.writingOptions)
+        let content = AgendaContentFixtures.typical
+        let day = BinderDay(content: content, theme: Theme())
+
+        try store.saveDay(day)
+        try store.saveInk(Data("ink".utf8), for: .overview, on: content.date)
+
+        #expect(try store.day(content.date) == day)
+        #expect(try store.ink(on: content.date)[.overview] == Data("ink".utf8))
+    }
 }

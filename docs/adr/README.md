@@ -129,3 +129,5 @@ until a later ADR supersedes it.
 | [0019](0019-alphas-are-tested-through-testflight-and-the-ad-hoc-ipa-is-opt-in.md) | Alphas are tested through TestFlight, and the Ad Hoc `.ipa` is opt-in | Accepted |
 | [0020](0020-on-ipad-the-agenda-is-a-binder-of-native-pages-with-pencilkit-ink.md) | On iPad the agenda is a binder of native pages with PencilKit ink, and the PDF is only the export | Accepted |
 | [0021](0021-a-binder-day-is-stored-as-a-content-snapshot-and-ink-per-page-key.md) | A binder day is stored as a content snapshot and ink per page key | Accepted |
+| [0022](0022-binder-files-and-agenda-pdfs-are-written-with-complete-unless-open-protection.md) | Binder files and agenda PDFs are written with complete-unless-open file protection | Accepted |
+| [0023](0023-binder-undo-uses-a-handwriting-history-kept-by-the-session.md) | Binder undo and redo use a handwriting history kept by the binder session, not PencilKit's undo manager | Accepted |

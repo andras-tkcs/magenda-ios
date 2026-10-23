@@ -59,7 +59,8 @@ enum AppEnvironment {
             credentials: KeychainClientCredentialsStore(),
             measurer: measurer, renderer: renderer,
             binderStore: FileBinderStore(
-                directory: URL.applicationSupportDirectory.appending(path: "Binder")),
+                directory: URL.applicationSupportDirectory.appending(path: "Binder"),
+                protection: FileProtection.writingOptions),
             manifest: manifest, timeZone: timeZone,
             today: CalendarDay.today(in: timeZone, now: Date()))
         return AppServices(
@@ -74,7 +75,8 @@ enum AppEnvironment {
             return InMemoryBinderStore()
         }
         return FileBinderStore(
-            directory: FileManager.default.temporaryDirectory.appending(path: name))
+            directory: FileManager.default.temporaryDirectory.appending(path: name),
+            protection: FileProtection.writingOptions)
     }
 
     /// Fixture-backed services for SwiftUI previews; `nil` when the bundle lacks the template.

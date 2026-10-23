@@ -38,8 +38,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   handwriting is saved with the day, also offline once the day is started.
 - The binder toolbar has black, blue, red and green pens, an eraser, undo and redo, buttons to jump
   to the overview, delegated tasks and notes, and Add page, which puts a blank copy of the current
-  page after it.
+  page after it. Undo and redo reach every page you wrote on since the day was opened, and scroll
+  to the page they change.
 - Share PDF in the binder shares the day with your handwriting on its pages.
+- The binder's saved handwriting and the PDFs it shares can't be read while the device is locked.
 - Rendering a day again keeps your handwriting on its pages; a meeting page you wrote on stays even
   when the meeting is no longer on the agenda.
 

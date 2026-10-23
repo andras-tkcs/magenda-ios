@@ -18,6 +18,24 @@ public final class BinderSession {
     /// The pages that carry handwriting.
     public var inkedKeys: Set<PageKey> { Set(ink.filter { !$0.value.isEmpty }.keys) }
 
+    /// One handwriting change: what page `key` held before and after it.
+    private struct InkChange {
+        let key: PageKey
+        let before: Data
+        let after: Data
+    }
+
+    /// How many handwriting changes undo can go back through; older ones are forgotten.
+    static let historyLimit = 100
+
+    private var undoStack: [InkChange] = []
+    private var redoStack: [InkChange] = []
+
+    /// Whether there is a handwriting change to undo.
+    public var canUndo: Bool { !undoStack.isEmpty }
+    /// Whether there is an undone handwriting change to redo.
+    public var canRedo: Bool { !redoStack.isEmpty }
+
     @ObservationIgnored private let store: any BinderStore
     @ObservationIgnored private let layout: BinderLayout
     @ObservationIgnored private let makeID: @Sendable () -> String
@@ -44,6 +62,37 @@ public final class BinderSession {
         guard (ink[key] ?? Data()) != data else {
             return
         }
+        undoStack.append(InkChange(key: key, before: ink[key] ?? Data(), after: data))
+        if undoStack.count > Self.historyLimit {
+            undoStack.removeFirst()
+        }
+        redoStack.removeAll()
+        write(data, on: key)
+    }
+
+    /// Reverts the last handwriting change, on whichever page it was, saves the page, and returns
+    /// its key; nil when there is nothing to undo.
+    public func undo() -> PageKey? {
+        guard let change = undoStack.popLast() else {
+            return nil
+        }
+        redoStack.append(change)
+        write(change.before, on: change.key)
+        return change.key
+    }
+
+    /// Applies the last undone handwriting change again, saves the page, and returns its key; nil
+    /// when there is nothing to redo.
+    public func redo() -> PageKey? {
+        guard let change = redoStack.popLast() else {
+            return nil
+        }
+        undoStack.append(change)
+        write(change.after, on: change.key)
+        return change.key
+    }
+
+    private func write(_ data: Data, on key: PageKey) {
         ink[key] = data.isEmpty ? nil : data
         do {
             try store.saveInk(data, for: key, on: date)
