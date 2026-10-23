@@ -1,4 +1,5 @@
-// AppCore's binder tools: the pens' colors and names.
+// AppCore's binder tools: the pens' colors and names, and the Pencil switch between a pen and the
+// eraser.
 
 import AppCore
 import Testing
@@ -29,5 +30,13 @@ struct BinderToolTests {
         #expect(BinderTool.pen(.red) == .pen(.red))
         #expect(BinderTool.pen(.red) != .pen(.blue))
         #expect(BinderTool.pen(.black) != .eraser)
+    }
+
+    @Test(
+        "The Pencil switches a pen to the eraser and the eraser back to the last pen",
+        arguments: BinderPen.allCases)
+    func pencilSwitch(pen: BinderPen) {
+        #expect(BinderTool.pen(pen).switched(backTo: .black) == .eraser)
+        #expect(BinderTool.eraser.switched(backTo: pen) == .pen(pen))
     }
 }
