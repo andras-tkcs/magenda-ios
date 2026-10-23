@@ -113,7 +113,8 @@ struct BinderLayoutTests {
 
     @Test("An added copy of a retained meeting page is titled from its own content")
     func retainedMeetingCopy() throws {
-        var day = binder(retained: [RetainedPage(key: .meeting("gone"), content: content(["gone"]))])
+        var day = binder(
+            retained: [RetainedPage(key: .meeting("gone"), content: content(["gone"]))])
         day.addPage(after: .meeting("gone"), id: "x")
         let plan = layout.plan(for: day)
         let page = try #require(plan.pages.first { $0.key == .extra("x") })
