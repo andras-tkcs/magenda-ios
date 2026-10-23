@@ -229,6 +229,19 @@ struct AgendaControllerBinderTests {
         #expect(binder.ink == [.overview: Data([1])])
     }
 
+    @Test("rendering again keeps the undo history")
+    func renderKeepsHistory() async throws {
+        let context = try await started(.standard)
+        await context.controller.render()
+        let binder = try #require(context.controller.binder)
+        binder.setInk(Data([1]), on: .overview)
+        await context.controller.render()
+        #expect(context.controller.binder === binder)
+        #expect(binder.ink == [.overview: Data([1])])
+        #expect(binder.undo() == .overview)
+        #expect(binder.ink.isEmpty)
+    }
+
     @Test("a page added while a render runs is in the saved day")
     func addPageDuringRender() async throws {
         let store = InMemoryBinderStore()
@@ -248,6 +261,29 @@ struct AgendaControllerBinderTests {
         #expect(saved.extras.map(\.id) == ["id-1"])
         #expect(saved == binder.day)
         #expect(binder.index(of: key) == 1)
+    }
+
+    /// Guards against handwriting written while a render runs being ignored by that render's
+    /// rebase, which dropped a meeting page that had left the content.
+    @Test("handwriting written while a render runs keeps its meeting page in the saved day")
+    func inkDuringRender() async throws {
+        let store = InMemoryBinderStore()
+        try store.saveDay(storedDay("2026-09-30"))
+        let gated = GatedRenderer()
+        let context = try make(rendering: gated, binderStore: store)
+        await context.controller.start()
+        let binder = try #require(context.controller.binder)
+        let rendering = Task { await context.controller.render() }
+        await gated.waitUntilBlocked()
+        binder.setInk(Data([7]), on: .meeting("a"))
+        await gated.release()
+        await rendering.value
+        let stored = try store.day(wednesday)
+        let saved = try #require(stored)
+        #expect(binder.day.retained.map(\.key) == [.meeting("a")])
+        #expect(binder.index(of: .meeting("a")) != nil)
+        #expect(binder.ink[.meeting("a")] == Data([7]))
+        #expect(saved == binder.day)
     }
 
     @Test("without an injected ID source, added pages still get distinct IDs")

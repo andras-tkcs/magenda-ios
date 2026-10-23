@@ -59,10 +59,13 @@ public final class InMemoryBinderStore: BinderStore, @unchecked Sendable {
 /// the app, never taken from Google data. Nothing here reads file attributes or timestamps.
 public struct FileBinderStore: BinderStore {
     private let directory: URL
+    private let writeOptions: Data.WritingOptions
 
-    /// Creates a store under `directory`; folders are created when something is saved.
-    public init(directory: URL) {
+    /// Creates a store under `directory`; folders are created when something is saved. Every write
+    /// is atomic and also uses `protection`, so the app can choose a file-protection class.
+    public init(directory: URL, protection: Data.WritingOptions = []) {
         self.directory = directory
+        writeOptions = protection.union(.atomic)
     }
 
     /// The saved day, or nil when no `day.json` exists; throws `.unreadable` when it cannot be
@@ -83,7 +86,8 @@ public struct FileBinderStore: BinderStore {
             let dayFolder = folder(day.date)
             try FileManager.default.createDirectory(
                 at: dayFolder, withIntermediateDirectories: true)
-            try encode(day).write(to: dayFolder.appending(path: "day.json"), options: .atomic)
+            try encode(day).write(
+                to: dayFolder.appending(path: "day.json"), options: writeOptions)
         }
     }
 
@@ -114,7 +118,7 @@ public struct FileBinderStore: BinderStore {
                     try? FileManager.default.removeItem(at: inkFolder.appending(path: existing))
                     entries[id] = nil
                     try encode(entries).write(
-                        to: inkFolder.appending(path: "index.json"), options: .atomic)
+                        to: inkFolder.appending(path: "index.json"), options: writeOptions)
                 }
                 return
             }
@@ -122,10 +126,10 @@ public struct FileBinderStore: BinderStore {
             let name = existing ?? "page-\(next).pkdata"
             try FileManager.default.createDirectory(
                 at: inkFolder, withIntermediateDirectories: true)
-            try data.write(to: inkFolder.appending(path: name), options: .atomic)
+            try data.write(to: inkFolder.appending(path: name), options: writeOptions)
             entries[id] = name
             try encode(entries).write(
-                to: inkFolder.appending(path: "index.json"), options: .atomic)
+                to: inkFolder.appending(path: "index.json"), options: writeOptions)
         }
     }
 

@@ -1,5 +1,5 @@
-// AppCore's `BinderSession`: saving handwriting as it changes, adding pages, and reporting what
-// could not be saved.
+// AppCore's `BinderSession`: saving handwriting as it changes, adding pages, undoing and redoing
+// handwriting, and reporting what could not be saved.
 
 import Foundation
 import Testing
@@ -125,5 +125,109 @@ struct BinderSessionTests {
         let session = makeSession(
             InMemoryBinderStore(), ink: [.overview: Data([1]), .notes: Data(), meeting: Data([3])])
         #expect(session.inkedKeys == [.overview, meeting])
+    }
+}
+
+@MainActor
+@Suite("Binder session history")
+struct BinderSessionHistoryTests {
+    private let layout: BinderLayout
+    private let day: BinderDay
+    private let date: CalendarDay
+    private let meeting = PageKey.meeting("a")
+
+    init() throws {
+        layout = BinderLayout(
+            manifest: try TemplateManifest.bundled(), measurer: FakeTextMeasurer())
+        date = try #require(CalendarDay(year: 2026, month: 9, day: 30))
+        day = BinderDay(
+            content: AgendaContent(
+                date: date, todoItems: [],
+                schedule: [ScheduleEntry(slot: 2, text: "A", meetingIndex: 0)],
+                meetings: ["A"], meetingIDs: ["a"], delegated: []),
+            theme: Theme())
+    }
+
+    private func makeSession(
+        _ store: any BinderStore, ink: [PageKey: Data] = [:]
+    ) -> BinderSession {
+        BinderSession(
+            day: day, plan: layout.plan(for: day), ink: ink, store: store, layout: layout,
+            makeID: CountingIDs().next)
+    }
+
+    @Test("undo reverts the last change on any page and saves it")
+    func undoAnyPage() throws {
+        let store = InMemoryBinderStore()
+        let session = makeSession(store)
+        session.setInk(Data([1]), on: meeting)
+        session.setInk(Data([2]), on: .notes)
+        #expect(session.undo() == .notes)
+        #expect(session.ink == [meeting: Data([1])])
+        #expect(try store.ink(on: date)[.notes] == nil)
+        #expect(session.undo() == meeting)
+        #expect(session.ink.isEmpty)
+        #expect(try store.ink(on: date).isEmpty)
+        #expect(session.undo() == nil)
+        #expect(!session.canUndo)
+    }
+
+    @Test("undo restores the handwriting a change replaced")
+    func undoRestoresReplaced() throws {
+        let store = InMemoryBinderStore()
+        let session = makeSession(store)
+        session.setInk(Data([1]), on: meeting)
+        session.setInk(Data([2]), on: meeting)
+        _ = session.undo()
+        #expect(session.ink[meeting] == Data([1]))
+        #expect(try store.ink(on: date)[meeting] == Data([1]))
+    }
+
+    @Test("redo reapplies what undo reverted, and a new change clears it")
+    func redoAndNewChange() throws {
+        let store = InMemoryBinderStore()
+        let session = makeSession(store)
+        session.setInk(Data([1]), on: meeting)
+        _ = session.undo()
+        #expect(session.canRedo)
+        #expect(session.redo() == meeting)
+        #expect(session.ink[meeting] == Data([1]))
+        #expect(try store.ink(on: date)[meeting] == Data([1]))
+        #expect(session.undo() == meeting)
+        session.setInk(Data([3]), on: .notes)
+        #expect(!session.canRedo)
+        #expect(session.redo() == nil)
+    }
+
+    @Test("the history keeps the last historyLimit changes")
+    func historyLimit() {
+        let session = makeSession(InMemoryBinderStore())
+        for i in 1...BinderSession.historyLimit + 1 {
+            session.setInk(Data([UInt8(i)]), on: meeting)
+        }
+        var undone = 0
+        while session.undo() != nil {
+            undone += 1
+        }
+        #expect(undone == BinderSession.historyLimit)
+        #expect(session.ink[meeting] == Data([1]))
+    }
+
+    @Test("an undo whose save fails keeps the reverted handwriting and says why")
+    func undoSaveFails() {
+        let session = makeSession(FailingBinderStore(.unwritable, failing: [.saveInk]))
+        session.setInk(Data([1]), on: meeting)
+        _ = session.undo()
+        #expect(session.ink.isEmpty)
+        #expect(
+            session.message == "Couldn't save your handwriting. Free some space on this device.")
+    }
+
+    @Test("adding a page leaves the history alone")
+    func addPageKeepsHistory() {
+        let session = makeSession(InMemoryBinderStore())
+        session.setInk(Data([1]), on: meeting)
+        _ = session.addPage(after: .overview)
+        #expect(session.undo() == meeting)
     }
 }
