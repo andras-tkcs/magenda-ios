@@ -218,9 +218,16 @@ final class SettingsUITests: XCTestCase {
 
         let forget = app.buttons["forgetClientButton"].firstMatch
         reveal(app, forget)
-        forget.tap()
+        // A tap that lands while the form is still settling from the drag is dropped, so the
+        // button is tapped again while the confirmation has not appeared.
         let confirm = app.buttons["Forget"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 30), "no confirmation appeared")
+        var taps = 0
+        while !confirm.exists && taps < 5 {
+            forget.tap()
+            taps += 1
+            _ = confirm.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(confirm.exists, "no confirmation appeared after \(taps) taps")
         confirm.tap()
         XCTAssertTrue(
             element(app, "clientIDField").waitForExistence(timeout: 30),
