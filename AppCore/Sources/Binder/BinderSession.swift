@@ -119,6 +119,36 @@ public final class BinderSession {
         return .extra(id)
     }
 
+    /// Whether `key` is a page the person added, which they can delete.
+    public func canDelete(_ key: PageKey) -> Bool {
+        guard case .extra(let id) = key else {
+            return false
+        }
+        return day.extras.contains { $0.id == id }
+    }
+
+    /// Deletes the added page `key` and its handwriting, saves the day, and returns the key of the
+    /// page to show instead: the one before it. Returns nil and changes nothing when `key` is not
+    /// an added page of this day.
+    public func deletePage(_ key: PageKey) -> PageKey? {
+        guard canDelete(key), case .extra(let id) = key, let index = self.index(of: key) else {
+            return nil
+        }
+        day.removePage(id: id)
+        plan = layout.plan(for: day)
+        ink[key] = nil
+        undoStack.removeAll { $0.key == key }
+        redoStack.removeAll { $0.key == key }
+        do {
+            try store.saveDay(day)
+            try store.saveInk(Data(), for: key, on: date)
+            message = nil
+        } catch {
+            message = "Couldn't delete the page. Free some space on this device."
+        }
+        return plan.pages[max(0, min(index - 1, plan.pages.count - 1))].key
+    }
+
     // Used by a render, which updates the open binder instead of replacing it, so screens keep
     // saving into the same session and its handwriting.
     func replace(day: BinderDay, plan: RenderPlan) {

@@ -1,5 +1,6 @@
 // AppCore's `AgendaLayout` page list, header, meeting pages and further-notes page, measured with
-// `FakeTextMeasurer` against the bundled template manifest.
+// `FakeTextMeasurer` against the bundled template manifest, and the continued title of a copied
+// meeting page.
 
 import Testing
 
@@ -118,6 +119,41 @@ struct AgendaLayoutTests {
         let run = try #require(runs(plan.pages[1]).first { $0.text == "Team sync" })
         #expect(run.font.weight == .extralight)
         #expect(run.font.size == 20)
+    }
+
+    @Test("A continued title that is too wide is ellipsized to the title width")
+    func longContinuedTitle() throws {
+        let title = String(repeating: "x", count: 200)
+        let content = try content(meetings: [title])
+        let layout = try layout()
+        let page = try #require(layout.plan(for: content).pages.dropFirst().first)
+        let operations = layout.continuedOperations(of: page, in: content)
+        let run = try #require(
+            operations.compactMap { operation -> TextRun? in
+                if case .text(let run) = operation, run.text.hasPrefix("cont. ") {
+                    return run
+                }
+                return nil
+            }.first)
+        #expect(run.text.hasSuffix("…"))
+        #expect(run.width <= TemplateGeometry.meetingTitleWidth)
+    }
+
+    @Test("A page whose key is not in the content keeps its operations")
+    func unknownKeyKeepsOperations() throws {
+        let content = try content(meetings: ["A"])
+        let layout = try layout()
+        let page = try #require(layout.plan(for: content).pages.dropFirst().first)
+        let stray = PagePlan(key: .meeting("zz"), chrome: page.chrome, operations: page.operations)
+        #expect(layout.continuedOperations(of: stray, in: content) == page.operations)
+    }
+
+    @Test("A page that is not a meeting page keeps its operations")
+    func nonMeetingPageKeepsOperations() throws {
+        let content = try content(meetings: ["A"])
+        let layout = try layout()
+        let page = try #require(layout.plan(for: content).pages.first)
+        #expect(layout.continuedOperations(of: page, in: content) == page.operations)
     }
 
     @Test("The further-notes page draws only its label besides the header")

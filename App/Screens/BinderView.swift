@@ -1,8 +1,8 @@
 import AppCore
 import SwiftUI
 
-/// The day's binder on iPad: its pages one under the other, each with a canvas to write on, the
-/// page indicator, and Share PDF with the handwriting on the pages.
+/// The day's binder on iPad: its pages side by side, one whole page per screen, each with a
+/// canvas to write on, the page indicator, and Share PDF with the handwriting on the pages.
 struct BinderView: View {
     /// The accessibility identifiers UI tests find elements by.
     enum ID {
@@ -16,6 +16,9 @@ struct BinderView: View {
         static let undoButton = "undoButton"
         static let redoButton = "redoButton"
         static let addPageButton = "addPageButton"
+        static let deletePageButton = "deletePageButton"
+        static let confirmDeletePageButton = "confirmDeletePageButton"
+        static let cancelDeletePageButton = "cancelDeletePageButton"
 
         static func penButton(_ pen: BinderPen) -> String { "penButton.\(pen.rawValue)" }
 
@@ -29,8 +32,9 @@ struct BinderView: View {
 
     @State private var visibleKey: PageKey?
     @State private var tool = BinderTool.pen(.black)
+    @State private var confirmsDelete = false
 
-    /// The position of the page at the top of the scroll view; the first page until it scrolls.
+    /// The position of the page on screen; the first page until it moves.
     private var visibleIndex: Int {
         visibleKey.flatMap { binder.index(of: $0) } ?? 0
     }
@@ -50,13 +54,21 @@ struct BinderView: View {
         scroll(to: key)
     }
 
-    /// Adds a blank page after the one at the top of the screen and shows it.
+    /// Adds a blank page after the one on screen and shows it.
     private func addPage() {
         let visible = visibleKey.flatMap { binder.index(of: $0) != nil ? $0 : nil }
         guard let after = visible ?? binder.plan.pages.first?.key else {
             return
         }
         scroll(to: binder.addPage(after: after))
+    }
+
+    /// Deletes the added page on screen and shows the page before it.
+    private func deleteVisiblePage() {
+        guard let key = visibleKey, let next = binder.deletePage(key) else {
+            return
+        }
+        scroll(to: next)
     }
 
     /// Shown while an exported PDF waits to be shared.
@@ -72,8 +84,72 @@ struct BinderView: View {
 
     var body: some View {
         let plan = binder.plan
-        ScrollView(.vertical) {
-            LazyVStack(spacing: 16) {
+        // The bars and the page indicator are stacked around the pages instead of inset into the
+        // scroll view, so a page is fitted to the room they leave, even under a long banner, and a
+        // swipe in that room reaches the pages.
+        VStack(spacing: 0) {
+            BinderToolbar(
+                tool: $tool,
+                hasDelegatedPage: plan.pages.contains { $0.key == .delegated(0) },
+                canUndo: binder.canUndo, canRedo: binder.canRedo,
+                goToOverview: { scroll(to: .overview) },
+                goToDelegated: { scroll(to: .delegated(0)) },
+                goToNotes: { scroll(to: .notes) },
+                undo: { reveal(binder.undo()) }, redo: { reveal(binder.redo()) },
+                addPage: addPage,
+                canDeletePage: visibleKey.map { binder.canDelete($0) } ?? false,
+                deletePage: { confirmsDelete = true })
+            if !plan.omittedTodoItems.isEmpty {
+                OmittedTasksBanner(tasks: plan.omittedTodoItems.map(\.text))
+            }
+            if let message = binder.message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.bar)
+            }
+            pages(plan)
+            Text("Page \(visibleIndex + 1) of \(plan.pages.count)")
+                .font(.footnote.monospacedDigit())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .accessibilityIdentifier(ID.binderPageIndicator)
+                .padding(.bottom, 8)
+        }
+        .background(Color(.secondarySystemBackground))
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await controller.exportBinder() }
+                } label: {
+                    Label("Share PDF", systemImage: "square.and.arrow.up")
+                }
+                .accessibilityIdentifier(ID.binderShareButton)
+            }
+        }
+        .sheet(isPresented: showsShareSheet, onDismiss: { controller.clearBinderExport() }) {
+            if let url = controller.binderExport {
+                ActivityView(url: url, onDone: { controller.clearBinderExport() })
+            }
+        }
+        .alert("Delete this page?", isPresented: $confirmsDelete) {
+            Button("Delete", role: .destructive, action: deleteVisiblePage)
+                .accessibilityIdentifier(ID.confirmDeletePageButton)
+            Button("Cancel", role: .cancel) {}
+                .accessibilityIdentifier(ID.cancelDeletePageButton)
+        } message: {
+            Text("The page and its handwriting will be removed. This can't be undone.")
+        }
+    }
+
+    /// The pages side by side, one whole page per screen.
+    private func pages(_ plan: RenderPlan) -> some View {
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
                 ForEach(Array(plan.pages.enumerated()), id: \.element.key) { index, page in
                     BinderPageView(
                         page: page, pageWidth: plan.pageWidth, pageHeight: plan.pageHeight,
@@ -92,64 +168,16 @@ struct BinderView: View {
                     .accessibilityIdentifier(ID.binderPage(index))
                     .accessibilityLabel(Self.label(for: page.key))
                     .accessibilityValue(binder.ink[page.key] == nil ? "Blank" : "Handwritten")
+                    .padding(16)
+                    .containerRelativeFrame([.horizontal, .vertical])
                 }
             }
             .scrollTargetLayout()
-            .padding(16)
         }
+        .scrollTargetBehavior(.paging)
+        .scrollIndicators(.hidden)
         .scrollPosition(id: $visibleKey)
-        // Room after the last page, so it can scroll to the top and become the visible page.
-        .contentMargins(.bottom, 600, for: .scrollContent)
         .accessibilityIdentifier(ID.binderView)
-        .background(Color(.secondarySystemBackground))
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                BinderToolbar(
-                    tool: $tool,
-                    hasDelegatedPage: plan.pages.contains { $0.key == .delegated(0) },
-                    canUndo: binder.canUndo, canRedo: binder.canRedo,
-                    goToOverview: { scroll(to: .overview) },
-                    goToDelegated: { scroll(to: .delegated(0)) },
-                    goToNotes: { scroll(to: .notes) },
-                    undo: { reveal(binder.undo()) }, redo: { reveal(binder.redo()) },
-                    addPage: addPage)
-                if !plan.omittedTodoItems.isEmpty {
-                    OmittedTasksBanner(tasks: plan.omittedTodoItems.map(\.text))
-                }
-                if let message = binder.message {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.bar)
-                }
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            Text("Page \(visibleIndex + 1) of \(plan.pages.count)")
-                .font(.footnote.monospacedDigit())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.regularMaterial, in: Capsule())
-                .accessibilityIdentifier(ID.binderPageIndicator)
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    Task { await controller.exportBinder() }
-                } label: {
-                    Label("Share PDF", systemImage: "square.and.arrow.up")
-                }
-                .accessibilityIdentifier(ID.binderShareButton)
-            }
-        }
-        .sheet(isPresented: showsShareSheet, onDismiss: { controller.clearBinderExport() }) {
-            if let url = controller.binderExport {
-                ActivityView(url: url, onDone: { controller.clearBinderExport() })
-            }
-        }
     }
 
     /// What VoiceOver calls the page with `key`.
