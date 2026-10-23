@@ -21,7 +21,11 @@ final class PDFAgendaRenderer: AgendaRendering, @unchecked Sendable {
     func write(_ plan: RenderPlan, ink: [Data?], fileName: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "Agendas", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: FileProtection.attributes)
+        try FileManager.default.setAttributes(
+            FileProtection.attributes, ofItemAtPath: directory.path)
         let url = directory.appendingPathComponent(fileName)
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
@@ -49,6 +53,7 @@ final class PDFAgendaRenderer: AgendaRendering, @unchecked Sendable {
                 }
             }
         }
+        try FileManager.default.setAttributes(FileProtection.attributes, ofItemAtPath: url.path)
         return url
     }
 
