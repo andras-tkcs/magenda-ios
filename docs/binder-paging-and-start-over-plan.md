@@ -29,19 +29,33 @@ ADRs 0022 and 0023), and the feature PR is stacked on it (see "Stacking on PR 9"
 
 ## Stacking on PR 9
 
-`/implement` normally works against `main`. For this plan, while PR 9 is open, the orchestrator
-reads every `origin/main` in `.claude/commands/implement.md` as
-`origin/claude/binder-undo-render-protection-tvtezf` (the manifest's `base_branch`):
+`/implement` and `/dod` normally work against `main`. `base_branch` in the manifest is not a field
+`/implement` knows; it works through this section. While PR 9 is open, **every session** (the
+orchestrator, each phase's child and the final reviewer) reads every `origin/main` in
+`.claude/commands/implement.md` and `.claude/commands/dod.md` as
+`origin/claude/binder-undo-render-protection-tvtezf`. In particular, `/dod`'s
+`git diff --stat origin/main...HEAD` and the final review's `git diff origin/main...HEAD` become
+`git diff … origin/claude/binder-undo-render-protection-tvtezf...HEAD`, so PR 9's own files
+(`App/Platform/FileProtection.swift`, `AppTests/PlatformTests.swift`, ADRs 0022 and 0023) never
+show up as out of scope. The orchestrator writes that branch name into the final-review prompt.
 
-- The plan branch already contains PR 9 (merged into it), so the feature branch cut from it does
-  too. Before the first phase, and again before opening the PR, merge
-  `origin/claude/binder-undo-render-protection-tvtezf` into the feature branch (a merge commit), so
-  later fixes on PR 9 are in.
-- Open the single feature PR with **base `claude/binder-undo-render-protection-tvtezf`**, not
-  `main`, and say in its body that it is stacked on PR 9 and must merge after it.
-- If PR 9 has merged by the time a step runs, use `main` as usual: merge `origin/main`, and open
-  (or retarget) the PR against `main`. GitHub retargets an open stacked PR to `main` by itself
-  when PR 9's branch is deleted on merge.
+- **Has PR 9 merged?** Check with the GitHub MCP tool `pull_request_read` (`method: get`,
+  `owner: andras-tkcs`, `repo: magenda-ios`, `pullNumber: 9`) and read `merged`. Check when the
+  feature branch is created (implement.md §1), before the final review (§5), and before opening
+  the PR (§6).
+- **While PR 9 is open:** the plan branch already contains PR 9, so the feature branch cut from
+  it does too. When the feature branch is created and again before the final review, merge
+  `origin/claude/binder-undo-render-protection-tvtezf` into it (a merge commit), so later fixes on
+  PR 9 are in. Open the single feature PR with **base
+  `claude/binder-undo-render-protection-tvtezf`**, and say in its body that it is stacked on PR 9
+  and merges after it.
+- **Once PR 9 has merged:** merge `origin/main` into the feature branch, and if the feature PR is
+  already open, retarget it with the GitHub MCP tool `update_pull_request` (`base: main`).
+  GitHub does not do this by itself here: the repository keeps merged branches
+  (`delete_branch_on_merge` is off), so a PR left on PR 9's branch would merge into that stale
+  branch, not `main`. Then drive the PR to green against `main`.
+- PR 9 should be merged with a merge commit, as CONTRIBUTING.md asks. A squash merge would bring
+  its changes into `main` as a different commit, and merging `origin/main` could then conflict.
 - Never push to PR 9's branch.
 
 ## Current state
@@ -54,14 +68,14 @@ All references are to the plan branch, which contains PR 9.
   (`AppCore/Sources/Binder/BinderTool.swift`) is `.pen(BinderPen)` or `.eraser`; the selected tool
   is `@State tool` in `BinderView`.
 - Undo (from PR 9, ADR 0023): `BinderSession` keeps `undoStack`/`redoStack` of `InkChange(key:
-  before: after:)` (`BinderSession.swift:21-37`); `setInk` (`:61-73`) records a change and clears
-  redo, `undo()`/`redo()` (`:75-93`) write through `write(_:on:)` (`:95-108`) and return the page's
+  before: after:)` (`BinderSession.swift:21-37`); `setInk` (`:61-71`) records a change and clears
+  redo, `undo()`/`redo()` (`:75-93`) write through `write(_:on:)` (`:95-106`) and return the page's
   key. `BinderView` has no canvas registry and no `lastEditedKey` any more; its toolbar passes
   `canUndo: binder.canUndo, canRedo: binder.canRedo` and calls `reveal(binder.undo())`
   (`BinderView.swift:46-51`, `:107-115`). `BinderToolbar.button(_:_:_:isEnabled:action:)` disables
   a button with `isEnabled:`.
 
-- `App/Screens/BinderView.swift:75-104`: the binder is a `ScrollView(.vertical)` with a
+- `App/Screens/BinderView.swift:75-103`: the binder is a `ScrollView(.vertical)` with a
   `LazyVStack`, `.scrollTargetLayout()`, `.scrollPosition(id: $visibleKey)` and
   `.contentMargins(.bottom, 600, for: .scrollContent)` (the margin exists only so the last page
   can reach the top). `scroll(to:)` (`:38-42`) sets `visibleKey` with animation; `addPage()`
@@ -77,9 +91,9 @@ All references are to the plan branch, which contains PR 9.
   page swipe.
 - `AppCore/Sources/Binder/BinderDay.swift:86-99`: `addPage(after:id:)`; `ExtraPage` has `id`,
   `after`, `source` (never `.extra`).
-- `AppCore/Sources/Binder/BinderSession.swift:110-122`: `addPage(after:)` re-plans and saves the
-  day; `setInk` (`:61-73`) records history and saves ink; `store.saveInk(Data(), …)` deletes a page's ink
-  (`BinderStore.swift:50-52`, `:106-133`).
+- `AppCore/Sources/Binder/BinderSession.swift:108-120`: `addPage(after:)` re-plans and saves the
+  day; `setInk` (`:61-71`) records history and saves ink; `store.saveInk(Data(), …)` deletes a page's ink
+  (`BinderStore.swift:50-52`, `:108-134`).
 - `AppCore/Sources/Binder/BinderLayout.swift`: `plan(for:)` (`:23-41`) composes base, retained and
   added pages; `insertExtras` (`:69-115`) and its `copy(of:)` (`:79-85`) copy the source page's
   operations verbatim; `remapLinks` (`:117-134`) runs afterwards. `origins` is
@@ -430,12 +444,14 @@ ADRs 0022 and 0023 are PR 9's. This plan's take the next numbers:
 - **ADR 0024**: The binder shows one whole page per screen and pages turn with a horizontal swipe.
   Amends ADR 0020.
 - **ADR 0025**: Only pages added in the binder can be deleted, with their handwriting and their
-  undo history, after a confirmation. Amends ADR 0020. (That an added meeting-page copy is titled
+  undo history, after a confirmation. Amends ADR 0020 and ADR 0023 (the history no longer only
+  grows: Delete page trims it). (That an added meeting-page copy is titled
   "cont." at layout time, so nothing new is stored, goes under its Consequences; on its own it
   does not meet the ADR bar.)
 - **ADR 0026**: Render keeps a started day's handwriting; Start over is a separate, confirmed
-  action that deletes all of the day's handwriting and added pages and renders it fresh. Amends
-  ADR 0021.
+  action that deletes all of the day's handwriting and added pages and renders it fresh, with a
+  new session and an empty undo history. Amends ADR 0021 and ADR 0023 (the same day can now get an
+  empty history).
 
 The Pencil switch (D6) does not meet the ADR bar.
 
@@ -503,7 +519,7 @@ final_checks:
   - docs/adr/0024-*.md, docs/adr/0025-*.md and docs/adr/0026-*.md exist, are Accepted, and are in docs/adr/README.md's index next to PR 9's 0022 and 0023
   - CHANGELOG.md has [Unreleased] entries for paging, Delete page, cont. titles, the Apple Pencil switch and Start over, and keeps PR 9's undo and file-protection entries, and no new version heading
   - BinderDay.formatVersion is still 1
-  - the feature branch contains the latest origin/claude/binder-undo-render-protection-tvtezf (or PR 9 has merged and it contains origin/main), and the PR's base is that branch (or main once PR 9 has merged)
+  - the feature branch contains the latest origin/claude/binder-undo-render-protection-tvtezf, or, if PR 9 has merged, origin/main (the PR is then opened, or retargeted, with base main; see "Stacking on PR 9")
 phases:
   - id: p1-binder-pages
     title: Horizontal paging, Delete page and continued meeting titles in the binder
@@ -524,6 +540,8 @@ phases:
     brief: |
       Implement the plan's Design sections D1, D2, D3, D4 and the strings in D7 exactly as written.
       Do not edit docs, CHANGELOG.md or ADRs; the last phase does.
+      While PR 9 is open, diff and run /dod against origin/claude/binder-undo-render-protection-tvtezf,
+      not origin/main (the plan's "Stacking on PR 9"); PR 9's own files are not this phase's.
       1. AgendaLayout.swift: extract meetingTitleRuns(_:), add continuedTitle(_:) and
          continuedOperations(of:in:) (D1).
       2. BinderLayout.swift: originContents, the new insertExtras(_:into:layout:contents:)
@@ -570,17 +588,18 @@ phases:
            message == nil.
          - "only added pages can be deleted": canDelete(.overview), canDelete(meeting),
            canDelete(.extra("zz")) are false; deletePage(.overview) == nil and the plan is unchanged.
-         - "deleting a page forgets its undo history": InMemoryBinderStore; let key =
-           session.addPage(after: meeting); session.setInk(Data([1]), on: meeting);
-           session.setInk(Data([2]), on: key); _ = session.deletePage(key); session.canRedo is
-           false; session.undo() == meeting; session.undo() == nil; try store.ink(on:
-           date)[key] == nil.
+         - "deleting a page forgets its undo history", in PR 9's "Binder session history" suite:
+           InMemoryBinderStore; let key = session.addPage(after: meeting); session.setInk(Data([1]),
+           on: meeting); session.setInk(Data([2]), on: key); #expect(session.undo() == key) (so the
+           redo stack holds key's change);
+           _ = session.deletePage(key); then session.canRedo is false; session.canUndo is true;
+           session.undo() == meeting; session.undo() == nil; session.ink[key] == nil; try
+           store.ink(on: date)[key] == nil.
          - "a failed save of a deletion leaves a message": session on
            FailingBinderStore(.unwritable, failing: [.saveDay]); let key = session.addPage(after:
            meeting); deletePage(key) == meeting; message == "Couldn't delete the page. Free some
            space on this device."
-         - Put these in the existing "Binder session" suite, not PR 9's "Binder session history"
-           suite. Add no API to the stores. Update the opening comment.
+         - Put the other three in the "Binder session" suite. Add no API to the stores. Update the opening comment.
       9. AppUITests/BinderUITests.swift:
          - draw(on:) becomes a vertical stroke from CGVector(dx: 0.5, dy: 0.4) to
            CGVector(dx: 0.5, dy: 0.7); doc comment "Draws a vertical stroke down the middle of
@@ -634,6 +653,8 @@ phases:
     brief: |
       Implement the plan's Design section D5 and the Start over strings in D7 exactly as written.
       Do not edit docs, CHANGELOG.md or ADRs; the last phase does.
+      While PR 9 is open, diff and run /dod against origin/claude/binder-undo-render-protection-tvtezf,
+      not origin/main (the plan's "Stacking on PR 9"); PR 9's own files are not this phase's.
       1. AgendaController.swift: add startOver() right after render() (D5).
       2. AgendaView.swift: the three ID constants, @State confirmsStartOver, the Start Over toolbar
          item before Render, and the alert on the NavigationSplitView (D5). Do not touch
@@ -718,6 +739,8 @@ phases:
       Implement the plan's Design section D6 exactly as written, on top of p1's BinderView. Undo
       and Redo dimming is PR 9's and is already on the branch; do not touch it. Do not edit docs,
       CHANGELOG.md or ADRs; the last phase does.
+      While PR 9 is open, diff and run /dod against origin/claude/binder-undo-render-protection-tvtezf,
+      not origin/main (the plan's "Stacking on PR 9"); PR 9's own files are not this phase's.
       1. AppCore/Sources/Binder/BinderTool.swift: add switched(backTo:) (D6).
       2. New App/Screens/PencilInteractionView.swift as written in D6. The Magenda target's
          sources are the whole App folder (project.yml), so project.yml does not change.
@@ -746,6 +769,7 @@ phases:
     touches:
       - docs/adr/0020-on-ipad-the-agenda-is-a-binder-of-native-pages-with-pencilkit-ink.md
       - docs/adr/0021-a-binder-day-is-stored-as-a-content-snapshot-and-ink-per-page-key.md
+      - docs/adr/0023-binder-undo-uses-a-handwriting-history-kept-by-the-session.md
       - docs/adr/0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md
       - docs/adr/0025-only-added-binder-pages-can-be-deleted.md
       - docs/adr/0026-start-over-is-separate-from-render.md
@@ -760,6 +784,8 @@ phases:
       are already on the branch), then delete this plan. Read the plan's
       Design and ADRs sections first. No project history anywhere (ADR 0008): no phase names, plan
       ids or bare issue numbers.
+      While PR 9 is open, diff and run /dod against origin/claude/binder-undo-render-protection-tvtezf,
+      not origin/main (the plan's "Stacking on PR 9"); PR 9's own files are not this phase's.
       1. ADRs, following the template and rules in docs/adr/README.md (one decision per ADR;
          Status, Context, Decision, Alternatives considered, Consequences, Verification with source
          and test files, Related). Status: "Accepted — <output of date +%F>. Implemented." plus
@@ -767,35 +793,40 @@ phases:
          - docs/adr/0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md: Amends ADR 0020.
            Decision from D3; alternatives from D3's "Rejected". Index row: "The binder shows one
            whole page per screen and pages turn with a horizontal swipe".
-         - docs/adr/0025-only-added-binder-pages-can-be-deleted.md: Amends ADR 0020. Decision from
-           D2 and D4 (including that a deleted page's undo history goes with it); alternatives from
-           D4's "Rejected"; Consequences: an added copy of a meeting
-           page is titled "cont. <title>", computed at layout time (D1), so neither adding nor
-           deleting pages changes the stored format. Index row: "Only pages added in the binder
-           can be deleted, with their handwriting, after a confirmation".
-         - docs/adr/0026-start-over-is-separate-from-render.md: Amends ADR 0021. Decision from D5
-           (Render keeps handwriting as before; Start over, on iPad, after a confirmation, removes
-           every stored ink key of the day, including keys no longer shown, saves a fresh day and
-           renders it; it is not in the Agenda menu); alternatives from D5's "Rejected". Index row:
-           "Render keeps a started day's handwriting; Start over is a separate, confirmed action
-           that deletes it and renders the day fresh".
-         - ADR 0020's and ADR 0021's Status already carry PR 9's "Amended by" lines; add these
-           below them. Add to ADR 0020's Status the lines
-           "Amended by [ADR 0024](0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md)."
-           and "Amended by [ADR 0025](0025-only-added-binder-pages-can-be-deleted.md).", and to ADR
-           0021's Status "Amended by [ADR 0026](0026-start-over-is-separate-from-render.md).".
-           Change nothing else in either.
+         - docs/adr/0025-only-added-binder-pages-can-be-deleted.md: Amends ADR 0020 and ADR
+           0023. Decision from D2 and D4 (including that a deleted page's undo history goes with
+           it); alternatives from D4's "Rejected"; Consequences: an added copy of a meeting page is
+           titled "cont. <title>", computed at layout time (D1), so neither adding nor deleting
+           pages changes the stored format. Index row: "Only pages added in the binder can be
+           deleted, with their handwriting and undo history, after a confirmation".
+         - docs/adr/0026-start-over-is-separate-from-render.md: Amends ADR 0021 and ADR 0023.
+           Decision from D5 (Render keeps handwriting as before; Start over, on iPad, after a
+           confirmation, removes every stored ink key of the day, including keys no longer shown,
+           saves a fresh day and renders it in a new session with an empty undo history; it is not
+           in the Agenda menu); alternatives from D5's "Rejected". Index row: "Render keeps a
+           started day's handwriting; Start over is a separate, confirmed action that deletes it
+           and renders the day fresh".
+         - ADR 0020's, 0021's and 0023's Status may already carry "Amended by" lines; add these
+           below any that are there, in the same "…: <reason>." form:
+           - ADR 0020: "Amended by [ADR 0024](0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md): pages turn sideways, one whole page per screen."
+             and "Amended by [ADR 0025](0025-only-added-binder-pages-can-be-deleted.md): added pages can be deleted."
+           - ADR 0021: "Amended by [ADR 0026](0026-start-over-is-separate-from-render.md): Start over deletes a day's handwriting and renders it fresh."
+           - ADR 0023: "Amended by [ADR 0025](0025-only-added-binder-pages-can-be-deleted.md): deleting a page removes its history."
+             and "Amended by [ADR 0026](0026-start-over-is-separate-from-render.md): Start over begins an empty history."
+           Change nothing else in those ADRs.
          - Add the three rows to docs/adr/README.md's index, after PR 9's 0022 and 0023 rows.
-         - Related in each: ADR 0020 or 0021, and ADR 0023 for 0025 (the undo history it trims).
+         - Related in each: the ADRs it amends.
       2. README.md "Binder (iPad)": pages are swiped left and right, one whole page at a time; the
          toolbar also has Delete page, which removes a page you added after asking; a page added
          after a meeting page is titled "cont." before the meeting's title; Render again keeps
          your handwriting on its pages, and Start over (in the agenda's toolbar, after asking)
          deletes all of the day's handwriting and added pages and renders it fresh; double-tapping
          (or squeezing) the Apple Pencil switches between the pen and the eraser. Keep PR 9's
-         sentences on undo and redo and on the locked device. Change "(ADR 0020, ADR 0021)" to
+         sentences on undo and redo and on the locked device, but change "scroll to the page they
+         change" to "go to the page they change". Change "(ADR 0020, ADR 0021)" to
          "(ADR 0020, ADR 0021, ADR 0024 to ADR 0026)"; keep "(ADR 0022)".
-      3. docs/release-testing.md: keep PR 9's "go to Notes, and Undo scrolls back" item; add "- [ ] On an iPad with an Apple Pencil, swipe between binder pages with a
+      3. docs/release-testing.md: in PR 9's "go to Notes, and Undo scrolls back to that page" item,
+         change "scrolls back" to "goes back"; add "- [ ] On an iPad with an Apple Pencil, swipe between binder pages with a
          finger while the Pencil writes, and no stroke turns into a swipe or a swipe into a stroke."
          and "- [ ] On an iPad with an Apple Pencil, double-tap (and, on a Pencil Pro, squeeze)
          the Pencil: a pen switches to the eraser and the eraser back to the pen used last."
@@ -812,8 +843,9 @@ phases:
            opened, and go to the page they change."
          - Keep PR 9's "can't be read while the device is locked" bullet as it is.
          - Add after the toolbar bullet: "Double-tap the Apple Pencil (or squeeze a Pencil Pro) to
-           switch between the pen and the eraser. Undo and Redo are greyed out when there is
-           nothing to undo or redo."
+           switch between the pen and the eraser." Add "Undo and Redo are greyed out when there is
+           nothing to undo or redo." to the same bullet only if no [Unreleased] line already says
+           so (PR 9 may add one).
          - Add after the "Rendering a day again keeps your handwriting…" bullet: "Start over, on a
            started day, deletes all of its handwriting and added pages after asking and renders it
            fresh."
@@ -825,7 +857,7 @@ phases:
       Start Over is in AgendaCommands.swift, or the stored format version changed).
     acceptance:
       - ls docs/adr/0024-*.md docs/adr/0025-*.md docs/adr/0026-*.md lists three files, each with "Accepted" in its Status
-      - grep -c "Amended by" docs/adr/0020-*.md prints 3 and grep -c "Amended by" docs/adr/0021-*.md prints 2 (PR 9's line plus this plan's)
+      - grep -c "Amended by" docs/adr/0020-*.md prints 3, docs/adr/0021-*.md prints 2 and docs/adr/0023-*.md prints 2 (PR 9's lines plus this plan's)
       - grep -n "0024\|0025\|0026" docs/adr/README.md shows three index rows
       - grep -n "Double-tap the Apple Pencil" CHANGELOG.md matches; grep -n "Start over" CHANGELOG.md README.md matches in both; grep -n "^## \[" CHANGELOG.md shows no heading that is not already on main
       - test ! -e docs/binder-paging-and-start-over-plan.md and test ! -e docs/binder-paging-and-start-over-plan-manual-steps.html and grep -rn "binder-paging-and-start-over-plan" --exclude-dir=.git . finds nothing

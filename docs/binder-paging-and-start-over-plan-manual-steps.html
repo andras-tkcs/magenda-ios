@@ -86,7 +86,7 @@ button { font: 600 .9rem var(--body); color: var(--accent); background: transpar
 
     <article class="item" data-item="ma1">
       <h3>1. Check swiping, the Pencil switch, Undo and Redo, and the new pages on a real iPad</h3>
-      <div class="meta"><span>About 30 minutes</span><span class="progress" aria-live="polite"></span></div>
+      <div class="meta"><span>About 35 minutes</span><span class="progress" aria-live="polite"></span></div>
       <ol class="steps">
         <li><label><input type="checkbox" id="ma1-s1"><span>On your Mac, check out the PR's branch <code>feature/binder-paging-and-start-over</code> and run <code>xcodegen generate &amp;&amp; open Magenda.xcodeproj</code>, as in <a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/binder-paging-and-start-over/CONTRIBUTING.md#running-from-source">CONTRIBUTING.md, Running from source</a>.<span class="see">Xcode opens the Magenda project.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s2"><span>In Xcode, select the <b>Magenda</b> target, open <b>Signing &amp; Capabilities</b>, and pick your team under <b>Team</b>.<span class="see">The signing error under Signing goes away.</span></span></label></li>
@@ -94,7 +94,7 @@ button { font: 600 .9rem var(--body); color: var(--accent); background: transpar
         <li><label><input type="checkbox" id="ma1-s4"><span>In Xcode, pick the iPad as the run destination and press Run (⌘R).<span class="see">Magenda installs and opens on the iPad.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s5"><span>On the iPad, open <b>Settings → Apple Pencil</b> and check that Double-tap (and Squeeze, on a Pencil Pro) is set to something other than <b>Off</b> or <b>Run Shortcut</b>.<span class="see">Magenda leaves those two settings alone.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s6"><span>In Magenda, pick a day with at least one meeting and tap <b>Render</b>.<span class="see">The binder opens showing one whole page, with nothing cut off at the bottom.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s7"><span>Before writing anything, look at Undo and Redo in the binder toolbar.<span class="see">Both are greyed out.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s7"><span>Before writing anything, look at Undo and Redo in the binder toolbar (they should still dim with the new paging).<span class="see">Both are greyed out.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s8"><span>Write a stroke with the Pencil.<span class="see">Undo works; Redo is still greyed out.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s9"><span>Tap <b>Undo</b>.<span class="see">The stroke goes away and Redo works.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s10"><span>Write a new stroke.<span class="see">Redo is greyed out again: a new stroke clears it.</span></span></label></li>
@@ -110,9 +110,13 @@ button { font: 600 .9rem var(--body); color: var(--accent); background: transpar
         <li><label><input type="checkbox" id="ma1-s20"><span>On an added page, tap the trash button, then <b>Cancel</b>.<span class="see">The alert asks “Delete this page?”; Cancel keeps the page.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s21"><span>Tap the trash button again, then <b>Delete</b>.<span class="see">The page is gone and the page before it is shown.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s22"><span>Tap <b>Overview</b>.<span class="see">The trash button is greyed out on the overview.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s26"><span>Write a stroke on the overview, then tap <b>Add page</b> and write a stroke on the new page.<span class="see">Both strokes stay on their pages.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s27"><span>On that added page, tap the trash button, then <b>Delete</b>.<span class="see">The added page is gone and the overview is shown.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s28"><span>Tap <b>Undo</b>.<span class="see">The overview's stroke goes away. The deleted page does not come back.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s23"><span>Write something on any page, then tap <b>Render</b> in the agenda's toolbar.<span class="see">Your handwriting stays on its page.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s24"><span>Tap <b>Start Over</b> in the agenda's toolbar, then <b>Cancel</b>.<span class="see">The alert warns that all your notes on this day will be deleted; Cancel changes nothing.</span></span></label></li>
         <li><label><input type="checkbox" id="ma1-s25"><span>Tap <b>Start Over</b> again, then <b>Start Over</b> in the alert.<span class="see">The day is rendered fresh, with no handwriting and no added pages.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s29"><span>Look at Undo and Redo.<span class="see">Both are greyed out: Start over also clears the undo history.</span></span></label></li>
       </ol>
       <div class="report">
         <p><b>Report back:</b> tick this item's box in the PR and paste this line as a comment, with any failing step numbers.</p>
@@ -125,7 +129,7 @@ button { font: 600 .9rem var(--body); color: var(--accent); background: transpar
 
 <script>
 (function () {
-  var KEY = "binder-ipad-check-v2";
+  var KEY = "binder-ipad-check-v3";
   var state = {};
   try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { state = {}; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
