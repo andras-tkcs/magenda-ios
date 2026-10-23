@@ -15,7 +15,9 @@ A check stays manual only when automation cannot reliably decide pass or fail:
 - a first-run permission prompt's wording, which iOS renders;
 - App Review and the App Store listing;
 - real Google sign-in and real account data, which CI has no account for (ADR 0013): sign in with
-  your own client, render a day and share it into Noteshelf;
+  your own client, render a day and share it (on iPad, from the binder);
+- handwriting with a real Apple Pencil on an iPad (pressure, palm rejection), which the simulator
+  does not have;
 - the comparison of the app's agenda with a binder built by the old Claude workflow while that
   workflow still runs.
 
@@ -47,3 +49,5 @@ supports it):
 - [ ] VoiceOver reads every changed control with a label that says what it does.
 - [ ] Any new permission prompt reads well, and declining it leaves the app usable.
 - [ ] App Store Connect's privacy answers still match what the app collects.
+- [ ] On an iPad with an Apple Pencil, write on a binder page, relaunch, and the handwriting is
+      still there.

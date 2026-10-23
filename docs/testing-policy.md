@@ -77,7 +77,8 @@ a GitHub-hosted job or a `pull_request` workflow, and that boundary gets an ADR.
 `LayoutAudit` checks every render plan for text outside its container or the page, overlapping
 text and bad links (ADR 0012). It runs in AppCore with a deterministic fake font over the
 long-text fixtures, and in `AppTests` with the real fonts. The binder rules are tested in AppCore
-against the `standard` fixture, with no network and no simulator.
+against the `standard` fixture, with no network and no simulator. Binder pages (added and
+retained pages) are audited in AppCore too (`BinderLayoutTests`).
 
 ## Layers 5–6: release archive and distribution
 
