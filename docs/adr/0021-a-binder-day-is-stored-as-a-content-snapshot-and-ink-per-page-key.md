@@ -6,6 +6,7 @@ Accepted — 2026-10-22. Implemented.
 Qualifies [ADR 0014](0014-agenda-inputs-come-live-from-google-calendar-and-google-tasks.md): a
 started day opens without a network connection.
 Amended by [ADR 0022](0022-binder-files-and-agenda-pdfs-are-written-with-complete-unless-open-protection.md): its files are written with complete-unless-open protection.
+Amended by [ADR 0026](0026-start-over-is-separate-from-render.md): Start over deletes a day's handwriting and renders it fresh.
 
 ## Context
 

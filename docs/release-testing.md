@@ -51,5 +51,9 @@ supports it):
 - [ ] App Store Connect's privacy answers still match what the app collects.
 - [ ] On an iPad with an Apple Pencil, write on a binder page, relaunch, and the handwriting is
       still there.
-- [ ] On an iPad with an Apple Pencil, draw on a page, go to Notes, and Undo scrolls back to
+- [ ] On an iPad with an Apple Pencil, draw on a page, go to Notes, and Undo goes back to
       that page and removes the stroke.
+- [ ] On an iPad with an Apple Pencil, swipe between binder pages with a finger while the Pencil
+      writes, and no stroke turns into a swipe or a swipe into a stroke.
+- [ ] On an iPad with an Apple Pencil, double-tap (and, on a Pencil Pro, squeeze) the Pencil: a pen
+      switches to the eraser and the eraser back to the pen used last.

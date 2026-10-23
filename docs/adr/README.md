@@ -131,3 +131,6 @@ until a later ADR supersedes it.
 | [0021](0021-a-binder-day-is-stored-as-a-content-snapshot-and-ink-per-page-key.md) | A binder day is stored as a content snapshot and ink per page key | Accepted |
 | [0022](0022-binder-files-and-agenda-pdfs-are-written-with-complete-unless-open-protection.md) | Binder files and agenda PDFs are written with complete-unless-open file protection | Accepted |
 | [0023](0023-binder-undo-uses-a-handwriting-history-kept-by-the-session.md) | Binder undo and redo use a handwriting history kept by the binder session, not PencilKit's undo manager | Accepted |
+| [0024](0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md) | The binder shows one whole page per screen and pages turn with a horizontal swipe | Accepted |
+| [0025](0025-only-added-binder-pages-can-be-deleted.md) | Only pages added in the binder can be deleted, with their handwriting and undo history, after a confirmation | Accepted |
+| [0026](0026-start-over-is-separate-from-render.md) | Render keeps a started day's handwriting; Start over is a separate, confirmed action that deletes it and renders the day fresh | Accepted |
