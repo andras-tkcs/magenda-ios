@@ -8,6 +8,8 @@
   * their combined line coverage is below OVERALL_FLOOR, or
   * any file in MODULE_FLOORS is below its own floor.
 
+A failing file is reported with the lines where its never-run regions begin.
+
 Only AppCore is ratcheted. The app target is a thin SwiftUI shell whose views are exercised by the
 UI tests rather than measured line by line; logic that needs a floor belongs in AppCore (ADR 0007).
 
@@ -77,9 +79,22 @@ def _relative(filename: str) -> str | None:
     return posix[index:] if index >= 0 else None
 
 
-def _load(report: dict) -> tuple[float | None, dict[str, float]]:
-    """Combined line coverage of AppCore's sources (None if there are none), and each file's."""
+def _zero_count_lines(entry: dict) -> list[int]:
+    """Lines where a region that never ran begins; empty if the report carries no segments."""
+    return sorted(
+        {
+            seg[0]
+            for seg in entry.get("segments", [])
+            if len(seg) >= 5 and seg[3] and seg[4] and seg[2] == 0 and not (len(seg) > 5 and seg[5])
+        }
+    )
+
+
+def _load(report: dict) -> tuple[float | None, dict[str, float], dict[str, list[int]]]:
+    """Combined line coverage of AppCore's sources (None if there are none), each file's, and the
+    lines where each file's never-run regions begin."""
     per_file: dict[str, float] = {}
+    zero_lines: dict[str, list[int]] = {}
     covered = total = 0
     for entry in report["data"][0]["files"]:
         rel = _relative(entry["filename"])
@@ -89,19 +104,30 @@ def _load(report: dict) -> tuple[float | None, dict[str, float]]:
         covered += lines["covered"]
         total += lines["count"]
         per_file[rel] = 100.0 if lines["count"] == 0 else 100.0 * lines["covered"] / lines["count"]
+        zero_lines[rel] = _zero_count_lines(entry)
     overall = None if not per_file else (100.0 if total == 0 else 100.0 * covered / total)
-    return overall, per_file
+    return overall, per_file, zero_lines
 
 
 def check(report: dict) -> list[str]:
     """Every floor that is not met, as a human-readable line. Empty means the gate passes."""
-    overall, per_file = _load(report)
+    overall, per_file, zero_lines = _load(report)
     if overall is None:
         return [f"the report has no files under {SOURCES} -- was it produced by `swift test` in AppCore?"]
     failures: list[str] = []
+
+    def where(path: str) -> str:
+        lines = zero_lines.get(path, [])
+        if not lines:
+            return ""
+        return f" (zero-count regions start at lines {', '.join(map(str, lines))})"
+
     print(f"AppCore line coverage: {overall:.2f}% (floor {OVERALL_FLOOR:.1f}%)")
     if overall < OVERALL_FLOOR:
         failures.append(f"AppCore line coverage {overall:.2f}% is below the {OVERALL_FLOOR:.1f}% floor")
+        for path in sorted(per_file):
+            if path.startswith(SOURCES) and path not in MODULE_FLOORS and per_file[path] < 100.0:
+                failures.append(f"{path} is at {per_file[path]:.2f}%{where(path)}")
     if MODULE_FLOORS:
         print("\nFile floors:")
     for path, floor in MODULE_FLOORS.items():
@@ -111,10 +137,11 @@ def check(report: dict) -> list[str]:
             print(f"  MISSING {path}")
             continue
         actual = per_file[path]
-        status = "ok  " if actual >= floor else "FAIL"
-        print(f"  {status} {path}: {actual:.2f}% (floor {floor:.1f}%)")
         if actual < floor:
-            failures.append(f"{path} coverage {actual:.2f}% is below its {floor:.1f}% floor")
+            print(f"  FAIL {path}: {actual:.2f}% (floor {floor:.1f}%){where(path)}")
+            failures.append(f"{path} coverage {actual:.2f}% is below its {floor:.1f}% floor{where(path)}")
+        else:
+            print(f"  ok   {path}: {actual:.2f}% (floor {floor:.1f}%)")
     return failures
 
 

@@ -142,17 +142,14 @@ class TestReleaseChannel(unittest.TestCase):
 
 
 class TestCoverageFloor(unittest.TestCase):
-    def _report(self, files: dict[str, tuple[int, int]]) -> dict:
-        return {
-            "data": [
-                {
-                    "files": [
-                        {"filename": name, "summary": {"lines": {"count": count, "covered": covered}}}
-                        for name, (covered, count) in files.items()
-                    ]
-                }
-            ]
-        }
+    def _report(self, files: dict[str, tuple[int, int]], segments: dict[str, list[list]] | None = None) -> dict:
+        entries = []
+        for name, (covered, count) in files.items():
+            entry: dict = {"filename": name, "summary": {"lines": {"count": count, "covered": covered}}}
+            if segments and name in segments:
+                entry["segments"] = segments[name]
+            entries.append(entry)
+        return {"data": [{"files": entries}]}
 
     def _check(self, report: dict, overall: float, modules: dict[str, float]) -> list[str]:
         with mock.patch.object(check_coverage_floor, "OVERALL_FLOOR", overall), mock.patch.object(
@@ -183,6 +180,39 @@ class TestCoverageFloor(unittest.TestCase):
         """A renamed file would otherwise keep a floor that protects nothing."""
         report = self._report({"/r/AppCore/Sources/A.swift": (1, 1)})
         self.assertTrue(self._check(report, 0.0, {"AppCore/Sources/Gone.swift": 50.0}))
+
+    def test_a_failing_file_names_its_zero_count_lines(self) -> None:
+        name = "/r/AppCore/Sources/A.swift"
+        segments = {
+            name: [
+                [10, 1, 5, True, True, False],
+                [298, 5, 0, True, True, False],
+                [300, 1, 0, True, True, True],
+                [305, 1, 0, True, False, False],
+            ]
+        }
+        report = self._report({name: (9, 10)}, segments)
+        failures = self._check(report, 0.0, {"AppCore/Sources/A.swift": 100.0})
+        self.assertEqual(len(failures), 1)
+        self.assertTrue(failures[0].endswith("(zero-count regions start at lines 298)"))
+        self.assertNotIn("300", failures[0])
+        self.assertNotIn("305", failures[0])
+
+    def test_a_failing_file_without_segments_fails_plainly(self) -> None:
+        report = self._report({"/r/AppCore/Sources/A.swift": (9, 10)})
+        failures = self._check(report, 0.0, {"AppCore/Sources/A.swift": 100.0})
+        self.assertEqual(len(failures), 1)
+        self.assertTrue(failures[0].endswith("floor"))
+        self.assertNotIn("zero-count", failures[0])
+
+    def test_an_overall_failure_names_unfloored_files_below_100(self) -> None:
+        b = "/r/AppCore/Sources/B.swift"
+        report = self._report(
+            {"/r/AppCore/Sources/A.swift": (10, 10), b: (1, 2)}, {b: [[7, 1, 0, True, True, False]]}
+        )
+        failures = self._check(report, 100.0, {})
+        self.assertIn("AppCore/Sources/B.swift is at 50.00% (zero-count regions start at lines 7)", failures)
+        self.assertFalse([f for f in failures if "A.swift" in f])
 
     def test_a_report_without_appcore_fails(self) -> None:
         self.assertTrue(self._check(self._report({"/r/Other.swift": (1, 1)}), 0.0, {}))
