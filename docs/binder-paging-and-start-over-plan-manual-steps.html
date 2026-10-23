@@ -86,20 +86,33 @@ button { font: 600 .9rem var(--body); color: var(--accent); background: transpar
 
     <article class="item" data-item="ma1">
       <h3>1. Check swiping, the Pencil switch, Undo and Redo, and the new pages on a real iPad</h3>
-      <div class="meta"><span>About 20 minutes</span><span class="progress" aria-live="polite"></span></div>
+      <div class="meta"><span>About 30 minutes</span><span class="progress" aria-live="polite"></span></div>
       <ol class="steps">
         <li><label><input type="checkbox" id="ma1-s1"><span>On your Mac, check out the PR's branch <code>feature/binder-paging-and-start-over</code> and run <code>xcodegen generate &amp;&amp; open Magenda.xcodeproj</code>, as in <a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/binder-paging-and-start-over/CONTRIBUTING.md#running-from-source">CONTRIBUTING.md, Running from source</a>.<span class="see">Xcode opens the Magenda project.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s2"><span>Connect the iPad, pick it as the run destination, and press Run (⌘R).<span class="see">Magenda opens on the iPad.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s3"><span>On the iPad, open <b>Settings → Apple Pencil</b> and check that Double-tap (and Squeeze, on a Pencil Pro) is set to anything other than <b>Off</b>.<span class="see">Off is the one setting Magenda leaves alone.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s4"><span>In Magenda, pick a day with at least one meeting and tap <b>Render</b>.<span class="see">The binder opens showing one whole page, with nothing cut off at the bottom.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s5"><span>Swipe left and right with a finger. Then write with the Pencil while you rest your palm on the screen.<span class="see">A finger swipe turns exactly one page. The Pencil only ever writes, and resting your palm never turns a page.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s6"><span>Tap Overview, Delegated tasks and Notes in the binder toolbar.<span class="see">Each one shows its whole page. Delegated tasks shows the first delegated page.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s7"><span>With a pen selected, double-tap the Pencil. Double-tap again. On a Pencil Pro, squeeze it too.<span class="see">The first double-tap highlights the eraser in the toolbar, and the next one goes back to the pen you used last. A squeeze does the same.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s8"><span>On a fresh page, look at Undo and Redo, then write a stroke, tap Undo, and tap Redo.<span class="see">Both buttons start greyed out. After the stroke, only Undo works. After Undo, Redo works. After Redo, Redo is greyed out again.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s9"><span>Go to a meeting page and tap <b>Add page</b> twice.<span class="see">Both new pages read <span class="mono">Meeting title: cont. &lt;meeting title&gt;</span>, and each one opens showing its whole page.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s10"><span>On one of the added pages, tap the trash button, tap <b>Cancel</b>, then tap it again and tap <b>Delete</b>. Then go to the overview.<span class="see">Cancel keeps the page; Delete removes it and shows the page before it. On the overview the trash button is greyed out.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s11"><span>Write something on a page. In the agenda's toolbar, tap <b>Start Over</b>, tap <b>Cancel</b>, then tap it again and tap <b>Start Over</b>.<span class="see">Cancel changes nothing. Start Over warns that all your notes on this day will be deleted, then shows the day freshly rendered, with no handwriting and no added pages.</span></span></label></li>
-        <li><label><input type="checkbox" id="ma1-s12"><span>Tap <b>Render</b> again after writing on a page.<span class="see">Your handwriting stays on its page. Only Start Over deletes notes.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s2"><span>In Xcode, select the <b>Magenda</b> target, open <b>Signing &amp; Capabilities</b>, and pick your team under <b>Team</b>.<span class="see">The signing error under Signing goes away.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s3"><span>Connect the iPad. The first time only, turn on <b>Settings → Privacy &amp; Security → Developer Mode</b> on the iPad and let it restart.<span class="see">After the restart the iPad asks you to confirm Developer Mode; confirm it.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s4"><span>In Xcode, pick the iPad as the run destination and press Run (⌘R).<span class="see">Magenda installs and opens on the iPad.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s5"><span>On the iPad, open <b>Settings → Apple Pencil</b> and check that Double-tap (and Squeeze, on a Pencil Pro) is set to something other than <b>Off</b> or <b>Run Shortcut</b>.<span class="see">Magenda leaves those two settings alone.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s6"><span>In Magenda, pick a day with at least one meeting and tap <b>Render</b>.<span class="see">The binder opens showing one whole page, with nothing cut off at the bottom.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s7"><span>Before writing anything, look at Undo and Redo in the binder toolbar.<span class="see">Both are greyed out.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s8"><span>Write a stroke with the Pencil.<span class="see">Undo works; Redo is still greyed out.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s9"><span>Tap <b>Undo</b>.<span class="see">The stroke goes away and Redo works.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s10"><span>Write a new stroke.<span class="see">Redo is greyed out again: a new stroke clears it.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s11"><span>Tap <b>Undo</b>, then <b>Redo</b>.<span class="see">The stroke comes back and Redo is greyed out.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s12"><span>Swipe left with a finger, then right.<span class="see">Each swipe turns exactly one page.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s13"><span>Write a line with the Pencil while resting your palm on the screen.<span class="see">The Pencil only writes; your palm never turns a page.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s14"><span>Tap <b>Overview</b>, then <b>Delegated tasks</b>, then <b>Notes</b> in the binder toolbar.<span class="see">Each shows its whole page; Delegated tasks shows the first delegated page.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s15"><span>With a pen selected, double-tap the Pencil.<span class="see">The eraser is highlighted in the toolbar, and no undo/redo palette appears.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s16"><span>Double-tap the Pencil again.<span class="see">The pen you used last is highlighted again.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s17"><span>On a Pencil Pro, squeeze the Pencil, then squeeze again. (Skip with another Pencil.)<span class="see">The first squeeze switches to the eraser and the second back to the pen; no undo/redo palette appears.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s18"><span>Go to a meeting page and tap <b>Add page</b>.<span class="see">A new page opens whole and reads <span class="mono">Meeting title: cont. &lt;meeting title&gt;</span>.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s19"><span>Tap <b>Add page</b> again.<span class="see">The second added page also reads <span class="mono">cont. &lt;meeting title&gt;</span>.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s20"><span>On an added page, tap the trash button, then <b>Cancel</b>.<span class="see">The alert asks “Delete this page?”; Cancel keeps the page.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s21"><span>Tap the trash button again, then <b>Delete</b>.<span class="see">The page is gone and the page before it is shown.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s22"><span>Tap <b>Overview</b>.<span class="see">The trash button is greyed out on the overview.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s23"><span>Write something on any page, then tap <b>Render</b> in the agenda's toolbar.<span class="see">Your handwriting stays on its page.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s24"><span>Tap <b>Start Over</b> in the agenda's toolbar, then <b>Cancel</b>.<span class="see">The alert warns that all your notes on this day will be deleted; Cancel changes nothing.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s25"><span>Tap <b>Start Over</b> again, then <b>Start Over</b> in the alert.<span class="see">The day is rendered fresh, with no handwriting and no added pages.</span></span></label></li>
       </ol>
       <div class="report">
         <p><b>Report back:</b> tick this item's box in the PR and paste this line as a comment, with any failing step numbers.</p>
@@ -112,7 +125,7 @@ button { font: 600 .9rem var(--body); color: var(--accent); background: transpar
 
 <script>
 (function () {
-  var KEY = "binder-ipad-check";
+  var KEY = "binder-ipad-check-v2";
   var state = {};
   try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { state = {}; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }

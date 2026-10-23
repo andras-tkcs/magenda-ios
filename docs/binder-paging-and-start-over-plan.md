@@ -24,8 +24,9 @@ Seven changes to the iPad binder, requested by the maintainer directly (there is
 
 ## Current state
 
-- Pencil and undo: nothing in `App/` adds a `UIPencilInteraction`, so double-tap and squeeze fall
-  to the system's default. `BinderView.swift:116-117` calls `editedCanvas?.undoManager?.undo()` /
+- Pencil and undo: nothing in `App/` adds a `UIPencilInteraction`. The undo/redo palette the
+  maintainer sees is most likely PencilKit's own compact palette over a canvas (on a Pencil Pro
+  squeeze); nothing in the binder handles double-tap or squeeze. `BinderView.swift:116-117` calls `editedCanvas?.undoManager?.undo()` /
   `.redo()`; the buttons (`BinderToolbar.swift`, `button("arrow.uturn.backward", …)` and
   `button("arrow.uturn.forward", …)`) are always enabled. A `PKCanvasView`'s `undoManager` is the
   window's, which posts `.NSUndoManagerDidUndoChange`, `.NSUndoManagerDidRedoChange` and
@@ -302,7 +303,7 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
 - While the render runs, the iPad detail shows the "No binder yet" placeholder, then the new
   binder. That is expected; do not keep the old session on screen.
 
-### D7. The Pencil switches between pen and eraser (`BinderTool.swift`, `PencilInteractionView.swift`, `BinderView.swift`)
+### D6. The Pencil switches between pen and eraser (`BinderTool.swift`, `PencilInteractionView.swift`, `BinderView.swift`)
 
 - `BinderTool` (AppCore):
   ```swift
@@ -321,7 +322,7 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
   import UIKit
 
   /// An empty view that reports the Apple Pencil's double-tap and squeeze, unless the person has
-  /// set them to do nothing in Settings.
+  /// set them to do nothing or to run a shortcut in Settings.
   struct PencilInteractionView: UIViewRepresentable {
       /// Called once per double-tap or completed squeeze.
       let onSwitch: () -> Void
@@ -351,7 +352,7 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
           func pencilInteraction(
               _ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap
           ) {
-              if UIPencilInteraction.preferredTapAction != .ignore {
+              if Self.switches(UIPencilInteraction.preferredTapAction) {
                   onSwitch()
               }
           }
@@ -360,23 +361,30 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
               _ interaction: UIPencilInteraction,
               didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze
           ) {
-              if squeeze.phase == .ended, UIPencilInteraction.preferredSqueezeAction != .ignore {
+              if squeeze.phase == .ended, Self.switches(UIPencilInteraction.preferredSqueezeAction) {
                   onSwitch()
               }
+          }
+
+          // The system runs a shortcut itself; the binder leaves that action, and "Off", alone.
+          private static func switches(_ action: UIPencilPreferredAction) -> Bool {
+              ![.ignore, .runSystemShortcut].contains(action)
           }
       }
   }
   ```
   It shows nothing, so its preview is `#Preview { PencilInteractionView(onSwitch: {}) }`.
-- `BinderView`: `@State private var lastPen = BinderPen.black`. Add
-  `.background(PencilInteractionView(onSwitch: { tool = tool.switched(backTo: lastPen) }))` to the
-  `ScrollView`, and `.onChange(of: tool) { if case .pen(let pen) = tool { lastPen = pen } }`.
-- Any preferred action other than "Ignore" switches pen and eraser: the binder has no color
+- `BinderView`: `@State private var lastPen = BinderPen.black`. In the modifier chain of the
+  `ScrollView`, right after `.scrollPosition(id: $visibleKey)` and before
+  `.accessibilityIdentifier(ID.binderView)`, add
+  `.background(PencilInteractionView(onSwitch: { tool = tool.switched(backTo: lastPen) }))` and
+  `.onChange(of: tool) { if case .pen(let pen) = tool { lastPen = pen } }`.
+- Any preferred action other than Off and Run Shortcut switches pen and eraser: the binder has no color
   palette or ink-attribute UI to show. Rejected: following each preferred action (the palettes it
   names do not exist in the binder); a Pencil-only gesture recognizer (double-tap and squeeze are
   only delivered through `UIPencilInteraction`).
 
-### D8. Undo and Redo are disabled when there is nothing to undo or redo (`BinderView.swift`, `BinderToolbar.swift`)
+### D7. Undo and Redo are disabled when there is nothing to undo or redo (`BinderView.swift`, `BinderToolbar.swift`)
 
 - `BinderToolbar`: declare `let canUndo: Bool` and `let canRedo: Bool` right after `let redo`, and
   add `.disabled(!canUndo)` / `.disabled(!canRedo)` to the Undo and Redo buttons. In `BinderView`'s
@@ -391,11 +399,13 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
   ```
   called from `.onReceive(NotificationCenter.default.publisher(for: .NSUndoManagerDidUndoChange))`,
   the same for `.NSUndoManagerDidRedoChange` and `.NSUndoManagerDidCloseUndoGroup` (each
-  `{ _ in refreshUndo() }`), and from `.onChange(of: lastEditedKey) { refreshUndo() }`.
-- A page whose canvas left the screen has no canvas, so both buttons are disabled until the person
-  writes again; that is expected.
+  `{ _ in refreshUndo() }`), and from `.onChange(of: lastEditedKey) { refreshUndo() }`. Put these
+  four modifiers in the same place as D6's, right after the `.onChange(of: tool)`.
+- The buttons keep their state while the page last written on is off screen, and refresh on the
+  next undo, redo or stroke. Do not add a refresh on `visibleKey`: at that moment the page's canvas
+  may not exist yet, which would disable Undo for a page the person swipes back to.
 
-### D6. Exact strings
+### D8. Exact strings
 
 - Title: `cont.` / `cont. <title>`.
 - Delete: toolbar label `Delete this page`; alert title `Delete this page?`; message
@@ -446,8 +456,19 @@ The last phase also adds the same checks to `docs/release-testing.md` for every 
   simulator; p4 builds them against the SDK and the real-iPad check covers them. If the app build
   fails on `UIPencilInteraction.Tap`/`.Squeeze` or `preferredSqueezeAction` (iOS 17.5 APIs; the
   deployment target is iOS 18), stop.
-- **Undo notifications.** If `testUndoAndRedoAreGreyedOutWhenThereIsNothingToDo` sees Redo stay
-  enabled after a new stroke, the window's undo manager is not the canvas's; stop.
+- **Undo notifications.** The design relies on PencilKit closing an undo group (posting
+  `.NSUndoManagerDidCloseUndoGroup`) for each stroke. If
+  `testUndoAndRedoAreGreyedOutWhenThereIsNothingToDo` sees Undo stay disabled or Redo stay enabled
+  after a stroke, p4 tries once also calling `refreshUndo()` from the `onInkChange` closure, on the
+  next run-loop turn (`DispatchQueue.main.async { refreshUndo() }`, after setting
+  `lastEditedKey`); if that fails too, it stops.
+- **PencilKit's own palette.** If, on the real iPad, PencilKit's undo/redo palette still appears
+  next to the pen/eraser switch, the maintainer records it in the PR as a follow-up; the design does
+  not change in this plan (no `PKCanvasView` API suppresses it).
+- **Pencil events on a background view.** Double-tap and squeeze are not hit-tested; they go to the
+  window's enabled interactions, so the background view should get them over the canvas. If the
+  real-iPad check shows no switch, the follow-up attaches the interaction to `BinderPageUIView`
+  instead.
 - **An unreadable ink index.** `ink(on:)` throwing `.unreadable` would show the "free some space"
   message, but `openStoredBinder` already fails on a damaged index and leaves `binder` nil, which
   hides Start over, so the case cannot arise from the UI.
@@ -470,7 +491,7 @@ verify_after_merge:
 final_checks:
   - docs/binder-paging-and-start-over-plan.md and docs/binder-paging-and-start-over-plan-manual-steps.html are deleted and nothing links to them
   - docs/adr/0022-*.md, docs/adr/0023-*.md and docs/adr/0024-*.md exist, are Accepted, and are in docs/adr/README.md's index
-  - CHANGELOG.md has [Unreleased] entries for paging, Delete page, cont. titles and Start over, and no new version heading
+  - CHANGELOG.md has [Unreleased] entries for paging, Delete page, cont. titles, the Apple Pencil switch, Undo/Redo greying and Start over, and no new version heading
   - BinderDay.formatVersion is still 1
 phases:
   - id: p1-binder-pages
@@ -490,7 +511,7 @@ phases:
       - AppCore/Tests/Binder/BinderSessionTests.swift
       - AppUITests/BinderUITests.swift
     brief: |
-      Implement the plan's Design sections D1, D2, D3, D4 and the strings in D6 exactly as written.
+      Implement the plan's Design sections D1, D2, D3, D4 and the strings in D8 exactly as written.
       Do not edit docs, CHANGELOG.md or ADRs; the last phase does.
       1. AgendaLayout.swift: extract meetingTitleRuns(_:), add continuedTitle(_:) and
          continuedOperations(of:in:) (D1).
@@ -592,7 +613,7 @@ phases:
       - App/Screens/AgendaView.swift
       - AppUITests/StartOverUITests.swift
     brief: |
-      Implement the plan's Design section D5 and the Start over strings in D6 exactly as written.
+      Implement the plan's Design section D5 and the Start over strings in D8 exactly as written.
       Do not edit docs, CHANGELOG.md or ADRs; the last phase does.
       1. AgendaController.swift: add startOver() right after render() (D5).
       2. AgendaView.swift: the three ID constants, @State confirmsStartOver, the Start Over toolbar
@@ -668,7 +689,7 @@ phases:
   - id: p4-pencil-and-undo
     title: The Pencil switches pen and eraser; Undo and Redo are disabled when there is nothing to do
     depends_on: [p1-binder-pages]
-    complexity: S
+    complexity: M
     touches:
       - AppCore/Sources/Binder/BinderTool.swift
       - AppCore/Tests/Binder/BinderToolTests.swift
@@ -677,14 +698,14 @@ phases:
       - App/Screens/BinderToolbar.swift
       - AppUITests/BinderUITests.swift
     brief: |
-      Implement the plan's Design sections D7 and D8 exactly as written, on top of p1's
+      Implement the plan's Design sections D6 and D7 exactly as written, on top of p1's
       BinderView and BinderToolbar. Do not edit docs, CHANGELOG.md or ADRs; the last phase does.
-      1. AppCore/Sources/Binder/BinderTool.swift: add switched(backTo:) (D7).
-      2. New App/Screens/PencilInteractionView.swift as written in D7. The Magenda target's
+      1. AppCore/Sources/Binder/BinderTool.swift: add switched(backTo:) (D6).
+      2. New App/Screens/PencilInteractionView.swift as written in D6. The Magenda target's
          sources are the whole App folder (project.yml), so project.yml does not change.
-      3. BinderView.swift: lastPen, the PencilInteractionView background and the onChange (D7);
-         canUndo, canRedo, refreshUndo() and its .onReceive/.onChange callers (D8).
-      4. BinderToolbar.swift: canUndo and canRedo after redo, and the .disabled modifiers (D8).
+      3. BinderView.swift: lastPen, the PencilInteractionView background and the onChange (D6);
+         canUndo, canRedo, refreshUndo() and its .onReceive/.onChange callers (D7).
+      4. BinderToolbar.swift: canUndo and canRedo after redo, and the .disabled modifiers (D7).
          Pass them from BinderView in that position.
       5. AppCore/Tests/Binder/BinderToolTests.swift: "The Pencil switches a pen to the eraser and
          the eraser back to the last pen", parameterized over every BinderPen: .pen(pen)
@@ -695,14 +716,17 @@ phases:
          launch "standard" with "-MagendaFingerDrawing"; render; undoButton and redoButton exist
          and isEnabled is false; draw on binderPage.0 and wait for "Handwritten"; wait (an
          XCTNSPredicateExpectation on "isEnabled == true", 10 s) for undoButton to be enabled;
-         redoButton.isEnabled is false; tap undoButton; wait for redoButton to be enabled; tap
+         redoButton.isEnabled is false; tap undoButton; wait for redoButton to be enabled; draw on
+         binderPage.0 again and wait for redoButton to be disabled (a new stroke clears Redo) and
+         undoButton to be enabled; tap undoButton; wait for redoButton to be enabled; tap
          redoButton; wait ("isEnabled == false") for redoButton to be disabled. Add a private
          helper waitForEnabled(_ element: XCUIElement, _ enabled: Bool) -> Bool for these waits.
          Update the file's opening comment.
       7. Push and dispatch tests.yml on the phase branch; read core, lint, scripts, app and ui.
       Stop with status=blocked if: the app build fails on a UIPencilInteraction API; Redo stays
-      enabled after a new stroke or Undo stays disabled after one; testUndoAndRedoAffectTheLastDrawing
-      fails; the coverage floor fails for a file outside touches.
+      enabled after a new stroke or Undo stays disabled after one, also after one try of the
+      fallback in the plan's Risks ("Undo notifications"); testUndoAndRedoAffectTheLastDrawing
+      fails; the tests seem to need a refresh on visibleKey (D7 says why not to add one); the coverage floor fails for a file outside touches.
     acceptance:
       - grep -n "func switched(backTo" AppCore/Sources/Binder/BinderTool.swift matches
       - grep -n "UIPencilInteraction(delegate" App/Screens/PencilInteractionView.swift matches; grep -n "PencilInteractionView(onSwitch" App/Screens/BinderView.swift matches
@@ -793,7 +817,7 @@ phases:
       - ls docs/adr/0022-*.md docs/adr/0023-*.md docs/adr/0024-*.md lists three files, each with "Accepted" in its Status
       - grep -c "Amended by" docs/adr/0020-*.md prints 2 and grep -c "Amended by" docs/adr/0021-*.md prints 1
       - grep -n "0022\|0023\|0024" docs/adr/README.md shows three index rows
-      - grep -n "Start over" CHANGELOG.md README.md matches in both; grep -n "^## \[" CHANGELOG.md shows no heading that is not already on main
+      - grep -n "Double-tap the Apple Pencil" CHANGELOG.md matches; grep -n "Start over" CHANGELOG.md README.md matches in both; grep -n "^## \[" CHANGELOG.md shows no heading that is not already on main
       - test ! -e docs/binder-paging-and-start-over-plan.md and test ! -e docs/binder-paging-and-start-over-plan-manual-steps.html and grep -rn "binder-paging-and-start-over-plan" --exclude-dir=.git . finds nothing
       - python3 -m unittest discover -s scripts/tests passes
 ```
