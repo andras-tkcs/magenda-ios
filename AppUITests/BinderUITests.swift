@@ -128,7 +128,7 @@ final class BinderUITests: XCTestCase {
         XCTAssertTrue(indicator.waitForExistence(timeout: 30), "the page indicator never appeared")
         var swipes = 0
         while indicator.label.hasPrefix("Page 1 of ") && swipes < 3 {
-            binder.swipeLeft()
+            binder.swipeLeft(velocity: .fast)
             swipes += 1
         }
         XCTAssertFalse(
