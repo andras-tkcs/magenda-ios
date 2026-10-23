@@ -33,9 +33,6 @@ struct BinderView: View {
     @State private var visibleKey: PageKey?
     @State private var tool = BinderTool.pen(.black)
     @State private var confirmsDelete = false
-    /// The page the scroll offset is at, and whether the scroll view is at rest.
-    @State private var offsetIndex = 0
-    @State private var scrollPhase = ScrollPhase.idle
 
     /// The position of the page on screen; the first page until it moves.
     private var visibleIndex: Int {
@@ -46,20 +43,6 @@ struct BinderView: View {
         withAnimation {
             visibleKey = key
         }
-    }
-
-    /// Makes the page the scroll view came to rest at the visible one. A swipe moves the offset
-    /// without `scrollPosition(id:)` reporting it, so the offset is read directly; while a scroll
-    /// is moving the visible page is left alone, so a jump to a page is not turned into the
-    /// pages it passes.
-    private func syncVisiblePage() {
-        let pages = binder.plan.pages
-        guard scrollPhase == .idle, pages.indices.contains(offsetIndex),
-            visibleKey != pages[offsetIndex].key
-        else {
-            return
-        }
-        visibleKey = pages[offsetIndex].key
     }
 
     /// Scrolls to the page an undo or redo changed, unless it is already the visible page or is not
@@ -130,17 +113,6 @@ struct BinderView: View {
         .scrollTargetBehavior(.paging)
         .scrollIndicators(.hidden)
         .scrollPosition(id: $visibleKey)
-        .onScrollGeometryChange(for: Int.self) { geometry in
-            geometry.containerSize.width > 0
-                ? Int((geometry.contentOffset.x / geometry.containerSize.width).rounded()) : 0
-        } action: { _, index in
-            offsetIndex = index
-            syncVisiblePage()
-        }
-        .onScrollPhaseChange { _, phase in
-            scrollPhase = phase
-            syncVisiblePage()
-        }
         .accessibilityIdentifier(ID.binderView)
         .background(Color(.secondarySystemBackground))
         .safeAreaInset(edge: .top, spacing: 0) {
