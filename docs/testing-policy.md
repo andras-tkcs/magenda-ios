@@ -46,7 +46,9 @@ and on dispatch. A 100% pass rate is required to merge.
 | `ui (<family>, <runtime>, <shard>)` (macOS), nine jobs | The same build, then one shard of the UI tests on the same three simulators: `edit-screen`, `settings`, and `rest` (every UI test class not in another shard, so a new class runs there) |
 
 The UI tests run as three parallel shards per device, so a failed shard is re-run on its own
-("Re-run failed jobs") instead of repeating every UI test.
+("Re-run failed jobs") instead of repeating every UI test. Each shard boots its simulator before
+the build and waits for the boot to finish before the first test: a device's first boot keeps the
+runner busy for minutes, and a UI test launched during it times out before its body runs.
 
 `scripts/simulator.py` chooses devices by family and runtime rather than by name, because names
 change with every Xcode. `oldest` means the oldest installed runtime at or above the deployment
