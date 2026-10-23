@@ -126,10 +126,16 @@ jobs:
           xcodegen generate
       - name: Pick a simulator
         run: echo "DESTINATION=$(python3 scripts/simulator.py --family "$FAMILY" --runtime "$RUNTIME")" >> "$GITHUB_ENV"
+      # A device's first boot keeps the runner busy for minutes, and UI tests started on it time out
+      # at launch. Booting it here lets that work overlap the build, and the tests wait for the boot.
+      - name: Boot the simulator
+        run: xcrun simctl boot "${DESTINATION#id=}"
       - name: Build for testing
         run: |
           xcodebuild build-for-testing -project Magenda.xcodeproj -scheme Magenda \
             -destination "$DESTINATION" -derivedDataPath build/DerivedData -quiet
+      - name: Wait for the simulator to finish booting
+        run: xcrun simctl bootstatus "${DESTINATION#id=}" -b
       - name: UI tests (100% pass rate required)
         run: |
           # SHARD_ARGS is deliberately unquoted: it is several -only-testing/-skip-testing words.
