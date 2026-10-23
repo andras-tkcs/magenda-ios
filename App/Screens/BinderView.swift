@@ -1,5 +1,4 @@
 import AppCore
-import PencilKit
 import SwiftUI
 
 /// The day's binder on iPad: its pages one under the other, each with a canvas to write on, the
@@ -30,24 +29,25 @@ struct BinderView: View {
 
     @State private var visibleKey: PageKey?
     @State private var tool = BinderTool.pen(.black)
-    @State private var registry = CanvasRegistry()
-    // The page last written or erased on, which undo and redo act on.
-    @State private var lastEditedKey: PageKey?
 
     /// The position of the page at the top of the scroll view; the first page until it scrolls.
     private var visibleIndex: Int {
         visibleKey.flatMap { binder.index(of: $0) } ?? 0
     }
 
-    /// The canvas of the page last drawn on, when it is on screen.
-    private var editedCanvas: PKCanvasView? {
-        lastEditedKey.flatMap { registry.canvas(for: $0) }
-    }
-
     private func scroll(to key: PageKey) {
         withAnimation {
             visibleKey = key
         }
+    }
+
+    /// Scrolls to the page an undo or redo changed, unless it is already the visible page or is not
+    /// shown.
+    private func reveal(_ key: PageKey?) {
+        guard let key, key != visibleKey, binder.index(of: key) != nil else {
+            return
+        }
+        scroll(to: key)
     }
 
     /// Adds a blank page after the one at the top of the screen and shows it.
@@ -78,17 +78,14 @@ struct BinderView: View {
                     BinderPageView(
                         page: page, pageWidth: plan.pageWidth, pageHeight: plan.pageHeight,
                         ink: binder.ink[page.key], allowsFingerDrawing: allowsFingerDrawing,
-                        tool: tool, registry: registry,
+                        tool: tool,
                         linkTarget: { plan.linkTarget(at: $0, onPage: index) },
                         onLinkTap: { target in
                             if plan.pages.indices.contains(target) {
                                 scroll(to: plan.pages[target].key)
                             }
                         },
-                        onInkChange: { data in
-                            lastEditedKey = page.key
-                            binder.setInk(data, on: page.key)
-                        }
+                        onInkChange: { data in binder.setInk(data, on: page.key) }
                     )
                     .aspectRatio(plan.pageWidth / plan.pageHeight, contentMode: .fit)
                     .accessibilityElement(children: .ignore)
@@ -110,11 +107,11 @@ struct BinderView: View {
                 BinderToolbar(
                     tool: $tool,
                     hasDelegatedPage: plan.pages.contains { $0.key == .delegated(0) },
+                    canUndo: binder.canUndo, canRedo: binder.canRedo,
                     goToOverview: { scroll(to: .overview) },
                     goToDelegated: { scroll(to: .delegated(0)) },
                     goToNotes: { scroll(to: .notes) },
-                    undo: { editedCanvas?.undoManager?.undo() },
-                    redo: { editedCanvas?.undoManager?.redo() },
+                    undo: { reveal(binder.undo()) }, redo: { reveal(binder.redo()) },
                     addPage: addPage)
                 if !plan.omittedTodoItems.isEmpty {
                     OmittedTasksBanner(tasks: plan.omittedTodoItems.map(\.text))
