@@ -2,7 +2,7 @@ import AppCore
 import SwiftUI
 
 /// The binder's controls in one scrolling row: go to a page, pick a pen or the eraser, undo and
-/// redo, and add a page.
+/// redo, and add or delete a page.
 struct BinderToolbar: View {
     @Binding var tool: BinderTool
     /// Whether the plan has a delegated-tasks page to go to.
@@ -15,6 +15,8 @@ struct BinderToolbar: View {
     let undo: () -> Void
     let redo: () -> Void
     let addPage: () -> Void
+    let canDeletePage: Bool
+    let deletePage: () -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -51,6 +53,10 @@ struct BinderToolbar: View {
                 button("doc.badge.plus", "Add page after this one", BinderView.ID.addPageButton) {
                     addPage()
                 }
+                button(
+                    "trash", "Delete this page", BinderView.ID.deletePageButton,
+                    isEnabled: canDeletePage
+                ) { deletePage() }
             }
             .padding(.horizontal)
             .padding(.vertical, 6)

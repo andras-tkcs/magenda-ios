@@ -124,9 +124,9 @@ public struct AgendaLayout: Sendable {
         return .meeting(hasID ? content.meetingIDs[index] : "#\(index)")
     }
 
-    private func meetingPage(title: String, key: PageKey) -> PagePlan {
-        let label = labelRuns(of: slots(on: "meeting_unit"))
-        let titleRuns = ["meeting.title"].compactMap { manifest.slot($0) }
+    /// The runs of a meeting page's title, ellipsized to fit the title slot.
+    func meetingTitleRuns(_ title: String) -> [TextRun] {
+        ["meeting.title"].compactMap { manifest.slot($0) }
             .flatMap { slot -> [TextRun] in
                 let box = paddedBox(of: slot)
                 return placer.place(
@@ -140,8 +140,37 @@ public struct AgendaLayout: Sendable {
                         x0: box.x0, y0: box.y0, x1: TemplateGeometry.meetingTitleRight, y1: box.y1),
                     alignment: .left)
             }
+    }
+
+    /// The text a continued meeting page shows as its title.
+    static func continuedTitle(_ title: String) -> String {
+        title.isEmpty ? "cont." : "cont. \(title)"
+    }
+
+    /// `page`'s operations with its meeting title replaced by the continued title, when `page` is a
+    /// meeting page laid out from `content`; otherwise its operations unchanged.
+    func continuedOperations(of page: PagePlan, in content: AgendaContent) -> [DrawOperation] {
+        guard page.chrome == .meeting,
+            let index = meetingTitles(of: content).indices.first(where: {
+                meetingKey(at: $0, in: content) == page.key
+            })
+        else {
+            return page.operations
+        }
+        let title = meetingTitles(of: content)[index]
+        // A meeting page's operations start with its label runs, then its title runs.
+        let start = labelRuns(of: slots(on: "meeting_unit")).count
+        let end = start + meetingTitleRuns(title).count
+        return Array(page.operations[..<start])
+            + meetingTitleRuns(Self.continuedTitle(title)).map { .text($0) }
+            + page.operations[end...]
+    }
+
+    private func meetingPage(title: String, key: PageKey) -> PagePlan {
+        let label = labelRuns(of: slots(on: "meeting_unit"))
         return PagePlan(
-            key: key, chrome: .meeting, operations: (label + titleRuns).map { .text($0) })
+            key: key, chrome: .meeting,
+            operations: (label + meetingTitleRuns(title)).map { .text($0) })
     }
 
     private func furtherNotesPage() -> PagePlan {

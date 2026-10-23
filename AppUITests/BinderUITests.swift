@@ -1,5 +1,6 @@
-// The binder on iPad: its pages, the page indicator, the pen, eraser, undo and page buttons,
-// handwriting kept with its day and across a relaunch, and the omitted-tasks banner.
+// The binder on iPad: its pages, swiping between them and deleting added ones, the page
+// indicator, the pen, eraser, undo and page buttons, handwriting kept with its day and across a
+// relaunch, and the omitted-tasks banner.
 //
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `AgendaView.ID` and
 // `BinderView.ID`, never by their visible text; a page's value says whether it carries ink.
@@ -33,11 +34,11 @@ final class BinderUITests: XCTestCase {
             element(app, "binderView").waitForExistence(timeout: 30), "the binder never appeared")
     }
 
-    /// Draws a horizontal stroke across the middle of `page` with a finger.
+    /// Draws a vertical stroke down the middle of `page` with a finger.
     @MainActor
     private func draw(on page: XCUIElement) {
-        let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.6))
-        let end = page.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6))
+        let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        let end = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
         start.press(forDuration: 0.1, thenDragTo: end)
     }
 
@@ -117,7 +118,7 @@ final class BinderUITests: XCTestCase {
     }
 
     @MainActor
-    func testAFingerScrollsTheBinder() throws {
+    func testAFingerSwipesToTheNextPage() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
         let app = launch("overflow")
         render(app)
@@ -127,12 +128,12 @@ final class BinderUITests: XCTestCase {
         XCTAssertTrue(indicator.waitForExistence(timeout: 30), "the page indicator never appeared")
         var swipes = 0
         while indicator.label.hasPrefix("Page 1 of ") && swipes < 3 {
-            binder.swipeUp()
+            binder.swipeLeft()
             swipes += 1
         }
         XCTAssertFalse(
             indicator.label.hasPrefix("Page 1 of "),
-            "a finger did not scroll the binder: the indicator still says \(indicator.label)")
+            "a finger did not turn the page: the indicator still says \(indicator.label)")
     }
 
     @MainActor
@@ -196,12 +197,9 @@ final class BinderUITests: XCTestCase {
             "the page indicator says \(atOverview) after Overview")
     }
 
+    /// Taps Add page and returns the page count once the new page is there.
     @MainActor
-    func testAddPageAddsAPageAfterTheCurrentOne() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch("standard")
-        render(app)
-
+    private func addPage(_ app: XCUIApplication) -> Int {
         let indicator = element(app, "binderPageIndicator")
         XCTAssertTrue(indicator.waitForExistence(timeout: 30), "the page indicator never appeared")
         let before = indicator.label
@@ -221,8 +219,71 @@ final class BinderUITests: XCTestCase {
                 after = waitForIndicator(app, matching: "Page 2 of \(total)")
             }
         }
+        return total
+    }
+
+    @MainActor
+    func testAddPageAddsAPageAfterTheCurrentOne() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard")
+        render(app)
+
+        let total = addPage(app)
+        let after = waitForIndicator(app, matching: "Page 2 of \(total)")
         let expected = "Page 2 of \(total)"
-        XCTAssertEqual(after, expected, "the page indicator says \(after) after \(taps) taps")
+        XCTAssertEqual(after, expected, "the page indicator says \(after)")
+    }
+
+    @MainActor
+    func testAPageIsShownWhole() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard")
+        render(app)
+
+        let binder = element(app, "binderView")
+        let page = element(app, "binderPage.0")
+        XCTAssertTrue(page.waitForExistence(timeout: 30), "the first page never appeared")
+        XCTAssertTrue(
+            binder.frame.contains(page.frame),
+            "the page \(page.frame) is not inside the binder \(binder.frame)")
+        XCTAssertGreaterThanOrEqual(
+            page.frame.minY, element(app, "binderOverviewButton").frame.maxY,
+            "the page sits under the toolbar")
+    }
+
+    @MainActor
+    func testDeletingAnAddedPageAsksFirst() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard")
+        render(app)
+
+        let total = addPage(app)
+        let delete = element(app, "deletePageButton")
+        XCTAssertTrue(delete.waitForExistence(timeout: 30), "the Delete button never appeared")
+        XCTAssertTrue(delete.isEnabled, "Delete is disabled on an added page")
+
+        delete.tap()
+        tapButton(app, "cancelDeletePageButton")
+        XCTAssertEqual(
+            waitForIndicator(app, matching: "Page 2 of \(total)"), "Page 2 of \(total)",
+            "cancelling deleted the page")
+
+        delete.tap()
+        tapButton(app, "confirmDeletePageButton")
+        XCTAssertEqual(
+            waitForIndicator(app, matching: "Page 1 of \(total - 1)"), "Page 1 of \(total - 1)",
+            "confirming did not delete the page")
+    }
+
+    @MainActor
+    func testDeletingIsDisabledOnAPrintedPage() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch("standard")
+        render(app)
+
+        let delete = element(app, "deletePageButton")
+        XCTAssertTrue(delete.waitForExistence(timeout: 30), "the Delete button never appeared")
+        XCTAssertFalse(delete.isEnabled, "Delete is enabled on a printed page")
     }
 
     @MainActor

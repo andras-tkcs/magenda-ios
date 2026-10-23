@@ -1,5 +1,6 @@
 // AppCore's `BinderLayout`: composing the content's, retained and added pages, remapping links,
-// and rebasing a day onto new content, measured with `FakeTextMeasurer`.
+// titling an added copy of a meeting page as continued, and rebasing a day onto new content,
+// measured with `FakeTextMeasurer`.
 
 import Testing
 
@@ -81,8 +82,55 @@ struct BinderLayoutTests {
         let plan = layout.plan(for: day)
         #expect(keys(plan) == [.overview, .meeting("a"), .extra("x"), .meeting("b"), .notes])
         #expect(plan.pages[2].chrome == plan.pages[1].chrome)
-        #expect(plan.pages[2].operations == plan.pages[1].operations)
+        #expect(texts(plan.pages[2]).contains("cont. A"))
+        #expect(!texts(plan.pages[2]).contains("A"))
+        #expect(texts(plan.pages[1]).contains("A"))
         #expect(targets(plan.pages[2]) == [0, 4])
+    }
+
+    @Test("Every added copy of a meeting page is titled as continued")
+    func everyCopyIsContinued() {
+        var day = binder()
+        day.addPage(after: .meeting("a"), id: "x")
+        day.addPage(after: .extra("x"), id: "y")
+        let plan = layout.plan(for: day)
+        #expect(keys(plan).prefix(4) == [.overview, .meeting("a"), .extra("x"), .extra("y")])
+        #expect(texts(plan.pages[2]).contains("cont. A"))
+        #expect(texts(plan.pages[3]).contains("cont. A"))
+    }
+
+    @Test("An added copy of the blank meeting page is titled cont.")
+    func blankMeetingCopy() throws {
+        var day = binder(content([]))
+        day.addPage(after: .meeting(""), id: "x")
+        let plan = layout.plan(for: day)
+        let page = try #require(plan.pages.first { $0.key == .extra("x") })
+        let words = texts(page)
+        let label = try #require(words.firstIndex(of: "Meeting title:"))
+        #expect(words.contains("cont."))
+        #expect(words.firstIndex(of: "cont.") == label + 1)
+    }
+
+    @Test("An added copy of a retained meeting page is titled from its own content")
+    func retainedMeetingCopy() throws {
+        var day = binder(retained: [RetainedPage(key: .meeting("gone"), content: content(["gone"]))])
+        day.addPage(after: .meeting("gone"), id: "x")
+        let plan = layout.plan(for: day)
+        let page = try #require(plan.pages.first { $0.key == .extra("x") })
+        #expect(texts(page).contains("cont. GONE"))
+    }
+
+    @Test("Added copies of other pages keep their text")
+    func otherCopiesKeepText() throws {
+        var day = binder()
+        day.addPage(after: .overview, id: "o")
+        day.addPage(after: .notes, id: "n")
+        let plan = layout.plan(for: day)
+        for (extra, source) in [(PageKey.extra("o"), PageKey.overview), (.extra("n"), .notes)] {
+            let copy = try #require(plan.pages.first { $0.key == extra })
+            let original = try #require(plan.pages.first { $0.key == source })
+            #expect(texts(copy) == texts(original))
+        }
     }
 
     @Test("Schedule links point at the right meeting after pages were added before it")
@@ -170,8 +218,11 @@ struct BinderLayoutTests {
                 retained: [RetainedPage(key: .meeting("gone"), content: content(["gone"]))])
             bound.addPage(after: base[1], id: "e1")
             bound.addPage(after: .notes, id: "e2")
+            let meeting = try #require(
+                base.first { if case .meeting = $0 { true } else { false } })
+            bound.addPage(after: meeting, id: "e3")
             let plan = layout.plan(for: bound)
-            #expect(plan.pages.count == base.count + 3)
+            #expect(plan.pages.count == base.count + 4)
             #expect(LayoutAudit.violations(in: plan) == [])
         }
     }

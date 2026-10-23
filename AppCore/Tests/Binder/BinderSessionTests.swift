@@ -1,5 +1,5 @@
 // AppCore's `BinderSession`: saving handwriting as it changes, adding pages, undoing and redoing
-// handwriting, and reporting what could not be saved.
+// handwriting, deleting added pages, and reporting what could not be saved.
 
 import Foundation
 import Testing
@@ -110,6 +110,39 @@ struct BinderSessionTests {
         let key = session.addPage(after: .overview)
         #expect(session.index(of: key) == 1)
         #expect(session.message == "Couldn't save the new page. Free some space on this device.")
+    }
+
+    @Test("a deleted page goes with its handwriting, and the page before it is shown")
+    func deletePage() throws {
+        let store = InMemoryBinderStore()
+        let session = makeSession(store)
+        let key = session.addPage(after: meeting)
+        session.setInk(Data([1]), on: key)
+        #expect(session.deletePage(key) == meeting)
+        #expect(session.index(of: key) == nil)
+        #expect(session.ink[key] == nil)
+        #expect(try store.day(date)?.extras == [])
+        #expect(try store.ink(on: date)[key] == nil)
+        #expect(session.message == nil)
+    }
+
+    @Test("only added pages can be deleted")
+    func onlyAddedPagesCanBeDeleted() {
+        let session = makeSession(InMemoryBinderStore())
+        let before = session.plan
+        #expect(!session.canDelete(.overview))
+        #expect(!session.canDelete(meeting))
+        #expect(!session.canDelete(.extra("zz")))
+        #expect(session.deletePage(.overview) == nil)
+        #expect(session.plan == before)
+    }
+
+    @Test("a failed save of a deletion leaves a message")
+    func deletePageFails() {
+        let session = makeSession(FailingBinderStore(.unwritable, failing: [.saveDay]))
+        let key = session.addPage(after: meeting)
+        #expect(session.deletePage(key) == meeting)
+        #expect(session.message == "Couldn't delete the page. Free some space on this device.")
     }
 
     @Test("index finds a shown page and nothing else")
@@ -229,5 +262,22 @@ struct BinderSessionHistoryTests {
         session.setInk(Data([1]), on: meeting)
         _ = session.addPage(after: .overview)
         #expect(session.undo() == meeting)
+    }
+
+    @Test("deleting a page forgets its undo history")
+    func deletePageForgetsHistory() throws {
+        let store = InMemoryBinderStore()
+        let session = makeSession(store)
+        let key = session.addPage(after: meeting)
+        session.setInk(Data([1]), on: meeting)
+        session.setInk(Data([2]), on: key)
+        #expect(session.undo() == key)
+        _ = session.deletePage(key)
+        #expect(!session.canRedo)
+        #expect(session.canUndo)
+        #expect(session.undo() == meeting)
+        #expect(session.undo() == nil)
+        #expect(session.ink[key] == nil)
+        #expect(try store.ink(on: date)[key] == nil)
     }
 }

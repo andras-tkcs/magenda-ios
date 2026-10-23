@@ -97,4 +97,16 @@ public struct BinderDay: Equatable, Codable, Sendable {
         }
         extras.append(ExtraPage(id: id, after: page, source: source))
     }
+
+    /// Removes the added page `id`; pages that followed it follow the page it followed. Nothing
+    /// happens when there is no such page.
+    public mutating func removePage(id: String) {
+        guard let removed = extras.first(where: { $0.id == id }) else {
+            return
+        }
+        for index in extras.indices where extras[index].after == .extra(id) {
+            extras[index].after = removed.after
+        }
+        extras.removeAll { $0.id == id }
+    }
 }
