@@ -32,6 +32,7 @@ struct BinderView: View {
 
     @State private var visibleKey: PageKey?
     @State private var tool = BinderTool.pen(.black)
+    @State private var lastPen = BinderPen.black
     @State private var confirmsDelete = false
 
     /// The position of the page on screen; the first page until it moves.
@@ -177,6 +178,12 @@ struct BinderView: View {
         .scrollTargetBehavior(.paging)
         .scrollIndicators(.hidden)
         .scrollPosition(id: $visibleKey)
+        .background(PencilInteractionView(onSwitch: { tool = tool.switched(backTo: lastPen) }))
+        .onChange(of: tool) {
+            if case .pen(let pen) = tool {
+                lastPen = pen
+            }
+        }
         .accessibilityIdentifier(ID.binderView)
     }
 
