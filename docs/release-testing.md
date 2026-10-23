@@ -51,3 +51,5 @@ supports it):
 - [ ] App Store Connect's privacy answers still match what the app collects.
 - [ ] On an iPad with an Apple Pencil, write on a binder page, relaunch, and the handwriting is
       still there.
+- [ ] On an iPad with an Apple Pencil, draw on a page, scroll it off screen and back, and Undo
+      removes that stroke.

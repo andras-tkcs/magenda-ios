@@ -193,6 +193,7 @@ struct AgendaView: View {
         if UIDevice.current.userInterfaceIdiom == .pad {
             if let binder = controller.binder {
                 BinderView(binder: binder)
+                    .id(ObjectIdentifier(binder))
             } else {
                 ContentUnavailableView(
                     "No binder yet", systemImage: "doc.richtext",
