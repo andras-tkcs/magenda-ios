@@ -1,5 +1,5 @@
 // AppCore's agenda controller and the binder: opening a stored day, saving one at Render, keeping
-// handwriting across renders, and exporting.
+// handwriting across renders, starting over, and exporting.
 
 import Foundation
 import Testing
@@ -284,6 +284,75 @@ struct AgendaControllerBinderTests {
         #expect(binder.index(of: .meeting("a")) != nil)
         #expect(binder.ink[.meeting("a")] == Data([7]))
         #expect(saved == binder.day)
+    }
+
+    @Test("starting over deletes the handwriting and added pages and renders a fresh day")
+    func startOverRendersFresh() async throws {
+        let context = try await started(.standard)
+        await context.controller.render()
+        let binder = try #require(context.controller.binder)
+        binder.setInk(Data([1]), on: .overview)
+        _ = binder.addPage(after: .overview)
+        try context.binderStore.saveInk(Data([2]), for: .meeting("gone"), on: wednesday)
+        await context.controller.startOver()
+        let fresh = try #require(context.controller.binder)
+        #expect(fresh !== binder)
+        #expect(fresh.ink.isEmpty)
+        #expect(fresh.day.extras.isEmpty)
+        #expect(fresh.day.retained.isEmpty)
+        #expect(try context.binderStore.ink(on: wednesday).isEmpty)
+        #expect(try context.binderStore.day(wednesday) == fresh.day)
+        #expect(fresh.plan.pages.map(\.key) == (try baseKeys(context.controller)))
+        #expect(context.controller.message == nil)
+    }
+
+    @Test("a start over overtaken by a load still leaves a fresh day")
+    func startOverOvertaken() async throws {
+        let store = InMemoryBinderStore()
+        var day = storedDay("2026-09-30")
+        day.addPage(after: .overview, id: "x")
+        try store.saveDay(day)
+        try store.saveInk(Data([1]), for: .extra("x"), on: wednesday)
+        let gated = GatedRenderer()
+        let context = try make(rendering: gated, binderStore: store)
+        await context.controller.start()
+        let starting = Task { await context.controller.startOver() }
+        await gated.waitUntilBlocked()
+        await context.controller.goToNextWorkingDay()
+        await gated.release()
+        await starting.value
+        let saved = try #require(try store.day(wednesday))
+        #expect(saved.extras.isEmpty)
+        #expect(saved.retained.isEmpty)
+        #expect(try store.ink(on: wednesday).isEmpty)
+    }
+
+    @Test("start over without a draft does nothing")
+    func startOverWithoutDraft() async throws {
+        let context = try make()
+        try context.binderStore.saveInk(Data([1]), for: .overview, on: wednesday)
+        await context.controller.startOver()
+        #expect(context.controller.binder == nil)
+        #expect(try context.binderStore.ink(on: wednesday) == [.overview: Data([1])])
+        #expect(try context.binderStore.day(wednesday) == nil)
+    }
+
+    @Test("a failed delete of the handwriting leaves the binder and a message")
+    func startOverFails() async throws {
+        let store = FailingBinderStore(.unwritable, failing: [])
+        let context = try make(binderStore: store)
+        await context.controller.start()
+        await context.controller.render()
+        let binder = try #require(context.controller.binder)
+        binder.setInk(Data([1]), on: .overview)
+        store.setFailing([.saveInk])
+        await context.controller.startOver()
+        #expect(context.controller.binder === binder)
+        #expect(binder.ink == [.overview: Data([1])])
+        #expect(
+            context.controller.message
+                == "Couldn't delete this day's handwriting. Free some space on this device and try again."
+        )
     }
 
     @Test("without an injected ID source, added pages still get distinct IDs")
