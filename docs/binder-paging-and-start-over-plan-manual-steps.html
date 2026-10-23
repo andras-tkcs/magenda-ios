@@ -1,0 +1,145 @@
+<title>Binder iPad Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: one narrow column like a ruled binder sheet; each check is a card with a margin rule on the left. */
+:root {
+  --paper: #fbfaf7;
+  --ink: #1d2230;
+  --muted: #5d6475;
+  --rule: #d9dbe3;
+  --accent: #1f5fd1;
+  --margin: #d12f2f;
+  --done: #1e8c45;
+  --card: #ffffff;
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14161c; --ink: #e8e9ee; --muted: #a0a6b6; --rule: #2c303b;
+    --accent: #7aa5f5; --margin: #f07a7a; --done: #5cc985; --card: #1b1e26;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #14161c; --ink: #e8e9ee; --muted: #a0a6b6; --rule: #2c303b;
+  --accent: #7aa5f5; --margin: #f07a7a; --done: #5cc985; --card: #1b1e26;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font: 16px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 720px; margin: 0 auto; display: grid; gap: 28px; }
+h1 { font: 650 2rem/1.15 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 650 1.35rem/1.2 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 600 1.05rem/1.3 var(--body); margin: 0; }
+p { margin: 0; max-width: 65ch; }
+.lede { color: var(--muted); }
+.eyebrow { font: 600 .75rem/1 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.part { display: grid; gap: 14px; }
+.none { color: var(--muted); border-left: 3px solid var(--rule); padding-left: 12px; }
+.item {
+  background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+  padding: 18px 18px 18px 22px; display: grid; gap: 12px; position: relative;
+}
+.item::before { content: ""; position: absolute; left: 10px; top: 14px; bottom: 14px; width: 2px; background: var(--margin); opacity: .55; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: .9rem; }
+.progress { font-variant-numeric: tabular-nums; }
+ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 10px; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+ol.steps label { display: grid; grid-template-columns: auto 1fr; gap: 10px; cursor: pointer; min-width: 0; }
+ol.steps label > span::before { content: counter(step) ". "; font-weight: 600; color: var(--accent); }
+input[type="checkbox"] { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--done); }
+li.checked label > span { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--rule); }
+.see { display: block; color: var(--muted); font-size: .92rem; margin-top: 2px; }
+code, .mono { font-family: var(--mono); font-size: .88em; background: color-mix(in srgb, var(--rule) 45%, transparent); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { margin: 0; overflow-x: auto; background: color-mix(in srgb, var(--rule) 40%, transparent); padding: 10px 12px; border-radius: 6px; font: 13px/1.5 var(--mono); }
+a { color: var(--accent); }
+a:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.report { display: grid; gap: 8px; border-top: 1px dashed var(--rule); padding-top: 12px; }
+.report pre { white-space: pre-wrap; }
+button { font: 600 .9rem var(--body); color: var(--accent); background: transparent; border: 1px solid var(--accent); border-radius: 6px; padding: 6px 12px; cursor: pointer; justify-self: start; }
+@media (prefers-reduced-motion: no-preference) { li label > span { transition: color .15s; } }
+</style>
+
+<main>
+  <header class="part">
+    <span class="eyebrow">Magenda · iPad binder</span>
+    <h1>Binder iPad check</h1>
+    <p class="lede">The simulator has no Apple Pencil, so these checks need your iPad and Pencil. Do them once the feature PR is ready to merge. Your ticks are saved in this browser.</p>
+  </header>
+
+  <section class="part" aria-labelledby="before">
+    <h2 id="before">Before implementation</h2>
+    <p class="none">Nothing to do. Run <code>/implement</code> on the plan straight away.</p>
+  </section>
+
+  <section class="part" aria-labelledby="after">
+    <h2 id="after">After implementation</h2>
+
+    <article class="item" data-item="ma1">
+      <h3>1. Check swiping, the Pencil switch, Undo and Redo, and the new pages on a real iPad</h3>
+      <div class="meta"><span>About 20 minutes</span><span class="progress" aria-live="polite"></span></div>
+      <ol class="steps">
+        <li><label><input type="checkbox" id="ma1-s1"><span>On your Mac, check out the PR's branch <code>feature/binder-paging-and-start-over</code> and run <code>xcodegen generate &amp;&amp; open Magenda.xcodeproj</code>, as in <a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/binder-paging-and-start-over/CONTRIBUTING.md#running-from-source">CONTRIBUTING.md, Running from source</a>.<span class="see">Xcode opens the Magenda project.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s2"><span>Connect the iPad, pick it as the run destination, and press Run (⌘R).<span class="see">Magenda opens on the iPad.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s3"><span>On the iPad, open <b>Settings → Apple Pencil</b> and check that Double-tap (and Squeeze, on a Pencil Pro) is set to anything other than <b>Off</b>.<span class="see">Off is the one setting Magenda leaves alone.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s4"><span>In Magenda, pick a day with at least one meeting and tap <b>Render</b>.<span class="see">The binder opens showing one whole page, with nothing cut off at the bottom.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s5"><span>Swipe left and right with a finger. Then write with the Pencil while you rest your palm on the screen.<span class="see">A finger swipe turns exactly one page. The Pencil only ever writes, and resting your palm never turns a page.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s6"><span>Tap Overview, Delegated tasks and Notes in the binder toolbar.<span class="see">Each one shows its whole page. Delegated tasks shows the first delegated page.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s7"><span>With a pen selected, double-tap the Pencil. Double-tap again. On a Pencil Pro, squeeze it too.<span class="see">The first double-tap highlights the eraser in the toolbar, and the next one goes back to the pen you used last. A squeeze does the same.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s8"><span>On a fresh page, look at Undo and Redo, then write a stroke, tap Undo, and tap Redo.<span class="see">Both buttons start greyed out. After the stroke, only Undo works. After Undo, Redo works. After Redo, Redo is greyed out again.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s9"><span>Go to a meeting page and tap <b>Add page</b> twice.<span class="see">Both new pages read <span class="mono">Meeting title: cont. &lt;meeting title&gt;</span>, and each one opens showing its whole page.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s10"><span>On one of the added pages, tap the trash button, tap <b>Cancel</b>, then tap it again and tap <b>Delete</b>. Then go to the overview.<span class="see">Cancel keeps the page; Delete removes it and shows the page before it. On the overview the trash button is greyed out.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s11"><span>Write something on a page. In the agenda's toolbar, tap <b>Start Over</b>, tap <b>Cancel</b>, then tap it again and tap <b>Start Over</b>.<span class="see">Cancel changes nothing. Start Over warns that all your notes on this day will be deleted, then shows the day freshly rendered, with no handwriting and no added pages.</span></span></label></li>
+        <li><label><input type="checkbox" id="ma1-s12"><span>Tap <b>Render</b> again after writing on a page.<span class="see">Your handwriting stays on its page. Only Start Over deletes notes.</span></span></label></li>
+      </ol>
+      <div class="report">
+        <p><b>Report back:</b> tick this item's box in the PR and paste this line as a comment, with any failing step numbers.</p>
+        <pre id="ma1-report">Binder iPad check: PASS (iPad model, iPadOS version, Pencil model). Failed steps: none.</pre>
+        <button type="button" id="copy-ma1">Copy line</button>
+      </div>
+    </article>
+  </section>
+</main>
+
+<script>
+(function () {
+  var KEY = "binder-ipad-check";
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { state = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function update() {
+    document.querySelectorAll(".item").forEach(function (item) {
+      var boxes = item.querySelectorAll('input[type="checkbox"]');
+      var done = 0;
+      boxes.forEach(function (b) { if (b.checked) done++; b.closest("li").classList.toggle("checked", b.checked); });
+      item.querySelector(".progress").textContent = done + " of " + boxes.length + " done";
+    });
+  }
+  document.querySelectorAll('input[type="checkbox"]').forEach(function (box) {
+    box.checked = !!state[box.id];
+    box.addEventListener("change", function () { state[box.id] = box.checked; save(); update(); });
+  });
+  update();
+  var button = document.getElementById("copy-ma1");
+  button.addEventListener("click", function () {
+    var text = document.getElementById("ma1-report").textContent;
+    function selectIt() {
+      var range = document.createRange(); range.selectNodeContents(document.getElementById("ma1-report"));
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      button.textContent = "Selected; copy it";
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { button.textContent = "Copied"; }, selectIt);
+    } catch (e) { selectIt(); }
+  });
+})();
+</script>
