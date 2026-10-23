@@ -224,13 +224,14 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
   /// Deletes the day's handwriting and added pages and renders the day fresh, as if it had never
   /// been started.
   public func startOver() async {
-      guard draft != nil else {
+      guard let draft else {
           return
       }
       do {
           for key in try binderStore.ink(on: day).keys {
               try binderStore.saveInk(Data(), for: key, on: day)
           }
+          try binderStore.saveDay(BinderDay(content: draft.content(), theme: settings.theme))
       } catch {
           message =
               "Couldn't delete this day's handwriting. Free some space on this device and try again."
@@ -241,7 +242,9 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
       await render()
   }
   ```
-  With `binder` nil, `render()` takes no base and no inked keys, builds a fresh `BinderDay` (no
+  The fresh day is saved before the render, so a render that is overtaken (a day switch or an
+  edit while it runs drops its result, and `saveBinder` never runs) cannot leave the old added and
+  retained pages stored without their ink. With `binder` nil, `render()` takes no base and no inked keys, builds a fresh `BinderDay` (no
   extras, no retained pages), and `saveBinder` saves it over the stored day and opens a new session
   with the store's (now empty) ink. Every stored ink key is removed, including keys no longer shown,
   so nothing comes back on a later Render. `BinderStore` gets no new method.
@@ -283,6 +286,8 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
   of ADR 0021, which the maintainer wants to keep); deleting the day's folder through a new
   `BinderStore` method (removing every ink key with the existing API does the same, with no new
   protocol requirement).
+- While the render runs, the iPad detail shows the "No binder yet" placeholder, then the new
+  binder. That is expected; do not keep the old session on screen.
 
 ### D6. Exact strings
 
@@ -300,17 +305,21 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
 - **ADR 0022**: The binder shows one whole page per screen and pages turn with a horizontal swipe.
   Amends ADR 0020.
 - **ADR 0023**: Only pages added in the binder can be deleted, with their handwriting, after a
-  confirmation; an added copy of a meeting page is titled "cont." at layout time and not stored.
-  Amends ADR 0020.
+  confirmation. Amends ADR 0020. (That an added meeting-page copy is titled "cont." at layout
+  time, so nothing new is stored, goes under its Consequences; on its own it does not meet the ADR
+  bar.)
 - **ADR 0024**: Render keeps a started day's handwriting; Start over is a separate, confirmed
   action that deletes all of the day's handwriting and added pages and renders it fresh. Amends
   ADR 0021.
 
 ## Manual steps
 
-None before implementation. The real-iPad check (swiping with a finger while the Pencil writes)
-is added to `docs/release-testing.md`'s release checklist by the last phase, so every release runs
-it; no `manual_after` item and no step-by-step page.
+None before implementation. The one human check, swiping with a finger while the Pencil writes
+on a real iPad, is added to `docs/release-testing.md`'s release checklist by the last phase
+instead of `manual_after`: a Pencil-only canvas under a finger-panned scroll view is how the
+binder already works (vertically), the swipe direction is the only change, and the release
+checklist runs it before every release. So there is no `manual_after` item and no step-by-step
+page.
 
 ## Risks and open questions
 
@@ -325,9 +334,12 @@ it; no `manual_after` item and no step-by-step page.
 - **Meeting page operation order.** D1 assumes a meeting page's operations are its label runs,
   then its title runs. If the reworked `addedPage` test shows the original title still on the copy,
   stop.
-- **Start over while a render runs.** `render()` already drops an overtaken render's result by
-  generation; `startOver` calls `render()`, so the later call wins. If
-  `AgendaControllerBinderTests`' existing overtaking test fails, stop.
+- **Start over overtaken.** A day switch while Start over's render runs drops that render's
+  result. D5 saves the fresh day first, so the stored day is clean either way; p2's
+  "a start over overtaken by a load still leaves a fresh day" proves it. If it fails, stop.
+- **An unreadable ink index.** `ink(on:)` throwing `.unreadable` would show the "free some space"
+  message, but `openStoredBinder` already fails on a damaged index and leaves `binder` nil, which
+  hides Start over, so the case cannot arise from the UI.
 
 ## Implementation manifest
 
@@ -474,20 +486,38 @@ phases:
          and Context helpers; context.binderStore is the store; use context.controller.day for the
          date):
          - "starting over deletes the handwriting and added pages and renders a fresh day":
-           started(.standard); render(); let binder = controller.binder; binder.setInk(Data([1]),
-           on: .overview); _ = binder.addPage(after: .overview); also
-           context.binderStore.saveInk(Data([2]), for: .meeting("gone"), on: day) (a key no longer
-           shown); await controller.startOver(); controller.binder is not nil and
-           !== the old binder; its ink is empty; its day.extras and day.retained are empty;
-           try context.binderStore.ink(on: day) is empty; the stored day == the new binder's day;
-           its plan's keys == baseKeys(controller); controller.message == nil.
-         - "start over without a draft does nothing": make() without start(); startOver(); binder
-           is nil and binderStore.day(day) is nil.
-         - "a failed delete of the handwriting leaves the binder and a message": make(binderStore:
-           FailingBinderStore(.unwritable, failing: [])) and start(); render(); setInk(Data([1]),
-           on: .overview) on the binder; store.setFailing([.saveInk]); startOver(); the binder is
-           the same object with ink [.overview: Data([1])], and message == "Couldn't delete this
-           day's handwriting. Free some space on this device and try again."
+           let context = try await started(.standard); await context.controller.render();
+           let binder = try #require(context.controller.binder); binder.setInk(Data([1]), on:
+           .overview); _ = binder.addPage(after: .overview); try context.binderStore.saveInk(
+           Data([2]), for: .meeting("gone"), on: wednesday) (a key no longer shown);
+           await context.controller.startOver(); then let fresh = try #require(
+           context.controller.binder); fresh !== binder; fresh.ink.isEmpty; fresh.day.extras and
+           fresh.day.retained are empty; try context.binderStore.ink(on: wednesday).isEmpty;
+           try context.binderStore.day(wednesday) == fresh.day; fresh.plan.pages.map(\.key) ==
+           try baseKeys(context.controller); context.controller.message == nil.
+         - "a start over overtaken by a load still leaves a fresh day": let store =
+           InMemoryBinderStore(); var day = storedDay("2026-09-30"); day.addPage(after: .overview,
+           id: "x"); try store.saveDay(day); try store.saveInk(Data([1]), for: .extra("x"), on:
+           wednesday); let gated = GatedRenderer(); let context = try make(rendering: gated,
+           binderStore: store); await context.controller.start(); let starting = Task { await
+           context.controller.startOver() }; await gated.waitUntilBlocked(); await
+           context.controller.goToNextWorkingDay(); await gated.release(); await starting.value;
+           then let saved = try #require(try store.day(wednesday)); saved.extras.isEmpty;
+           saved.retained.isEmpty; try store.ink(on: wednesday).isEmpty. (Modelled on
+           "a render overtaken by a load saves no binder".)
+         - "start over without a draft does nothing": let context = try make() without start();
+           try context.binderStore.saveInk(Data([1]), for: .overview, on: wednesday); await
+           context.controller.startOver(); context.controller.binder == nil; try
+           context.binderStore.ink(on: wednesday) == [.overview: Data([1])]; try
+           context.binderStore.day(wednesday) == nil.
+         - "a failed delete of the handwriting leaves the binder and a message": let store =
+           FailingBinderStore(.unwritable, failing: []); let context = try make(binderStore:
+           store); await context.controller.start(); await context.controller.render(); let binder
+           = try #require(context.controller.binder); binder.setInk(Data([1]), on: .overview);
+           store.setFailing([.saveInk]); await context.controller.startOver();
+           context.controller.binder === binder; binder.ink == [.overview: Data([1])];
+           context.controller.message == "Couldn't delete this day's handwriting. Free some space
+           on this device and try again."
          - Update the file's opening comment to mention starting over.
       4. New AppUITests/StartOverUITests.swift, class StartOverUITests, modelled on
          BinderUITests.swift (its launch, element, render, draw and waitForValue helpers, copied as
@@ -495,8 +525,10 @@ phases:
          CGVector(dx: 0.5, dy: 0.7)); opening comment: "Start over on iPad: it asks first, and
          confirming deletes the day's handwriting and renders it fresh. Layer 2 of
          docs/testing-policy.md; elements are found by identifier."
-         - testStartOverIsOfferedOnlyOnceTheDayIsStarted: iPad only; launch "standard"; before
-           render, startOverButton does not exist; after render it exists.
+         - testStartOverIsOfferedOnlyOnceTheDayIsStarted: iPad only; launch "standard"; wait for
+           renderButton and eventRow.0 with waitForExistence(timeout: 30); then
+           XCTAssertFalse(element(app, "startOverButton").exists); render(app); then
+           XCTAssertTrue(element(app, "startOverButton").waitForExistence(timeout: 30)).
          - testStartOverAsksAndThenDeletesTheHandwriting: iPad only; launch "standard" with
            "-MagendaFingerDrawing"; render; draw on binderPage.0 and wait for "Handwritten"; tap
            startOverButton, tap cancelStartOverButton, binderPage.0 is still "Handwritten"; tap
@@ -504,8 +536,8 @@ phases:
            "Blank".
          - Both start with try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only").
       5. Push and dispatch tests.yml on the phase branch; read core, lint, scripts, app and ui.
-      Stop with status=blocked if: an existing AgendaControllerBinderTests test fails (in
-      particular "a render overtaken by a load saves no binder"); the alert buttons are not found
+      Stop with status=blocked if: an existing AgendaControllerBinderTests test fails, or
+      "a start over overtaken by a load still leaves a fresh day" fails; the alert buttons are not found
       by identifier nor by app.alerts.firstMatch.buttons["Start Over"] / ["Cancel"] (use that
       fallback with a comment that SwiftUI does not expose alert button identifiers to XCUITest);
       the Start Over toolbar item is not reachable by identifier on the iPad simulator (it may be
@@ -514,7 +546,7 @@ phases:
       - grep -n "func startOver" AppCore/Sources/Controller/AgendaController.swift matches
       - grep -n "Start this day over?" App/Screens/AgendaView.swift matches; grep -n "Start Over" App/Screens/AgendaCommands.swift matches nothing
       - tests.yml on the phase branch is green in core (with the coverage floor), lint, scripts, the three app jobs and the nine ui jobs
-      - AgendaControllerBinderTests passes, including the three new tests
+      - AgendaControllerBinderTests passes, including the four new tests
       - on ui (ipad, newest, …), testStartOverIsOfferedOnlyOnceTheDayIsStarted and testStartOverAsksAndThenDeletesTheHandwriting pass
 
   - id: p3-retire-plan
@@ -550,8 +582,8 @@ phases:
            can be deleted, with their handwriting, after a confirmation".
          - docs/adr/0024-start-over-is-separate-from-render.md: Amends ADR 0021. Decision from D5
            (Render keeps handwriting as before; Start over, on iPad, after a confirmation, removes
-           every stored ink key of the day, including keys no longer shown, and renders a fresh
-           day; it is not in the Agenda menu); alternatives from D5's "Rejected". Index row:
+           every stored ink key of the day, including keys no longer shown, saves a fresh day and
+           renders it; it is not in the Agenda menu); alternatives from D5's "Rejected". Index row:
            "Render keeps a started day's handwriting; Start over is a separate, confirmed action
            that deletes it and renders the day fresh".
          - Add to ADR 0020's Status the lines
