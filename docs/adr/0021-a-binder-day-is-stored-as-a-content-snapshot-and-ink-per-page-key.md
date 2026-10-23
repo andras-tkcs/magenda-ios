@@ -53,8 +53,11 @@ survive relaunches and being offline.
 
 ## Consequences
 
-- Storage grows with every started day. A stored day is kept on the device until a later release
-  confirms it has been exported.
+- Storage grows with every started day; nothing deletes a stored day.
+- When a stored day cannot be read (corrupt, or a newer format version), the binder shows that
+  message and the next Render replaces the stored day with a fresh one, so extras and retained
+  pages saved in the unreadable file are lost (ink on the standard pages is still found under its
+  key).
 - `BinderDay.formatVersion` is 1. A day written by a different version cannot be decoded, and the app
   reports that the saved binder can't be read.
 - [ADR 0014](0014-agenda-inputs-come-live-from-google-calendar-and-google-tasks.md) says the

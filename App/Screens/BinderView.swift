@@ -52,7 +52,8 @@ struct BinderView: View {
 
     /// Adds a blank page after the one at the top of the screen and shows it.
     private func addPage() {
-        guard let after = visibleKey ?? binder.plan.pages.first?.key else {
+        let visible = visibleKey.flatMap { binder.index(of: $0) != nil ? $0 : nil }
+        guard let after = visible ?? binder.plan.pages.first?.key else {
             return
         }
         scroll(to: binder.addPage(after: after))

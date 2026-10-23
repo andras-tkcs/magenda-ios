@@ -1,10 +1,10 @@
 # Magenda
 
 An iPad-first app that builds the daily binder from Google Calendar and Google Tasks. Sign in with
-Google, pick a day, review what the app selected and why, untick or edit anything, render the
-agenda as a PDF, preview it beside the list (on iPad, open it as a binder you write in) and share
-it to Noteshelf or anywhere else. The rules
-are fixed and editable, and no AI is involved (ADR 0016). The app also runs on iPhone.
+Google, pick a day, review what the app selected and why, untick or edit anything and render the
+agenda as a PDF. On iPad the day opens as a binder you write in with Apple Pencil; on iPhone the
+app previews the PDF. The PDF can be shared anywhere. The rules are fixed and editable, and no AI
+is involved (ADR 0016).
 
 ## What goes on the agenda
 
