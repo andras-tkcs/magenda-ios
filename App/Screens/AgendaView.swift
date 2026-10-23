@@ -1,8 +1,9 @@
 import AppCore
 import SwiftUI
+import UIKit
 
-/// The agenda screen: the review list beside the PDF preview, with the controller's state behind
-/// both.
+/// The agenda screen: the review list beside the binder on iPad or the PDF preview on iPhone,
+/// with the controller's state behind both.
 struct AgendaView: View {
     /// The accessibility identifiers UI tests find elements by.
     enum ID {
@@ -189,7 +190,18 @@ struct AgendaView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let rendered = controller.rendered {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            if let binder = controller.binder {
+                BinderView(binder: binder)
+                    .id(ObjectIdentifier(binder))
+            } else {
+                ContentUnavailableView(
+                    "No binder yet", systemImage: "doc.richtext",
+                    description: Text("Tap Render to start the day's binder.")
+                )
+                .accessibilityIdentifier(ID.previewPlaceholder)
+            }
+        } else if let rendered = controller.rendered {
             PreviewView(rendered: rendered)
         } else {
             ContentUnavailableView(

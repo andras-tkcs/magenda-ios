@@ -7,6 +7,11 @@ import UIKit
 import XCTest
 
 final class AgendaScreenUITests: XCTestCase {
+    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
+    @MainActor private static var previewID: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
+    }
+
     @MainActor
     private func launch(_ fixture: String) -> XCUIApplication {
         let app = XCUIApplication()
@@ -97,6 +102,10 @@ final class AgendaScreenUITests: XCTestCase {
         let app = launch("standard")
         let picker = app.datePickers["datePicker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 30), "the date picker never appeared")
+        // The picker exists a moment before its button carries the date.
+        let shown = expectation(
+            for: NSPredicate { _, _ in !self.shownDate(picker).isEmpty }, evaluatedWith: nil)
+        wait(for: [shown], timeout: 10)
         let before = shownDate(picker)
         XCTAssertFalse(before.isEmpty, "the date picker shows no date")
 
@@ -129,7 +138,8 @@ final class AgendaScreenUITests: XCTestCase {
         render.tap()
 
         XCTAssertTrue(
-            element(app, "pdfPreview").waitForExistence(timeout: 30), "the preview never appeared")
+            element(app, Self.previewID).waitForExistence(timeout: 30),
+            "the preview never appeared")
         // The list's first row stands for the list: XCUITest never reports a List itself as
         // hittable once the centre of its frame lands on one of its rows, on any device.
         let row = element(app, "eventRow.0")

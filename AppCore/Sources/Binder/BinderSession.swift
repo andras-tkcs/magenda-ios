@@ -1,0 +1,79 @@
+import Foundation
+import Observation
+
+/// The open binder of one day: its pages, its handwriting, and saving both as they change.
+@MainActor @Observable
+public final class BinderSession {
+    /// The day the binder is for.
+    public var date: CalendarDay { day.date }
+    /// What the pages are drawn from.
+    public private(set) var day: BinderDay
+    /// The laid-out pages of `day`.
+    public private(set) var plan: RenderPlan
+    /// The handwriting of each page, as PencilKit data.
+    public private(set) var ink: [PageKey: Data]
+    /// The last saving problem, or nil when the last save worked.
+    public private(set) var message: String?
+
+    /// The pages that carry handwriting.
+    public var inkedKeys: Set<PageKey> { Set(ink.filter { !$0.value.isEmpty }.keys) }
+
+    @ObservationIgnored private let store: any BinderStore
+    @ObservationIgnored private let layout: BinderLayout
+    @ObservationIgnored private let makeID: @Sendable () -> String
+
+    init(
+        day: BinderDay, plan: RenderPlan, ink: [PageKey: Data], store: any BinderStore,
+        layout: BinderLayout, makeID: @escaping @Sendable () -> String
+    ) {
+        self.day = day
+        self.plan = plan
+        self.ink = ink
+        self.store = store
+        self.layout = layout
+        self.makeID = makeID
+    }
+
+    /// The position of the page called `key` in `plan`, or nil when it is not shown.
+    public func index(of key: PageKey) -> Int? {
+        plan.pages.firstIndex { $0.key == key }
+    }
+
+    /// Keeps `data` as the handwriting of `key` and saves it; empty `data` removes it.
+    public func setInk(_ data: Data, on key: PageKey) {
+        guard (ink[key] ?? Data()) != data else {
+            return
+        }
+        ink[key] = data.isEmpty ? nil : data
+        do {
+            try store.saveInk(data, for: key, on: date)
+            message = nil
+        } catch {
+            message =
+                (error as? BinderStoreError) == .unreadable
+                ? "Couldn't save your handwriting: this day's saved binder can't be read."
+                : "Couldn't save your handwriting. Free some space on this device."
+        }
+    }
+
+    /// Puts a blank copy of the page `key` right after it, saves the day, and returns the new
+    /// page's key.
+    public func addPage(after key: PageKey) -> PageKey {
+        let id = makeID()
+        day.addPage(after: key, id: id)
+        plan = layout.plan(for: day)
+        do {
+            try store.saveDay(day)
+        } catch {
+            message = "Couldn't save the new page. Free some space on this device."
+        }
+        return .extra(id)
+    }
+
+    // Used by a render, which updates the open binder instead of replacing it, so screens keep
+    // saving into the same session and its handwriting.
+    func replace(day: BinderDay, plan: RenderPlan) {
+        self.day = day
+        self.plan = plan
+    }
+}

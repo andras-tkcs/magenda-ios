@@ -9,6 +9,16 @@ import XCTest
 final class PreviewUITests: XCTestCase {
     private static let largestSize = "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge"
 
+    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
+    @MainActor private static var previewID: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
+    }
+
+    /// The share button of what a render shows.
+    @MainActor private static var shareID: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "binderShareButton" : "shareButton"
+    }
+
     @MainActor
     private func launch(_ fixture: String, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
@@ -31,7 +41,8 @@ final class PreviewUITests: XCTestCase {
             element(app, "eventRow.0").waitForExistence(timeout: 30), "the list never appeared")
         button.tap()
         XCTAssertTrue(
-            element(app, "pdfPreview").waitForExistence(timeout: 30), "the preview never appeared")
+            element(app, Self.previewID).waitForExistence(timeout: 30),
+            "the preview never appeared")
     }
 
     @MainActor
@@ -39,7 +50,7 @@ final class PreviewUITests: XCTestCase {
         let app = launch("standard")
         render(app)
 
-        let share = app.buttons["shareButton"].firstMatch
+        let share = app.buttons[Self.shareID].firstMatch
         XCTAssertTrue(share.waitForExistence(timeout: 30), "the share button never appeared")
         XCTAssertTrue(share.isHittable, "the share button can't be tapped")
         XCTAssertFalse(element(app, "omittedTasksBanner").exists)
@@ -117,7 +128,7 @@ final class PreviewUITests: XCTestCase {
             "longText", extra: ["-UIPreferredContentSizeCategoryName", Self.largestSize])
         render(app)
 
-        let share = app.buttons["shareButton"].firstMatch
+        let share = app.buttons[Self.shareID].firstMatch
         XCTAssertTrue(share.waitForExistence(timeout: 30), "the share button never appeared")
         XCTAssertTrue(share.isHittable, "the share button can't be tapped")
     }

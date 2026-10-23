@@ -4,10 +4,16 @@
 // and `AgendaView.ID`, never by their visible text, except for menu options and dialog buttons,
 // which have none.
 
+import UIKit
 import XCTest
 
 final class SettingsUITests: XCTestCase {
     private static let fixtureClientID = "123456789012-fixture.apps.googleusercontent.com"
+
+    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
+    @MainActor private static var previewID: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
+    }
 
     @MainActor
     private func launch() -> XCUIApplication {
@@ -184,7 +190,8 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(render.waitForExistence(timeout: 30), "the Render button never appeared")
         render.tap()
         XCTAssertTrue(
-            element(app, "pdfPreview").waitForExistence(timeout: 30), "the preview never appeared")
+            element(app, Self.previewID).waitForExistence(timeout: 30),
+            "the preview never appeared")
     }
 
     @MainActor
@@ -211,9 +218,16 @@ final class SettingsUITests: XCTestCase {
 
         let forget = app.buttons["forgetClientButton"].firstMatch
         reveal(app, forget)
-        forget.tap()
+        // A tap that lands while the form is still settling from the drag is dropped, so the
+        // button is tapped again while the confirmation has not appeared.
         let confirm = app.buttons["Forget"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 30), "no confirmation appeared")
+        var taps = 0
+        while !confirm.exists && taps < 5 {
+            forget.tap()
+            taps += 1
+            _ = confirm.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(confirm.exists, "no confirmation appeared after \(taps) taps")
         confirm.tap()
         XCTAssertTrue(
             element(app, "clientIDField").waitForExistence(timeout: 30),

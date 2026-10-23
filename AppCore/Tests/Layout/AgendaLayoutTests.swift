@@ -37,6 +37,28 @@ struct AgendaLayoutTests {
         #expect(plan.omittedTodoItems.isEmpty)
     }
 
+    @Test("Pages are keyed: a blank meeting page without meetings")
+    func keysWithoutMeetings() throws {
+        let plan = try layout().plan(for: content())
+        #expect(plan.pages.map(\.key) == [.overview, .meeting(""), .notes])
+    }
+
+    @Test("Meeting pages are keyed by event ID, or by position without one")
+    func meetingKeys() throws {
+        let day = try day()
+        let withIDs = AgendaContent(
+            date: day, todoItems: [], schedule: [], meetings: ["A", "B"], meetingIDs: ["x", "y"],
+            delegated: [])
+        #expect(
+            try layout().plan(for: withIDs).pages.map(\.key)
+                == [.overview, .meeting("x"), .meeting("y"), .notes])
+        let hash = "#"
+        let withoutIDs = try content(meetings: ["A", "B"])
+        #expect(
+            try layout().plan(for: withoutIDs).pages.map(\.key)
+                == [.overview, .meeting("\(hash)0"), .meeting("\(hash)1"), .notes])
+    }
+
     @Test("Each meeting gets its own page between the overview and the notes page")
     func pageOrderWithMeetings() throws {
         let plan = try layout().plan(for: content(meetings: ["A", "B", "C"]))

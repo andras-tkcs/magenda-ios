@@ -44,13 +44,13 @@ jobs:
       - name: Test scripts/
         run: python3 -m unittest discover -s scripts/tests -v
 
-  # The app itself, on simulators: its hosted unit tests (layer 1) and its UI tests (layer 2), on
-  # the newest and the oldest supported iOS and on an iPad (layer 3). Three points, not a product
-  # of every device and every runtime (docs/testing-policy.md).
+  # The app itself, on simulators: its hosted unit tests (layer 1), on the newest and the oldest
+  # supported iOS and on an iPad (layer 3). Three points, not a product of every device and every
+  # runtime (docs/testing-policy.md). The UI tests (layer 2) run in the `ui` job below.
   app:
     name: app (${{ matrix.family }}, ${{ matrix.runtime }})
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -81,16 +81,72 @@ jobs:
           xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
             -destination "$DESTINATION" -derivedDataPath build/DerivedData \
             -only-testing:MagendaTests -resultBundlePath build/app-tests.xcresult
-      - name: UI tests (100% pass rate required)
-        run: |
-          xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
-            -destination "$DESTINATION" -derivedDataPath build/DerivedData \
-            -only-testing:MagendaUITests -resultBundlePath build/ui-tests.xcresult
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xcresult-${{ matrix.family }}-${{ matrix.runtime }}
+          path: build/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The UI tests, three shards per device point so a failed shard is re-run alone ("Re-run failed
+  # jobs") and no job runs for long. `rest` selects the whole bundle minus the other shards' classes,
+  # so a UI test class added later runs there instead of in no shard. Each job builds for itself.
+  ui:
+    name: ui (${{ matrix.family }}, ${{ matrix.runtime }}, ${{ matrix.shard }})
+    runs-on: macos-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { family: iphone, runtime: newest, shard: edit-screen, args: "-only-testing:MagendaUITests/AgendaEditUITests -only-testing:MagendaUITests/AgendaScreenUITests -only-testing:MagendaUITests/LongTextUITests" }
+          - { family: iphone, runtime: newest, shard: settings, args: "-only-testing:MagendaUITests/SettingsUITests" }
+          - { family: iphone, runtime: newest, shard: rest, args: "-only-testing:MagendaUITests -skip-testing:MagendaUITests/AgendaEditUITests -skip-testing:MagendaUITests/AgendaScreenUITests -skip-testing:MagendaUITests/LongTextUITests -skip-testing:MagendaUITests/SettingsUITests" }
+          - { family: iphone, runtime: oldest, shard: edit-screen, args: "-only-testing:MagendaUITests/AgendaEditUITests -only-testing:MagendaUITests/AgendaScreenUITests -only-testing:MagendaUITests/LongTextUITests" }
+          - { family: iphone, runtime: oldest, shard: settings, args: "-only-testing:MagendaUITests/SettingsUITests" }
+          - { family: iphone, runtime: oldest, shard: rest, args: "-only-testing:MagendaUITests -skip-testing:MagendaUITests/AgendaEditUITests -skip-testing:MagendaUITests/AgendaScreenUITests -skip-testing:MagendaUITests/LongTextUITests -skip-testing:MagendaUITests/SettingsUITests" }
+          - { family: ipad, runtime: newest, shard: edit-screen, args: "-only-testing:MagendaUITests/AgendaEditUITests -only-testing:MagendaUITests/AgendaScreenUITests -only-testing:MagendaUITests/LongTextUITests" }
+          - { family: ipad, runtime: newest, shard: settings, args: "-only-testing:MagendaUITests/SettingsUITests" }
+          - { family: ipad, runtime: newest, shard: rest, args: "-only-testing:MagendaUITests -skip-testing:MagendaUITests/AgendaEditUITests -skip-testing:MagendaUITests/AgendaScreenUITests -skip-testing:MagendaUITests/LongTextUITests -skip-testing:MagendaUITests/SettingsUITests" }
+    env:
+      FAMILY: ${{ matrix.family }}
+      RUNTIME: ${{ matrix.runtime }}
+      SHARD: ${{ matrix.shard }}
+      SHARD_ARGS: ${{ matrix.args }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Show Xcode
+        run: xcodebuild -version
+      # project.yml's minimumXcodeGenVersion refuses anything older than the spec needs (ADR 0003).
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Pick a simulator
+        run: echo "DESTINATION=$(python3 scripts/simulator.py --family "$FAMILY" --runtime "$RUNTIME")" >> "$GITHUB_ENV"
+      # A device's first boot keeps the runner busy for minutes, and UI tests started on it time out
+      # at launch. Booting it here lets that work overlap the build, and the tests wait for the boot.
+      - name: Boot the simulator
+        run: xcrun simctl boot "${DESTINATION#id=}"
+      - name: Build for testing
+        run: |
+          xcodebuild build-for-testing -project Magenda.xcodeproj -scheme Magenda \
+            -destination "$DESTINATION" -derivedDataPath build/DerivedData -quiet
+      - name: Wait for the simulator to finish booting
+        run: xcrun simctl bootstatus "${DESTINATION#id=}" -b
+      - name: UI tests (100% pass rate required)
+        run: |
+          # SHARD_ARGS is deliberately unquoted: it is several -only-testing/-skip-testing words.
+          xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
+            -destination "$DESTINATION" -derivedDataPath build/DerivedData \
+            $SHARD_ARGS -resultBundlePath "build/ui-tests-$SHARD.xcresult"
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcresult-ui-${{ matrix.family }}-${{ matrix.runtime }}-${{ matrix.shard }}
           path: build/*.xcresult
           if-no-files-found: ignore
           retention-days: 14

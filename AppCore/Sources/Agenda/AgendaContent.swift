@@ -11,7 +11,7 @@ public enum Cadence: String, Codable, CaseIterable, Sendable {
 }
 
 /// One row of the to-do list.
-public struct TodoItem: Equatable, Sendable {
+public struct TodoItem: Equatable, Codable, Sendable {
     /// The task title.
     public var text: String
     /// The task's notes, empty when it has none.
@@ -28,7 +28,7 @@ public struct TodoItem: Equatable, Sendable {
 }
 
 /// One line of the daily schedule.
-public struct ScheduleEntry: Equatable, Sendable {
+public struct ScheduleEntry: Equatable, Codable, Sendable {
     /// The half-hour slot, see ``ScheduleSlot``.
     public var slot: Int
     /// The title shown in the slot.
@@ -45,7 +45,7 @@ public struct ScheduleEntry: Equatable, Sendable {
 }
 
 /// One row of the delegated-tasks page.
-public struct DelegatedItem: Equatable, Sendable {
+public struct DelegatedItem: Equatable, Codable, Sendable {
     /// The task.
     public var text: String
     /// Who owns it.
@@ -68,7 +68,7 @@ public struct DelegatedItem: Equatable, Sendable {
 }
 
 /// The plain data an agenda PDF is drawn from.
-public struct AgendaContent: Equatable, Sendable {
+public struct AgendaContent: Equatable, Codable, Sendable {
     /// The day the agenda is for.
     public var date: CalendarDay
     /// The to-do list rows.
@@ -77,18 +77,22 @@ public struct AgendaContent: Equatable, Sendable {
     public var schedule: [ScheduleEntry]
     /// One meeting page each; empty means one blank meeting page.
     public var meetings: [String]
+    /// The event ID of each meeting page, in the order of `meetings`; a meeting without one is
+    /// keyed by its position.
+    public var meetingIDs: [String]
     /// The delegated-tasks rows.
     public var delegated: [DelegatedItem]
 
     /// Creates agenda content.
     public init(
         date: CalendarDay, todoItems: [TodoItem], schedule: [ScheduleEntry], meetings: [String],
-        delegated: [DelegatedItem]
+        meetingIDs: [String] = [], delegated: [DelegatedItem]
     ) {
         self.date = date
         self.todoItems = todoItems
         self.schedule = schedule
         self.meetings = meetings
+        self.meetingIDs = meetingIDs
         self.delegated = delegated
     }
 }

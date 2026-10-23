@@ -8,6 +8,11 @@ import UIKit
 import XCTest
 
 final class AgendaEditUITests: XCTestCase {
+    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
+    @MainActor private static var previewID: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
+    }
+
     @MainActor
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
@@ -136,7 +141,7 @@ final class AgendaEditUITests: XCTestCase {
         XCTAssertTrue(element(app, "eventRow.0").waitForExistence(timeout: 30))
         app.typeKey("r", modifierFlags: .command)
         XCTAssertTrue(
-            element(app, "pdfPreview").waitForExistence(timeout: 30),
+            element(app, Self.previewID).waitForExistence(timeout: 30),
             "⌘R did not render the agenda")
     }
 

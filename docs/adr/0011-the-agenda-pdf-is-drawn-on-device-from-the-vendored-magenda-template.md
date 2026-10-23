@@ -3,6 +3,7 @@
 ## Status
 
 Accepted — 2026-10-15. Implemented.
+Amended by [ADR 0020](0020-on-ipad-the-agenda-is-a-binder-of-native-pages-with-pencilkit-ink.md): the template page is drawn by `PageDrawer`.
 
 ## Context
 

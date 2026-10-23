@@ -36,6 +36,17 @@ struct AgendaLayoutFixtureTests {
         #expect(LayoutAudit.violations(in: try plan(testCase)).isEmpty)
     }
 
+    @Test("Every page has its own key", arguments: AgendaLayoutFixtureTests.cases)
+    func keysAreUnique(_ testCase: Case) throws {
+        let plan = try plan(testCase)
+        #expect(Set(plan.pages.map(\.key)).count == plan.pages.count)
+        #expect(
+            !LayoutAudit.violations(in: plan).contains {
+                if case .duplicatePageKey = $0.kind { return true }
+                return false
+            })
+    }
+
     @Test("Every run is one non-empty line", arguments: AgendaLayoutFixtureTests.cases)
     func runsAreSingleLines(_ testCase: Case) throws {
         for page in try plan(testCase).pages {

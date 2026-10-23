@@ -62,8 +62,8 @@ verify:
 ci:
   dispatchable:
     - workflow: tests.yml
-      use_when: "swift test, the coverage floor or swift format with no Swift toolchain in the container (read the core and lint jobs); the app build, hosted app tests and UI tests on iPhone and iPad simulators (read the three app (...) jobs)."
-      notes: "Must be on main to be dispatchable; push the branch first. The macOS app jobs take 10-20 minutes."
+      use_when: "swift test, the coverage floor or swift format with no Swift toolchain in the container (read the core and lint jobs); the app build and hosted app tests on iPhone and iPad simulators (read the three app (...) jobs), and the UI tests in three shards per device (read the nine ui (...) jobs)."
+      notes: "Must be on main to be dispatchable; push the branch first. The macOS app and ui jobs take 10-20 minutes; re-run a failed ui job on its own."
     - workflow: build.yml
       use_when: "A Release archive with a version stamped in, e.g. after changing AppCore/Package.swift dependencies or as the release pre-flight."
       notes: "No inputs. Off a tag it archives unsigned and uploads nothing."

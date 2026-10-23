@@ -101,9 +101,11 @@ public struct AgendaDraft: Equatable, Sendable {
     public func content() -> AgendaContent {
         var meetingIndexes: [String: Int] = [:]
         var meetings: [String] = []
+        var meetingIDs: [String] = []
         for event in events where event.includesMeetingPage {
             meetingIndexes[event.id] = meetings.count
             meetings.append(event.title)
+            meetingIDs.append(event.id)
         }
         let scheduled = events.filter { $0.isIncluded && $0.scheduleSlot != nil }
         let schedule = Set(scheduled.compactMap(\.scheduleSlot)).sorted().map { slot in
@@ -117,7 +119,7 @@ public struct AgendaDraft: Equatable, Sendable {
             todoItems: tasks.filter(\.isIncluded).map {
                 TodoItem(text: $0.text, notes: $0.notes, due: $0.dueText)
             },
-            schedule: schedule, meetings: meetings,
+            schedule: schedule, meetings: meetings, meetingIDs: meetingIDs,
             delegated: delegated.filter(\.isIncluded).map {
                 DelegatedItem(
                     text: $0.text, owner: $0.owner, cadence: $0.cadence, marked: $0.marked,

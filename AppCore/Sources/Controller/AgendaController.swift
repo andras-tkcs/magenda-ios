@@ -20,8 +20,16 @@ public struct RenderedAgenda: Equatable, Sendable {
 
 /// Draws a `RenderPlan` into a PDF file.
 public protocol AgendaRendering: Sendable {
-    /// Writes the PDF for `plan` to a file called `fileName` and returns where it is.
-    func render(_ plan: RenderPlan, fileName: String) async throws -> URL
+    /// Writes the PDF for `plan` to a file called `fileName` and returns where it is. `ink[i]` is
+    /// the PencilKit data written on page `i`; a missing index means none.
+    func render(_ plan: RenderPlan, ink: [Data?], fileName: String) async throws -> URL
+}
+
+extension AgendaRendering {
+    /// Writes the PDF for `plan` without handwriting.
+    public func render(_ plan: RenderPlan, fileName: String) async throws -> URL {
+        try await render(plan, ink: [], fileName: fileName)
+    }
 }
 
 /// Everything the screens show and do: sign-in, loading a day, reviewing and editing its draft,
@@ -62,6 +70,10 @@ public final class AgendaController {
     public private(set) var taskLists: [GoogleTaskList] = []
     /// The PDF for the current draft, until the draft or settings change.
     public private(set) var rendered: RenderedAgenda?
+    /// The open binder of `day`, when one was started or is stored on this device.
+    public private(set) var binder: BinderSession?
+    /// The PDF of the binder with its handwriting, until it is shared or cleared.
+    public private(set) var binderExport: URL?
     /// The last error or notice for the current screen.
     public private(set) var message: String?
     /// The client ID that was entered, for the settings screen; `nil` before setup.
@@ -73,6 +85,9 @@ public final class AgendaController {
     @ObservationIgnored private let credentials: any ClientCredentialsStore
     @ObservationIgnored private let measurer: any TextMeasuring
     @ObservationIgnored private let renderer: any AgendaRendering
+    @ObservationIgnored private let binderStore: any BinderStore
+    @ObservationIgnored private let binderLayout: BinderLayout
+    @ObservationIgnored private let makeID: @Sendable () -> String
     @ObservationIgnored private let manifest: TemplateManifest
     @ObservationIgnored private let timeZone: TimeZone
     @ObservationIgnored private var loadGeneration = 0
@@ -92,8 +107,9 @@ public final class AgendaController {
     public init(
         account: any GoogleAccount, data: any GoogleDataSource, settingsStore: any SettingsStore,
         credentials: any ClientCredentialsStore, measurer: any TextMeasuring,
-        renderer: any AgendaRendering, manifest: TemplateManifest, timeZone: TimeZone,
-        today: CalendarDay
+        renderer: any AgendaRendering, binderStore: any BinderStore, manifest: TemplateManifest,
+        timeZone: TimeZone, today: CalendarDay,
+        makeID: @escaping @Sendable () -> String = { UUID().uuidString }
     ) {
         self.account = account
         self.data = data
@@ -101,6 +117,9 @@ public final class AgendaController {
         self.credentials = credentials
         self.measurer = measurer
         self.renderer = renderer
+        self.binderStore = binderStore
+        binderLayout = BinderLayout(manifest: manifest, measurer: measurer)
+        self.makeID = makeID
         self.manifest = manifest
         self.timeZone = timeZone
         day = today.nextWeekday()
@@ -193,6 +212,9 @@ public final class AgendaController {
         let generation = loadGeneration
         status = .loading
         message = nil
+        if binder?.date != day {
+            openStoredBinder()
+        }
         invalidateRendered()
         let outcome: Result<Loaded, any Error>
         do {
@@ -283,9 +305,20 @@ public final class AgendaController {
         let fileName = day.isoString + ".pdf"
         status = .rendering
         message = nil
-        let layout = AgendaLayout(manifest: manifest, measurer: measurer, theme: settings.theme)
+        let theme = settings.theme
+        let layout = AgendaLayout(manifest: manifest, measurer: measurer, theme: theme)
+        let binderLayout = binderLayout
         let content = draft.content()
-        let plan = await Task.detached { layout.plan(for: content) }.value
+        let base = binder?.date == day ? binder?.day : nil
+        let inked = binder?.inkedKeys ?? []
+        let laidOut = await Task.detached {
+            let binderDay = Self.binderDay(
+                binderLayout, base: base, content: content, theme: theme, inked: inked)
+            return LaidOut(
+                plan: layout.plan(for: content), binderDay: binderDay,
+                binderPlan: binderLayout.plan(for: binderDay))
+        }.value
+        let plan = laidOut.plan
         let outcome: Result<URL, any Error>
         do {
             outcome = .success(try await renderer.render(plan, fileName: fileName))
@@ -295,6 +328,7 @@ public final class AgendaController {
         guard generation == renderGeneration else {
             return
         }
+        saveBinder(laidOut, base: base, content: content, theme: theme)
         switch outcome {
         case .success(let url):
             rendered = RenderedAgenda(
@@ -304,6 +338,32 @@ public final class AgendaController {
             message = "Couldn't create the PDF. Try again."
         }
         status = .ready
+    }
+
+    /// Writes the PDF of the open binder, with its handwriting on each page, and keeps it in
+    /// `binderExport`.
+    public func exportBinder() async {
+        guard let binder else {
+            return
+        }
+        let ink = binder.plan.pages.map { binder.ink[$0.key] }
+        do {
+            binderExport = try await renderer.render(
+                binder.plan, ink: ink, fileName: binder.date.isoString + ".pdf")
+        } catch {
+            message = "Couldn't create the PDF. Try again."
+        }
+    }
+
+    /// Forgets the exported PDF, once it has been shared or dismissed.
+    public func clearBinderExport() {
+        binderExport = nil
+    }
+
+    private struct LaidOut: Sendable {
+        let plan: RenderPlan
+        let binderDay: BinderDay
+        let binderPlan: RenderPlan
     }
 
     private struct Loaded {
@@ -316,9 +376,64 @@ public final class AgendaController {
         error as? GoogleAPIError ?? .unexpectedResponse
     }
 
+    nonisolated private static func binderDay(
+        _ layout: BinderLayout, base: BinderDay?, content: AgendaContent, theme: Theme,
+        inked: Set<PageKey>
+    ) -> BinderDay {
+        base.map { layout.rebased($0, onto: content, theme: theme, inkedKeys: inked) }
+            ?? BinderDay(content: content, theme: theme)
+    }
+
+    // Opens what is stored for `day`, so a started day shows before (or without) the fetch.
+    private func openStoredBinder() {
+        do {
+            if let stored = try binderStore.day(day) {
+                binder = BinderSession(
+                    day: stored, plan: binderLayout.plan(for: stored),
+                    ink: try binderStore.ink(on: day), store: binderStore, layout: binderLayout,
+                    makeID: makeID)
+            } else {
+                binder = nil
+            }
+        } catch {
+            binder = nil
+            message = "Couldn't read the saved binder for this day."
+        }
+    }
+
+    // A page added or handwriting written while the render ran is in the open session but not in
+    // `base`, so the day is rebased again from the session before it is saved.
+    private func saveBinder(
+        _ laidOut: LaidOut, base: BinderDay?, content: AgendaContent, theme: Theme
+    ) {
+        var binderDay = laidOut.binderDay
+        var binderPlan = laidOut.binderPlan
+        if let session = binder, session.day != base {
+            binderDay = Self.binderDay(
+                binderLayout, base: session.day, content: content, theme: theme,
+                inked: session.inkedKeys)
+            binderPlan = binderLayout.plan(for: binderDay)
+        }
+        do {
+            try binderStore.saveDay(binderDay)
+            if let session = binder {
+                session.replace(day: binderDay, plan: binderPlan)
+            } else {
+                binder = BinderSession(
+                    day: binderDay, plan: binderPlan,
+                    ink: (try? binderStore.ink(on: day)) ?? [:], store: binderStore,
+                    layout: binderLayout, makeID: makeID)
+            }
+        } catch {
+            message = "Couldn't save the binder. Free some space on this device and try again."
+        }
+    }
+
     // Also drops a load still running, so it cannot bring back what was cleared.
     private func clearLoadedState() {
         loadGeneration += 1
+        binder = nil
+        binderExport = nil
         draft = nil
         calendars = []
         taskLists = []

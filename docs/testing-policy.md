@@ -42,7 +42,13 @@ and on dispatch. A 100% pass rate is required to merge.
 | `core` (Ubuntu) | `swift test` in AppCore with coverage, then `scripts/check_coverage_floor.py` |
 | `lint` (Ubuntu) | `swift format lint --strict` |
 | `scripts` (Ubuntu) | `python3 -m unittest discover -s scripts/tests`, including the no-project-history guard |
-| `app (iphone, newest)`, `app (iphone, oldest)`, `app (ipad, newest)` (macOS) | `xcodegen generate`, then the hosted app tests and the UI tests on a simulator `scripts/simulator.py` picks |
+| `app (iphone, newest)`, `app (iphone, oldest)`, `app (ipad, newest)` (macOS) | `xcodegen generate`, then the hosted app tests on a simulator `scripts/simulator.py` picks |
+| `ui (<family>, <runtime>, <shard>)` (macOS), nine jobs | The same build, then one shard of the UI tests on the same three simulators: `edit-screen`, `settings`, and `rest` (every UI test class not in another shard, so a new class runs there) |
+
+The UI tests run as three parallel shards per device, so a failed shard is re-run on its own
+("Re-run failed jobs") instead of repeating every UI test. Each shard boots its simulator before
+the build and waits for the boot to finish before the first test: a device's first boot keeps the
+runner busy for minutes, and a UI test launched during it times out before its body runs.
 
 `scripts/simulator.py` chooses devices by family and runtime rather than by name, because names
 change with every Xcode. `oldest` means the oldest installed runtime at or above the deployment
@@ -73,7 +79,8 @@ a GitHub-hosted job or a `pull_request` workflow, and that boundary gets an ADR.
 `LayoutAudit` checks every render plan for text outside its container or the page, overlapping
 text and bad links (ADR 0012). It runs in AppCore with a deterministic fake font over the
 long-text fixtures, and in `AppTests` with the real fonts. The binder rules are tested in AppCore
-against the `standard` fixture, with no network and no simulator.
+against the `standard` fixture, with no network and no simulator. Binder pages (added and
+retained pages) are audited in AppCore too (`BinderLayoutTests`).
 
 ## Layers 5–6: release archive and distribution
 

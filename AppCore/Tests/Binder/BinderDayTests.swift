@@ -1,0 +1,79 @@
+// AppCore's `BinderDay`: adding pages, the saved format and its version check.
+
+import Foundation
+import Testing
+
+@testable import AppCore
+
+@Suite("Binder day")
+struct BinderDayTests {
+    private func day() throws -> BinderDay {
+        BinderDay(
+            content: AgendaContent(
+                date: try #require(CalendarDay(year: 2026, month: 9, day: 30)), todoItems: [],
+                schedule: [], meetings: ["A"], meetingIDs: ["a"], delegated: []),
+            theme: Theme())
+    }
+
+    @Test("A page added after a base page copies that page and follows it")
+    func addAfterBasePage() throws {
+        var day = try day()
+        day.addPage(after: .meeting("a"), id: "x")
+        #expect(day.extras == [ExtraPage(id: "x", after: .meeting("a"), source: .meeting("a"))])
+    }
+
+    @Test("A page added after an added page inherits its source and follows it directly")
+    func addAfterExtra() throws {
+        var day = try day()
+        day.addPage(after: .meeting("a"), id: "x")
+        day.addPage(after: .overview, id: "o")
+        day.addPage(after: .extra("x"), id: "y")
+        #expect(
+            day.extras == [
+                ExtraPage(id: "x", after: .meeting("a"), source: .meeting("a")),
+                ExtraPage(id: "o", after: .overview, source: .overview),
+                ExtraPage(id: "y", after: .extra("x"), source: .meeting("a")),
+            ])
+    }
+
+    @Test("A page added after an unknown added page is its own source")
+    func addAfterUnknownExtra() throws {
+        var day = try day()
+        day.addPage(after: .extra("ghost"), id: "y")
+        #expect(day.extras == [ExtraPage(id: "y", after: .extra("ghost"), source: .extra("ghost"))])
+    }
+
+    @Test("Adding twice after one page puts the second right after it and the first behind")
+    func addTwice() throws {
+        var day = try day()
+        day.addPage(after: .meeting("a"), id: "x")
+        day.addPage(after: .meeting("a"), id: "y")
+        #expect(
+            day.extras == [
+                ExtraPage(id: "x", after: .extra("y"), source: .meeting("a")),
+                ExtraPage(id: "y", after: .meeting("a"), source: .meeting("a")),
+            ])
+    }
+
+    @Test("A day survives encoding and decoding")
+    func codableRoundTrip() throws {
+        var day = try day()
+        day.addPage(after: .meeting("a"), id: "x")
+        day.retained = [RetainedPage(key: .meeting("old"), content: day.content)]
+        let decoded = try JSONDecoder().decode(BinderDay.self, from: JSONEncoder().encode(day))
+        #expect(decoded == day)
+        #expect(decoded.version == BinderDay.formatVersion)
+        #expect(decoded.date == day.content.date)
+    }
+
+    @Test("A day saved with another version does not decode")
+    func otherVersionThrows() throws {
+        let data = try JSONEncoder().encode(try day())
+        let text = try #require(String(data: data, encoding: .utf8))
+        let changed = text.replacingOccurrences(of: "\"version\":1", with: "\"version\":2")
+        #expect(changed != text)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(BinderDay.self, from: Data(changed.utf8))
+        }
+    }
+}

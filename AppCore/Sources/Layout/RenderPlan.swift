@@ -147,13 +147,16 @@ public enum DrawOperation: Equatable, Sendable {
 
 /// One page of a plan.
 public struct PagePlan: Equatable, Sendable {
+    /// Which page of the binder it is.
+    public let key: PageKey
     /// The template page it is drawn on.
     public let chrome: ChromePage
     /// What to draw, in order.
     public var operations: [DrawOperation]
 
     /// Creates a page plan.
-    public init(chrome: ChromePage, operations: [DrawOperation]) {
+    public init(key: PageKey, chrome: ChromePage, operations: [DrawOperation]) {
+        self.key = key
         self.chrome = chrome
         self.operations = operations
     }
@@ -178,5 +181,21 @@ public struct RenderPlan: Equatable, Sendable {
         self.pageHeight = pageHeight
         self.pages = pages
         self.omittedTodoItems = omittedTodoItems
+    }
+
+    /// The target page of the last link on page `index` whose area holds `point` (edges
+    /// included), or nil when there is none or the page does not exist.
+    public func linkTarget(at point: PlanPoint, onPage index: Int) -> Int? {
+        guard pages.indices.contains(index) else {
+            return nil
+        }
+        for operation in pages[index].operations.reversed() {
+            if case .link(let rect, let target) = operation,
+                point.x >= rect.x0, point.x <= rect.x1, point.y >= rect.y0, point.y <= rect.y1
+            {
+                return target
+            }
+        }
+        return nil
     }
 }

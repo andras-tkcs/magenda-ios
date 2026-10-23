@@ -32,6 +32,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- On iPad, Render opens the day's binder: write on its pages with Apple Pencil, and the
+  handwriting is saved with the day, also offline once the day is started.
+- The binder toolbar has black, blue, red and green pens, an eraser, undo and redo, buttons to jump
+  to the overview, delegated tasks and notes, and Add page, which puts a blank copy of the current
+  page after it.
+- Share PDF in the binder shares the day with your handwriting on its pages.
+- Rendering a day again keeps your handwriting on its pages; a meeting page you wrote on stays even
+  when the meeting is no longer on the agenda.
+
 ## [0.1.1] — 2026-10-15
 
 First stable release. It also carries everything from the 0.1.0 alpha, which was never shipped.
