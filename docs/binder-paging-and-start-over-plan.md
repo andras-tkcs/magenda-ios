@@ -1,8 +1,12 @@
-# Plan: binder paging, delete page, continued titles, Pencil switch, undo state and Start over
+# Plan: binder paging, delete page, continued titles, Pencil switch and Start over
 
 ## Goal
 
-Seven changes to the iPad binder, requested by the maintainer directly (there is no issue):
+Changes to the iPad binder, requested by the maintainer directly (there is no issue). The work
+starts from [PR 9](https://github.com/andras-tkcs/magenda-ios/pull/9) (branch
+`claude/binder-undo-render-protection-tvtezf`: a binder-wide undo history in `BinderSession`,
+Undo and Redo dimmed when there is nothing to do, ink kept during a render, and file protection;
+ADRs 0022 and 0023), and the feature PR is stacked on it (see "Stacking on PR 9" below).
 
 1. **Swipe left/right between pages** instead of scrolling vertically. Each page is shown whole,
    scaled to fit the screen, one page per swipe.
@@ -19,29 +23,53 @@ Seven changes to the iPad binder, requested by the maintainer directly (there is
 6. **The Apple Pencil's double-tap (and the Pencil Pro's squeeze) switches between the pen and the
    eraser.** Today it does nothing useful for the binder (the maintainer sees only an undo/redo
    palette); from the eraser it switches back to the pen used last.
-7. **Undo and Redo are greyed out when there is nothing to undo or redo.** The maintainer asked
-   for Redo; Undo gets the same treatment so the two buttons behave alike.
+7. **Undo and Redo are greyed out when there is nothing to undo or redo.** PR 9 already does
+   this (`BinderSession.canUndo`/`canRedo`, `BinderToolbar`'s `isEnabled:`); this plan only keeps
+   it working with the new pages (D2 drops a deleted page's history).
+
+## Stacking on PR 9
+
+`/implement` normally works against `main`. For this plan, while PR 9 is open, the orchestrator
+reads every `origin/main` in `.claude/commands/implement.md` as
+`origin/claude/binder-undo-render-protection-tvtezf` (the manifest's `base_branch`):
+
+- The plan branch already contains PR 9 (merged into it), so the feature branch cut from it does
+  too. Before the first phase, and again before opening the PR, merge
+  `origin/claude/binder-undo-render-protection-tvtezf` into the feature branch (a merge commit), so
+  later fixes on PR 9 are in.
+- Open the single feature PR with **base `claude/binder-undo-render-protection-tvtezf`**, not
+  `main`, and say in its body that it is stacked on PR 9 and must merge after it.
+- If PR 9 has merged by the time a step runs, use `main` as usual: merge `origin/main`, and open
+  (or retarget) the PR against `main`. GitHub retargets an open stacked PR to `main` by itself
+  when PR 9's branch is deleted on merge.
+- Never push to PR 9's branch.
 
 ## Current state
 
-- Pencil and undo: nothing in `App/` adds a `UIPencilInteraction`. The undo/redo palette the
-  maintainer sees is most likely PencilKit's own compact palette over a canvas (on a Pencil Pro
-  squeeze); nothing in the binder handles double-tap or squeeze. `BinderView.swift:116-117` calls `editedCanvas?.undoManager?.undo()` /
-  `.redo()`; the buttons (`BinderToolbar.swift`, `button("arrow.uturn.backward", …)` and
-  `button("arrow.uturn.forward", …)`) are always enabled. A `PKCanvasView`'s `undoManager` is the
-  window's, which posts `.NSUndoManagerDidUndoChange`, `.NSUndoManagerDidRedoChange` and
-  `.NSUndoManagerDidCloseUndoGroup`. `BinderTool` (`AppCore/Sources/Binder/BinderTool.swift`) is
-  `.pen(BinderPen)` or `.eraser`; the selected tool is `@State tool` in `BinderView`.
+All references are to the plan branch, which contains PR 9.
 
-- `App/Screens/BinderView.swift:75-105`: the binder is a `ScrollView(.vertical)` with a
+- Pencil: nothing in `App/` adds a `UIPencilInteraction`. The undo/redo palette the maintainer
+  sees is most likely PencilKit's own compact palette over a canvas (on a Pencil Pro squeeze);
+  nothing in the binder handles double-tap or squeeze. `BinderTool`
+  (`AppCore/Sources/Binder/BinderTool.swift`) is `.pen(BinderPen)` or `.eraser`; the selected tool
+  is `@State tool` in `BinderView`.
+- Undo (from PR 9, ADR 0023): `BinderSession` keeps `undoStack`/`redoStack` of `InkChange(key:
+  before: after:)` (`BinderSession.swift:21-37`); `setInk` (`:61-73`) records a change and clears
+  redo, `undo()`/`redo()` (`:75-93`) write through `write(_:on:)` (`:95-108`) and return the page's
+  key. `BinderView` has no canvas registry and no `lastEditedKey` any more; its toolbar passes
+  `canUndo: binder.canUndo, canRedo: binder.canRedo` and calls `reveal(binder.undo())`
+  (`BinderView.swift:46-51`, `:107-115`). `BinderToolbar.button(_:_:_:isEnabled:action:)` disables
+  a button with `isEnabled:`.
+
+- `App/Screens/BinderView.swift:75-104`: the binder is a `ScrollView(.vertical)` with a
   `LazyVStack`, `.scrollTargetLayout()`, `.scrollPosition(id: $visibleKey)` and
   `.contentMargins(.bottom, 600, for: .scrollContent)` (the margin exists only so the last page
-  can reach the top). `scroll(to:)` (`:47-51`) sets `visibleKey` with animation; `addPage()`
-  (`:53-60`) scrolls to the returned key; the page indicator (`:133-140`) reads `visibleIndex`.
+  can reach the top). `scroll(to:)` (`:38-42`) sets `visibleKey` with animation; `addPage()`
+  (`:54-60`) scrolls to the returned key; the page indicator (`:130-137`) reads `visibleIndex`.
   The page is A4 portrait (595.3 × 841.9 pt, `slots.json`), so fitted to the width it is taller
   than an iPad screen in portrait, and a jump can leave its bottom off screen.
-- `App/Screens/BinderToolbar.swift`: the toolbar row; `button(_:_:_:action:)` makes an icon
-  button with label and identifier. Identifiers live in `BinderView.ID`.
+- `App/Screens/BinderToolbar.swift`: the toolbar row; `button(_:_:_:isEnabled:action:)` makes an
+  icon button with label, identifier and enabled state. Identifiers live in `BinderView.ID`.
 - `App/Screens/BinderPageView.swift`: the canvas is `.pencilOnly` unless `-MagendaFingerDrawing`
   is passed, so a finger pans the enclosing scroll view.
 - `AppUITests/BinderUITests.swift`: `draw(on:)` draws a horizontal finger stroke (dx 0.3 → 0.7)
@@ -49,8 +77,8 @@ Seven changes to the iPad binder, requested by the maintainer directly (there is
   page swipe.
 - `AppCore/Sources/Binder/BinderDay.swift:86-99`: `addPage(after:id:)`; `ExtraPage` has `id`,
   `after`, `source` (never `.extra`).
-- `AppCore/Sources/Binder/BinderSession.swift:59-71`: `addPage(after:)` re-plans and saves the
-  day; `setInk` (`:43-57`) saves ink; `store.saveInk(Data(), …)` deletes a page's ink
+- `AppCore/Sources/Binder/BinderSession.swift:110-122`: `addPage(after:)` re-plans and saves the
+  day; `setInk` (`:61-73`) records history and saves ink; `store.saveInk(Data(), …)` deletes a page's ink
   (`BinderStore.swift:50-52`, `:106-133`).
 - `AppCore/Sources/Binder/BinderLayout.swift`: `plan(for:)` (`:23-41`) composes base, retained and
   added pages; `insertExtras` (`:69-115`) and its `copy(of:)` (`:79-85`) copy the source page's
@@ -67,8 +95,8 @@ Seven changes to the iPad binder, requested by the maintainer directly (there is
   line.
 - Rendering a started day: `AgendaController.render()` (`AgendaController.swift:299-341`) rebases
   the open day onto the new content (`BinderLayout.rebased`, ADR 0021), keeping handwriting and
-  added pages; `saveBinder` (`:405-430`) rebases again from the open session if it changed during
-  the render, then updates the session in place or creates one with the store's ink. There is no
+  added pages; `saveBinder` (`:406-431`) rebases again from the open session if its day or its
+  inked pages changed during the render (PR 9), then updates the session in place or creates one with the store's ink. There is no
   way to discard a day's notes. The Render button is `AgendaView.swift:217-223`, enabled by
   `canRender` (`:35-37`); the Agenda menu has its own Render (`AgendaCommands.swift:26-30`).
 - The store keeps a day's ink under page keys, including keys no longer shown (ADR 0021,
@@ -152,6 +180,8 @@ Seven changes to the iPad binder, requested by the maintainer directly (there is
   `deletePage`:
   `guard canDelete(key), case .extra(let id) = key, let index = self.index(of: key) else { return nil }`;
   `day.removePage(id: id)`; `plan = layout.plan(for: day)`; `ink[key] = nil`;
+  `undoStack.removeAll { $0.key == key }`; `redoStack.removeAll { $0.key == key }` (so Undo never
+  writes ink back for a page that no longer exists, and `canUndo`/`canRedo` stay truthful);
   `do { try store.saveDay(day); try store.saveInk(Data(), for: key, on: date); message = nil } catch { message = "Couldn't delete the page. Free some space on this device." }`;
   return `plan.pages[max(0, min(index - 1, plan.pages.count - 1))].key` (one expression, so no
   unreachable branch; the overview is first and never deletable, so this is the page before).
@@ -198,7 +228,7 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
 - `BinderToolbar`: declare `let canDeletePage: Bool` and `let deletePage: () -> Void` after
   `let addPage`, and pass them last, in that order, in `BinderView`'s `BinderToolbar(…)` call.
   Right after the Add page button:
-  `button("trash", "Delete this page", BinderView.ID.deletePageButton) { deletePage() }.disabled(!canDeletePage)`.
+  `button("trash", "Delete this page", BinderView.ID.deletePageButton, isEnabled: canDeletePage) { deletePage() }`.
   The type's doc comment becomes "The binder's controls in one scrolling row: go to a page, pick a
   pen or the eraser, undo and redo, and add or delete a page."
 - `BinderView`: `@State private var confirmsDelete = false`; pass
@@ -220,9 +250,6 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
   private func deleteVisiblePage() {
       guard let key = visibleKey, let next = binder.deletePage(key) else {
           return
-      }
-      if lastEditedKey == key {
-          lastEditedKey = nil
       }
       scroll(to: next)
   }
@@ -261,7 +288,8 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
   retained pages stored without their ink. With `binder` nil, `render()` takes no base and no inked keys, builds a fresh `BinderDay` (no
   extras, no retained pages), and `saveBinder` saves it over the stored day and opens a new session
   with the store's (now empty) ink. Every stored ink key is removed, including keys no longer shown,
-  so nothing comes back on a later Render. `BinderStore` gets no new method.
+  so nothing comes back on a later Render. `BinderStore` gets no new method. The new session also
+  starts with an empty undo history, so Undo cannot bring deleted handwriting back.
 - `AgendaView.ID`: add `static let startOverButton = "startOverButton"`,
   `static let confirmStartOverButton = "confirmStartOverButton"` and
   `static let cancelStartOverButton = "cancelStartOverButton"`.
@@ -384,28 +412,7 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
   names do not exist in the binder); a Pencil-only gesture recognizer (double-tap and squeeze are
   only delivered through `UIPencilInteraction`).
 
-### D7. Undo and Redo are disabled when there is nothing to undo or redo (`BinderView.swift`, `BinderToolbar.swift`)
-
-- `BinderToolbar`: declare `let canUndo: Bool` and `let canRedo: Bool` right after `let redo`, and
-  add `.disabled(!canUndo)` / `.disabled(!canRedo)` to the Undo and Redo buttons. In `BinderView`'s
-  call, pass them in that position.
-- `BinderView`: `@State private var canUndo = false` and `@State private var canRedo = false`, and
-  ```swift
-  /// Reads whether the canvas last drawn on has something to undo or redo.
-  private func refreshUndo() {
-      canUndo = editedCanvas?.undoManager?.canUndo ?? false
-      canRedo = editedCanvas?.undoManager?.canRedo ?? false
-  }
-  ```
-  called from `.onReceive(NotificationCenter.default.publisher(for: .NSUndoManagerDidUndoChange))`,
-  the same for `.NSUndoManagerDidRedoChange` and `.NSUndoManagerDidCloseUndoGroup` (each
-  `{ _ in refreshUndo() }`), and from `.onChange(of: lastEditedKey) { refreshUndo() }`. Put these
-  four modifiers in the same place as D6's, right after the `.onChange(of: tool)`.
-- The buttons keep their state while the page last written on is off screen, and refresh on the
-  next undo, redo or stroke. Do not add a refresh on `visibleKey`: at that moment the page's canvas
-  may not exist yet, which would disable Undo for a page the person swipes back to.
-
-### D8. Exact strings
+### D7. Exact strings
 
 - Title: `cont.` / `cont. <title>`.
 - Delete: toolbar label `Delete this page`; alert title `Delete this page?`; message
@@ -418,15 +425,19 @@ off screen); fit-to-width with vertical scrolling inside a page (the maintainer 
 
 ## ADRs
 
-- **ADR 0022**: The binder shows one whole page per screen and pages turn with a horizontal swipe.
+ADRs 0022 and 0023 are PR 9's. This plan's take the next numbers:
+
+- **ADR 0024**: The binder shows one whole page per screen and pages turn with a horizontal swipe.
   Amends ADR 0020.
-- **ADR 0023**: Only pages added in the binder can be deleted, with their handwriting, after a
-  confirmation. Amends ADR 0020. (That an added meeting-page copy is titled "cont." at layout
-  time, so nothing new is stored, goes under its Consequences; on its own it does not meet the ADR
-  bar.)
-- **ADR 0024**: Render keeps a started day's handwriting; Start over is a separate, confirmed
+- **ADR 0025**: Only pages added in the binder can be deleted, with their handwriting and their
+  undo history, after a confirmation. Amends ADR 0020. (That an added meeting-page copy is titled
+  "cont." at layout time, so nothing new is stored, goes under its Consequences; on its own it
+  does not meet the ADR bar.)
+- **ADR 0026**: Render keeps a started day's handwriting; Start over is a separate, confirmed
   action that deletes all of the day's handwriting and added pages and renders it fresh. Amends
   ADR 0021.
+
+The Pencil switch (D6) does not meet the ADR bar.
 
 ## Manual steps
 
@@ -456,12 +467,10 @@ The last phase also adds the same checks to `docs/release-testing.md` for every 
   simulator; p4 builds them against the SDK and the real-iPad check covers them. If the app build
   fails on `UIPencilInteraction.Tap`/`.Squeeze` or `preferredSqueezeAction` (iOS 17.5 APIs; the
   deployment target is iOS 18), stop.
-- **Undo notifications.** The design relies on PencilKit closing an undo group (posting
-  `.NSUndoManagerDidCloseUndoGroup`) for each stroke. If
-  `testUndoAndRedoAreGreyedOutWhenThereIsNothingToDo` sees Undo stay disabled or Redo stay enabled
-  after a stroke, p4 tries once also calling `refreshUndo()` from the `onInkChange` closure, on the
-  next run-loop turn (`DispatchQueue.main.async { refreshUndo() }`, after setting
-  `lastEditedKey`); if that fails too, it stops.
+- **PR 9 changes under the plan.** PR 9's CI was still running when this plan was written, and a
+  review may change it. Each phase starts from the feature branch with the latest PR 9 merged in;
+  if a brief's `path:line` or symbol no longer matches (for example `BinderSession.undoStack` is
+  renamed), stop with `status=blocked` rather than adapting.
 - **PencilKit's own palette.** If, on the real iPad, PencilKit's undo/redo palette still appears
   next to the pen/eraser switch, the maintainer records it in the PR as a follow-up; the design does
   not change in this plan (no `PKCanvasView` API suppresses it).
@@ -478,6 +487,7 @@ The last phase also adds the same checks to `docs/release-testing.md` for every 
 ```yaml
 plan_slug: binder-paging-and-start-over
 feature_branch: feature/binder-paging-and-start-over
+base_branch: claude/binder-undo-render-protection-tvtezf   # PR 9; see "Stacking on PR 9". Use main once PR 9 has merged
 max_parallel: 2
 manual_before: []
 manual_steps_artifact: https://claude.ai/artifact/6TtYhmdaNScatb83coUtw9
@@ -490,9 +500,10 @@ verify_after_merge:
   - swift test --package-path AppCore --filter "Binder|AgendaLayout|AgendaController"
 final_checks:
   - docs/binder-paging-and-start-over-plan.md and docs/binder-paging-and-start-over-plan-manual-steps.html are deleted and nothing links to them
-  - docs/adr/0022-*.md, docs/adr/0023-*.md and docs/adr/0024-*.md exist, are Accepted, and are in docs/adr/README.md's index
-  - CHANGELOG.md has [Unreleased] entries for paging, Delete page, cont. titles, the Apple Pencil switch, Undo/Redo greying and Start over, and no new version heading
+  - docs/adr/0024-*.md, docs/adr/0025-*.md and docs/adr/0026-*.md exist, are Accepted, and are in docs/adr/README.md's index next to PR 9's 0022 and 0023
+  - CHANGELOG.md has [Unreleased] entries for paging, Delete page, cont. titles, the Apple Pencil switch and Start over, and keeps PR 9's undo and file-protection entries, and no new version heading
   - BinderDay.formatVersion is still 1
+  - the feature branch contains the latest origin/claude/binder-undo-render-protection-tvtezf (or PR 9 has merged and it contains origin/main), and the PR's base is that branch (or main once PR 9 has merged)
 phases:
   - id: p1-binder-pages
     title: Horizontal paging, Delete page and continued meeting titles in the binder
@@ -511,7 +522,7 @@ phases:
       - AppCore/Tests/Binder/BinderSessionTests.swift
       - AppUITests/BinderUITests.swift
     brief: |
-      Implement the plan's Design sections D1, D2, D3, D4 and the strings in D8 exactly as written.
+      Implement the plan's Design sections D1, D2, D3, D4 and the strings in D7 exactly as written.
       Do not edit docs, CHANGELOG.md or ADRs; the last phase does.
       1. AgendaLayout.swift: extract meetingTitleRuns(_:), add continuedTitle(_:) and
          continuedOperations(of:in:) (D1).
@@ -559,11 +570,17 @@ phases:
            message == nil.
          - "only added pages can be deleted": canDelete(.overview), canDelete(meeting),
            canDelete(.extra("zz")) are false; deletePage(.overview) == nil and the plan is unchanged.
+         - "deleting a page forgets its undo history": InMemoryBinderStore; let key =
+           session.addPage(after: meeting); session.setInk(Data([1]), on: meeting);
+           session.setInk(Data([2]), on: key); _ = session.deletePage(key); session.canRedo is
+           false; session.undo() == meeting; session.undo() == nil; try store.ink(on:
+           date)[key] == nil.
          - "a failed save of a deletion leaves a message": session on
            FailingBinderStore(.unwritable, failing: [.saveDay]); let key = session.addPage(after:
            meeting); deletePage(key) == meeting; message == "Couldn't delete the page. Free some
            space on this device."
-         - Add no API to the stores. Update the opening comment.
+         - Put these in the existing "Binder session" suite, not PR 9's "Binder session history"
+           suite. Add no API to the stores. Update the opening comment.
       9. AppUITests/BinderUITests.swift:
          - draw(on:) becomes a vertical stroke from CGVector(dx: 0.5, dy: 0.4) to
            CGVector(dx: 0.5, dy: 0.7); doc comment "Draws a vertical stroke down the middle of
@@ -582,6 +599,8 @@ phases:
            equals "Page 1 of \(total - 1)".
          - New testDeletingIsDisabledOnAPrintedPage: after render, deletePageButton exists and
            isEnabled == false.
+         - PR 9's testUndoRevertsAPageThatScrolledAway uses draw(on:), the Notes button and the
+           page indicator; it must keep passing unchanged with paging.
          - Every new test starts with
            try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only").
            Update the opening comment to mention swiping and deleting pages.
@@ -601,7 +620,7 @@ phases:
       - grep -n "formatVersion = 1" AppCore/Sources/Binder/BinderDay.swift matches
       - tests.yml on the phase branch is green in core (with the coverage floor), lint, scripts, the three app jobs and the nine ui jobs
       - BinderLayoutTests, BinderDayTests, BinderSessionTests and AgendaLayoutTests pass, including the new tests named in the brief
-      - on ui (ipad, newest, …), testAFingerSwipesToTheNextPage, testAPageIsShownWhole, testDeletingAnAddedPageAsksFirst, testDeletingIsDisabledOnAPrintedPage, testAddPageAddsAPageAfterTheCurrentOne, testNotesAndOverviewButtonsMoveBetweenPages, testHandwritingStaysWithTheDay, testHandwritingSurvivesARelaunch and testUndoAndRedoAffectTheLastDrawing pass
+      - on ui (ipad, newest, …), testAFingerSwipesToTheNextPage, testAPageIsShownWhole, testDeletingAnAddedPageAsksFirst, testDeletingIsDisabledOnAPrintedPage, testAddPageAddsAPageAfterTheCurrentOne, testNotesAndOverviewButtonsMoveBetweenPages, testHandwritingStaysWithTheDay, testHandwritingSurvivesARelaunch, testUndoAndRedoAffectTheLastDrawing and PR 9's testUndoRevertsAPageThatScrolledAway pass
 
   - id: p2-start-over
     title: Start over deletes a started day's notes and renders it fresh, after a confirmation
@@ -613,7 +632,7 @@ phases:
       - App/Screens/AgendaView.swift
       - AppUITests/StartOverUITests.swift
     brief: |
-      Implement the plan's Design section D5 and the Start over strings in D8 exactly as written.
+      Implement the plan's Design section D5 and the Start over strings in D7 exactly as written.
       Do not edit docs, CHANGELOG.md or ADRs; the last phase does.
       1. AgendaController.swift: add startOver() right after render() (D5).
       2. AgendaView.swift: the three ID constants, @State confirmsStartOver, the Start Over toolbar
@@ -686,64 +705,50 @@ phases:
       - AgendaControllerBinderTests passes, including the four new tests
       - on ui (ipad, newest, …), testStartOverIsOfferedOnlyOnceTheDayIsStarted and testStartOverAsksAndThenDeletesTheHandwriting pass
 
-  - id: p4-pencil-and-undo
-    title: The Pencil switches pen and eraser; Undo and Redo are disabled when there is nothing to do
+  - id: p4-pencil-switch
+    title: Double-tapping or squeezing the Apple Pencil switches between the pen and the eraser
     depends_on: [p1-binder-pages]
-    complexity: M
+    complexity: S
     touches:
       - AppCore/Sources/Binder/BinderTool.swift
       - AppCore/Tests/Binder/BinderToolTests.swift
       - App/Screens/PencilInteractionView.swift
       - App/Screens/BinderView.swift
-      - App/Screens/BinderToolbar.swift
-      - AppUITests/BinderUITests.swift
     brief: |
-      Implement the plan's Design sections D6 and D7 exactly as written, on top of p1's
-      BinderView and BinderToolbar. Do not edit docs, CHANGELOG.md or ADRs; the last phase does.
+      Implement the plan's Design section D6 exactly as written, on top of p1's BinderView. Undo
+      and Redo dimming is PR 9's and is already on the branch; do not touch it. Do not edit docs,
+      CHANGELOG.md or ADRs; the last phase does.
       1. AppCore/Sources/Binder/BinderTool.swift: add switched(backTo:) (D6).
       2. New App/Screens/PencilInteractionView.swift as written in D6. The Magenda target's
          sources are the whole App folder (project.yml), so project.yml does not change.
-      3. BinderView.swift: lastPen, the PencilInteractionView background and the onChange (D6);
-         canUndo, canRedo, refreshUndo() and its .onReceive/.onChange callers (D7).
-      4. BinderToolbar.swift: canUndo and canRedo after redo, and the .disabled modifiers (D7).
-         Pass them from BinderView in that position.
-      5. AppCore/Tests/Binder/BinderToolTests.swift: "The Pencil switches a pen to the eraser and
-         the eraser back to the last pen", parameterized over every BinderPen: .pen(pen)
+      3. BinderView.swift: lastPen, the PencilInteractionView background and the onChange, at the
+         place in the modifier chain D6 names.
+      4. AppCore/Tests/Binder/BinderToolTests.swift: "The Pencil switches a pen to the eraser and
+         the eraser back to the last pen", parameterized over BinderPen.allCases: .pen(pen)
          .switched(backTo: .black) == .eraser, and .eraser.switched(backTo: pen) == .pen(pen).
          Update the file's opening comment to mention the Pencil switch.
-      6. AppUITests/BinderUITests.swift: new testUndoAndRedoAreGreyedOutWhenThereIsNothingToDo,
-         iPad only (try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")),
-         launch "standard" with "-MagendaFingerDrawing"; render; undoButton and redoButton exist
-         and isEnabled is false; draw on binderPage.0 and wait for "Handwritten"; wait (an
-         XCTNSPredicateExpectation on "isEnabled == true", 10 s) for undoButton to be enabled;
-         redoButton.isEnabled is false; tap undoButton; wait for redoButton to be enabled; draw on
-         binderPage.0 again and wait for redoButton to be disabled (a new stroke clears Redo) and
-         undoButton to be enabled; tap undoButton; wait for redoButton to be enabled; tap
-         redoButton; wait ("isEnabled == false") for redoButton to be disabled. Add a private
-         helper waitForEnabled(_ element: XCUIElement, _ enabled: Bool) -> Bool for these waits.
-         Update the file's opening comment.
-      7. Push and dispatch tests.yml on the phase branch; read core, lint, scripts, app and ui.
-      Stop with status=blocked if: the app build fails on a UIPencilInteraction API; Redo stays
-      enabled after a new stroke or Undo stays disabled after one, also after one try of the
-      fallback in the plan's Risks ("Undo notifications"); testUndoAndRedoAffectTheLastDrawing
-      fails; the tests seem to need a refresh on visibleKey (D7 says why not to add one); the coverage floor fails for a file outside touches.
+      5. Push and dispatch tests.yml on the phase branch; read core, lint, scripts, app and ui.
+      The simulator has no Pencil, so there is no UI test for the switch; the real-iPad check in
+      manual_after covers it.
+      Stop with status=blocked if: the app build fails on a UIPencilInteraction API; an existing
+      BinderUITests test fails; the coverage floor fails for a file outside touches.
     acceptance:
       - grep -n "func switched(backTo" AppCore/Sources/Binder/BinderTool.swift matches
       - grep -n "UIPencilInteraction(delegate" App/Screens/PencilInteractionView.swift matches; grep -n "PencilInteractionView(onSwitch" App/Screens/BinderView.swift matches
-      - grep -n "disabled(!canRedo)" App/Screens/BinderToolbar.swift and grep -n "disabled(!canUndo)" App/Screens/BinderToolbar.swift match
+      - grep -n "runSystemShortcut" App/Screens/PencilInteractionView.swift matches
       - tests.yml on the phase branch is green in core (with the coverage floor), lint, scripts, the three app jobs and the nine ui jobs
-      - BinderToolTests passes, including the new test; on ui (ipad, newest, …) testUndoAndRedoAreGreyedOutWhenThereIsNothingToDo and testUndoAndRedoAffectTheLastDrawing pass
+      - BinderToolTests passes, including the new test
 
   - id: p3-retire-plan
-    title: ADRs 0022 to 0024, docs and changelog; delete the plan
-    depends_on: [p1-binder-pages, p2-start-over, p4-pencil-and-undo]
+    title: ADRs 0024 to 0026, docs and changelog; delete the plan
+    depends_on: [p1-binder-pages, p2-start-over, p4-pencil-switch]
     complexity: S
     touches:
       - docs/adr/0020-on-ipad-the-agenda-is-a-binder-of-native-pages-with-pencilkit-ink.md
       - docs/adr/0021-a-binder-day-is-stored-as-a-content-snapshot-and-ink-per-page-key.md
-      - docs/adr/0022-binder-pages-turn-sideways-one-whole-page-at-a-time.md
-      - docs/adr/0023-only-added-binder-pages-can-be-deleted.md
-      - docs/adr/0024-start-over-is-separate-from-render.md
+      - docs/adr/0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md
+      - docs/adr/0025-only-added-binder-pages-can-be-deleted.md
+      - docs/adr/0026-start-over-is-separate-from-render.md
       - docs/adr/README.md
       - README.md
       - docs/release-testing.md
@@ -751,43 +756,46 @@ phases:
       - docs/binder-paging-and-start-over-plan.md
       - docs/binder-paging-and-start-over-plan-manual-steps.html
     brief: |
-      Write the ADRs and docs for what p1, p2 and p4 built, then delete this plan. Read the plan's
+      Write the ADRs and docs for what p1, p2 and p4 built (PR 9's ADRs 0022 and 0023 and its docs
+      are already on the branch), then delete this plan. Read the plan's
       Design and ADRs sections first. No project history anywhere (ADR 0008): no phase names, plan
       ids or bare issue numbers.
       1. ADRs, following the template and rules in docs/adr/README.md (one decision per ADR;
          Status, Context, Decision, Alternatives considered, Consequences, Verification with source
          and test files, Related). Status: "Accepted — <output of date +%F>. Implemented." plus
          the Amends line below.
-         - docs/adr/0022-binder-pages-turn-sideways-one-whole-page-at-a-time.md: Amends ADR 0020.
+         - docs/adr/0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md: Amends ADR 0020.
            Decision from D3; alternatives from D3's "Rejected". Index row: "The binder shows one
            whole page per screen and pages turn with a horizontal swipe".
-         - docs/adr/0023-only-added-binder-pages-can-be-deleted.md: Amends ADR 0020. Decision from
-           D2 and D4; alternatives from D4's "Rejected"; Consequences: an added copy of a meeting
+         - docs/adr/0025-only-added-binder-pages-can-be-deleted.md: Amends ADR 0020. Decision from
+           D2 and D4 (including that a deleted page's undo history goes with it); alternatives from
+           D4's "Rejected"; Consequences: an added copy of a meeting
            page is titled "cont. <title>", computed at layout time (D1), so neither adding nor
            deleting pages changes the stored format. Index row: "Only pages added in the binder
            can be deleted, with their handwriting, after a confirmation".
-         - docs/adr/0024-start-over-is-separate-from-render.md: Amends ADR 0021. Decision from D5
+         - docs/adr/0026-start-over-is-separate-from-render.md: Amends ADR 0021. Decision from D5
            (Render keeps handwriting as before; Start over, on iPad, after a confirmation, removes
            every stored ink key of the day, including keys no longer shown, saves a fresh day and
            renders it; it is not in the Agenda menu); alternatives from D5's "Rejected". Index row:
            "Render keeps a started day's handwriting; Start over is a separate, confirmed action
            that deletes it and renders the day fresh".
-         - Add to ADR 0020's Status the lines
-           "Amended by [ADR 0022](0022-binder-pages-turn-sideways-one-whole-page-at-a-time.md)."
-           and "Amended by [ADR 0023](0023-only-added-binder-pages-can-be-deleted.md).", and to ADR
-           0021's Status "Amended by [ADR 0024](0024-start-over-is-separate-from-render.md).".
+         - ADR 0020's and ADR 0021's Status already carry PR 9's "Amended by" lines; add these
+           below them. Add to ADR 0020's Status the lines
+           "Amended by [ADR 0024](0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md)."
+           and "Amended by [ADR 0025](0025-only-added-binder-pages-can-be-deleted.md).", and to ADR
+           0021's Status "Amended by [ADR 0026](0026-start-over-is-separate-from-render.md).".
            Change nothing else in either.
-         - Add the three rows to docs/adr/README.md's index.
+         - Add the three rows to docs/adr/README.md's index, after PR 9's 0022 and 0023 rows.
+         - Related in each: ADR 0020 or 0021, and ADR 0023 for 0025 (the undo history it trims).
       2. README.md "Binder (iPad)": pages are swiped left and right, one whole page at a time; the
          toolbar also has Delete page, which removes a page you added after asking; a page added
          after a meeting page is titled "cont." before the meeting's title; Render again keeps
          your handwriting on its pages, and Start over (in the agenda's toolbar, after asking)
          deletes all of the day's handwriting and added pages and renders it fresh; double-tapping
-         (or squeezing) the Apple Pencil switches between the pen and the eraser; Undo and Redo
-         are greyed out when there is nothing to undo or redo. Change
-         "(ADR 0020, ADR 0021)" to "(ADR 0020 to ADR 0024)".
-      3. docs/release-testing.md: change "scroll it off screen and back" to "swipe to another page
-         and back"; add "- [ ] On an iPad with an Apple Pencil, swipe between binder pages with a
+         (or squeezing) the Apple Pencil switches between the pen and the eraser. Keep PR 9's
+         sentences on undo and redo and on the locked device. Change "(ADR 0020, ADR 0021)" to
+         "(ADR 0020, ADR 0021, ADR 0024 to ADR 0026)"; keep "(ADR 0022)".
+      3. docs/release-testing.md: keep PR 9's "go to Notes, and Undo scrolls back" item; add "- [ ] On an iPad with an Apple Pencil, swipe between binder pages with a
          finger while the Pencil writes, and no stroke turns into a swipe or a swipe into a stroke."
          and "- [ ] On an iPad with an Apple Pencil, double-tap (and, on a Pencil Pro, squeeze)
          the Pencil: a pen switches to the eraser and the eraser back to the pen used last."
@@ -800,7 +808,9 @@ phases:
            pens, an eraser, undo and redo, buttons to jump to the overview, delegated tasks and
            notes, Add page, which puts a blank copy of the current page after it (titled "cont."
            before the meeting's title on a meeting page), and Delete page, which removes a page
-           you added after asking."
+           you added after asking. Undo and redo reach every page you wrote on since the day was
+           opened, and go to the page they change."
+         - Keep PR 9's "can't be read while the device is locked" bullet as it is.
          - Add after the toolbar bullet: "Double-tap the Apple Pencil (or squeeze a Pencil Pro) to
            switch between the pen and the eraser. Undo and Redo are greyed out when there is
            nothing to undo or redo."
@@ -814,9 +824,9 @@ phases:
       Stop with status=blocked if the code on the branch does not match the Design (for example
       Start Over is in AgendaCommands.swift, or the stored format version changed).
     acceptance:
-      - ls docs/adr/0022-*.md docs/adr/0023-*.md docs/adr/0024-*.md lists three files, each with "Accepted" in its Status
-      - grep -c "Amended by" docs/adr/0020-*.md prints 2 and grep -c "Amended by" docs/adr/0021-*.md prints 1
-      - grep -n "0022\|0023\|0024" docs/adr/README.md shows three index rows
+      - ls docs/adr/0024-*.md docs/adr/0025-*.md docs/adr/0026-*.md lists three files, each with "Accepted" in its Status
+      - grep -c "Amended by" docs/adr/0020-*.md prints 3 and grep -c "Amended by" docs/adr/0021-*.md prints 2 (PR 9's line plus this plan's)
+      - grep -n "0024\|0025\|0026" docs/adr/README.md shows three index rows
       - grep -n "Double-tap the Apple Pencil" CHANGELOG.md matches; grep -n "Start over" CHANGELOG.md README.md matches in both; grep -n "^## \[" CHANGELOG.md shows no heading that is not already on main
       - test ! -e docs/binder-paging-and-start-over-plan.md and test ! -e docs/binder-paging-and-start-over-plan-manual-steps.html and grep -rn "binder-paging-and-start-over-plan" --exclude-dir=.git . finds nothing
       - python3 -m unittest discover -s scripts/tests passes
