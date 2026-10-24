@@ -16,9 +16,9 @@ final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
-    private func launch() -> XCUIApplication {
+    private func launch(_ extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "standard"]
+        app.launchArguments = ["-MagendaFixture", "standard"] + extraArguments
         app.launch()
         return app
     }
@@ -287,5 +287,59 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(
             app.buttons["signInButton"].waitForExistence(timeout: 30),
             "the sign-in button never appeared")
+    }
+
+    /// Types into a text field of the settings form: scrolls it clear of the keyboard, taps it,
+    /// and types.
+    @MainActor
+    private func enterText(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
+        reveal(app, field, upperHalf: true)
+        field.tap()
+        app.typeText(text)
+    }
+
+    @MainActor
+    func testAnInvalidRoutineShowsAnErrorAndAValidOneIsSaved() {
+        let app = launch(["-MagendaNoRoutine"])
+        openSettings(app)
+
+        enterText(app, element(app, "routineURLField"), "https://example.com/fire")
+        enterText(app, element(app, "routineTokenField"), "sk-ant-oat01-test")
+        let save = app.buttons["saveRoutineButton"].firstMatch
+        reveal(app, save, upperHalf: true)
+        save.tap()
+        XCTAssertTrue(
+            element(app, "routineError").waitForExistence(timeout: 30),
+            "no error for a bad fire URL")
+
+        let urlField = element(app, "routineURLField")
+        reveal(app, urlField, upperHalf: true)
+        // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
+        let current = urlField.value as? String ?? ""
+        urlField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
+        app.typeText(deletes + "https://api.anthropic.com/v1/claude_code/routines/trig_ui/fire")
+        reveal(app, save, upperHalf: true)
+        save.tap()
+        let status = element(app, "routineStatusLabel")
+        XCTAssertTrue(status.waitForExistence(timeout: 30), "the routine was never saved")
+        XCTAssertTrue(status.label.contains("trig_"), "the status named no trigger")
+    }
+
+    @MainActor
+    func testForgettingTheRoutineBringsBackTheFields() {
+        let app = launch()
+        openSettings(app)
+
+        let status = element(app, "routineStatusLabel")
+        reveal(app, status)
+        XCTAssertTrue(status.label.contains("trig_fixture"), "the fixture routine is not shown")
+
+        let forget = app.buttons["forgetRoutineButton"].firstMatch
+        reveal(app, forget)
+        forget.tap()
+        XCTAssertTrue(
+            element(app, "routineURLField").waitForExistence(timeout: 30),
+            "the fire URL field never came back")
     }
 }

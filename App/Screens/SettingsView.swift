@@ -14,6 +14,12 @@ struct SettingsView: View {
         static let clientIDLabel = "clientIDLabel"
         static let changeClientButton = "changeClientButton"
         static let forgetClientButton = "forgetClientButton"
+        static let routineURLField = "routineURLField"
+        static let routineTokenField = "routineTokenField"
+        static let saveRoutineButton = "saveRoutineButton"
+        static let routineError = "routineError"
+        static let routineStatusLabel = "routineStatusLabel"
+        static let forgetRoutineButton = "forgetRoutineButton"
         static let signOutButton = "signOutButton"
         static let version = "version"
         static let settingsDone = "settingsDone"
@@ -53,12 +59,16 @@ struct SettingsView: View {
     let appInfo: AppInfo
 
     @Environment(AgendaController.self) private var controller
+    @Environment(HandoffController.self) private var handoff
     @Environment(\.dismiss) private var dismiss
 
     @State private var hexDrafts: [ColorRole: String] = [:]
     @State private var invalidRoles: Set<ColorRole> = []
     @State private var showsClientSheet = false
     @State private var confirmsForget = false
+    @State private var routineURL = ""
+    @State private var routineToken = ""
+    @State private var routineSaveFailed = false
 
     var body: some View {
         NavigationStack {
@@ -73,6 +83,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier(ID.rulesLink)
                 }
                 clientSection
+                routineSection
                 accountSection
                 aboutSection
             }
@@ -305,6 +316,56 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var routineSection: some View {
+        if let triggerID = handoff.routineTriggerID {
+            Section("End-of-day routine") {
+                Text("Sends finished days to \(triggerID)")
+                    .accessibilityIdentifier(ID.routineStatusLabel)
+                Button("Forget routine", role: .destructive) { handoff.forgetRoutine() }
+                    .accessibilityIdentifier(ID.forgetRoutineButton)
+            }
+        } else {
+            Section {
+                TextField("Fire URL", text: $routineURL)
+                    .keyboardType(.URL)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: routineURL) { routineSaveFailed = false }
+                    .accessibilityIdentifier(ID.routineURLField)
+                SecureField("Token", text: $routineToken)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: routineToken) { routineSaveFailed = false }
+                    .accessibilityIdentifier(ID.routineTokenField)
+                if routineSaveFailed, let message = handoff.message {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier(ID.routineError)
+                }
+                Button("Save", action: saveRoutine)
+                    .accessibilityIdentifier(ID.saveRoutineButton)
+            } header: {
+                Text("End-of-day routine")
+            } footer: {
+                Text(
+                    "Finished days upload to Google Drive. To send them to Claude, add the API trigger of your end-of-day routine from claude.ai/code/routines."
+                )
+            }
+        }
+    }
+
+    private func saveRoutine() {
+        if handoff.saveRoutine(fireURL: routineURL, token: routineToken) {
+            routineURL = ""
+            routineToken = ""
+            routineSaveFailed = false
+        } else {
+            routineSaveFailed = true
+        }
+    }
+
     private var accountSection: some View {
         Section("Account") {
             Button("Sign out") {
@@ -328,9 +389,13 @@ struct SettingsView: View {
 }
 
 #Preview {
-    if let controller = AppEnvironment.previewController() {
+    if let services = AppEnvironment.previewServices() {
         SettingsView(appInfo: AppInfo(name: "Preview", version: "1.0.0", build: "1"))
-            .environment(controller)
-            .task { await controller.start() }
+            .environment(services.controller)
+            .environment(services.handoff)
+            .task {
+                await services.controller.start()
+                services.handoff.start()
+            }
     }
 }

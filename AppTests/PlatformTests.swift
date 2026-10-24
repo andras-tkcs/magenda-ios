@@ -56,6 +56,24 @@ struct PlatformTests {
         #expect(try store.load() == nil)
     }
 
+    @Test("The routine credentials store saves, loads and deletes")
+    func routineStoreRoundTrip() throws {
+        let store = KeychainRoutineCredentialsStore(service: "name.tkcs.magenda.tests-routine")
+        try store.delete()
+        defer { try? store.delete() }
+
+        #expect(try store.load() == nil)
+        let routine = try #require(
+            RoutineCredentials(
+                fireURL: "https://api.anthropic.com/v1/claude_code/routines/trig_test/fire",
+                token: "sk-ant-oat01-test"))
+        try store.save(routine)
+        #expect(try store.load() == routine)
+
+        try store.delete()
+        #expect(try store.load() == nil)
+    }
+
     @Test("Settings round-trip through UserDefaults and garbage loads as defaults")
     func settingsRoundTrip() throws {
         let suite = "name.tkcs.magenda.tests.settings"
