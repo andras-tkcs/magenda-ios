@@ -170,7 +170,9 @@ struct GoogleOAuthAuthorizationRequestTests {
                 URLQueryItem(name: "code_challenge_method", value: "S256"),
                 URLQueryItem(name: "state", value: request.state),
             ])
-        #expect(request.url.absoluteString.contains("scope=\(calendarScope)%20\(tasksScope)%20\(driveScope)"))
+        #expect(
+            request.url.absoluteString.contains(
+                "scope=\(calendarScope)%20\(tasksScope)%20\(driveScope)"))
     }
 }
 

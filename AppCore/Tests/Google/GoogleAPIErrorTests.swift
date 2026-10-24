@@ -29,11 +29,13 @@ struct GoogleAPIErrorTests {
         #expect(error.userMessage == message)
     }
 
-    @Test("No message mentions a token", arguments: [
-        GoogleAPIError.notConfigured, .authorizationCancelled, .authorizationFailed,
-        .missingScopes, .signedOut, .forbidden, .notFound, .rateLimited, .network,
-        .unexpectedResponse,
-    ])
+    @Test(
+        "No message mentions a token",
+        arguments: [
+            GoogleAPIError.notConfigured, .authorizationCancelled, .authorizationFailed,
+            .missingScopes, .signedOut, .forbidden, .notFound, .rateLimited, .network,
+            .unexpectedResponse,
+        ])
     func noTokenInMessage(error: GoogleAPIError) {
         #expect(!error.userMessage.lowercased().contains("token"))
     }

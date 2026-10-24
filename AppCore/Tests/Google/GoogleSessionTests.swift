@@ -351,8 +351,8 @@ struct GoogleSessionSendTests {
     @Test(
         "A non-2xx answer maps to its error",
         arguments: [
-            (403, GoogleAPIError.forbidden), (404, .notFound), (429, .rateLimited), (500, .unexpectedResponse),
-            (302, .unexpectedResponse),
+            (403, GoogleAPIError.forbidden), (404, .notFound), (429, .rateLimited),
+            (500, .unexpectedResponse), (302, .unexpectedResponse),
         ])
     func statusMapping(status: Int, error: GoogleAPIError) async throws {
         let http = FakeHTTPClient()
