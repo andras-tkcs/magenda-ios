@@ -46,13 +46,16 @@ public struct DraftEvent: Equatable, Identifiable, Sendable {
     public var isIncluded: Bool
     /// Whether the event gets a meeting page.
     public var includesMeetingPage: Bool
+    /// The summary skill the meeting page asks for, if its title is mapped.
+    public var summarySkill: String?
 
     /// Creates an event with every field given.
     public init(
         id: String, originalTitle: String, title: String, defaultTitle: String,
         shortNameKey: String, start: Date, timeText: String, scheduleSlot: Int?,
         exclusion: EventExclusion?, hasOtherAttendees: Bool, attendeeEmails: [String],
-        attendeeFirstNames: [String], isIncluded: Bool, includesMeetingPage: Bool
+        attendeeFirstNames: [String], isIncluded: Bool, includesMeetingPage: Bool,
+        summarySkill: String? = nil
     ) {
         self.id = id
         self.originalTitle = originalTitle
@@ -68,6 +71,7 @@ public struct DraftEvent: Equatable, Identifiable, Sendable {
         self.attendeeFirstNames = attendeeFirstNames
         self.isIncluded = isIncluded
         self.includesMeetingPage = includesMeetingPage
+        self.summarySkill = summarySkill
     }
 
     /// Why the event is treated the way it is, in display order.
