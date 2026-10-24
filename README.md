@@ -53,16 +53,21 @@ none is chosen)
 ## Binder (iPad)
 
 On iPad, Render opens the day's binder: the same pages as the PDF, drawn in the app, with Apple
-Pencil handwriting on each one. The toolbar has black, blue, red and green pens, an eraser, undo and
-redo, buttons that jump to the overview, the delegated tasks and the notes, and Add page, which puts
-a blank copy of the current page after it. Undo and redo reach every page you wrote on since the day
-was opened, and scroll to the page they change. Tapping a link on a page follows it. Share PDF
+Pencil handwriting on each one. Swipe left and right to turn pages, one whole page at a time. The
+toolbar has black, blue, red and green pens, an eraser, undo and redo, buttons that jump to the
+overview, the delegated tasks and the notes, Add page, which puts a blank copy of the current page
+after it, and Delete page, which removes a page you added after asking. A page added after a
+meeting page is titled "cont." before the meeting's title. Undo and redo reach every page you wrote
+on since the day was opened, and go to the page they change. Double-tapping (or squeezing) the
+Apple Pencil switches between the pen and the eraser. Tapping a link on a page follows it. Share PDF
 shares the day with your handwriting on its pages.
 
 Handwriting is saved on the device per page. Rendering the day again keeps it on its page, and a
-meeting page you wrote on stays even when the meeting has left the agenda. Once a day is started, it
-opens without a network connection. The iPhone shows the PDF preview (ADR 0020, ADR 0021). The saved
-binder and the shared PDFs can't be read while the device is locked (ADR 0022).
+meeting page you wrote on stays even when the meeting has left the agenda. Start over, in the
+agenda's toolbar, deletes all of the day's handwriting and added pages after asking, and renders
+the day fresh. Once a day is started, it opens without a network connection. The iPhone shows the
+PDF preview (ADR 0020, ADR 0021, ADR 0024 to ADR 0026). The saved binder and the shared PDFs can't
+be read while the device is locked (ADR 0022).
 
 ## Delegated tasks
 

@@ -4,6 +4,8 @@
 
 Accepted — 2026-10-23. Implemented.
 Amends [ADR 0020](0020-on-ipad-the-agenda-is-a-binder-of-native-pages-with-pencilkit-ink.md).
+Amended by [ADR 0025](0025-only-added-binder-pages-can-be-deleted.md): deleting a page removes its history.
+Amended by [ADR 0026](0026-start-over-is-separate-from-render.md): Start over begins an empty history.
 
 ## Context
 
