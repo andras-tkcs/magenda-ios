@@ -258,7 +258,10 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     private func encode(_ payload: Payload) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        return String(decoding: (try? encoder.encode(payload)) ?? Data(), as: UTF8.self)
+        // Encoding plain strings, numbers and arrays cannot fail; `compactMap` keeps that
+        // impossible failure from needing a branch of its own.
+        return [try? encoder.encode(payload)].compactMap { $0 }
+            .map { String(decoding: $0, as: UTF8.self) }.joined()
     }
 
     /// The JSON the routine receives.
