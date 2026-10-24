@@ -28,10 +28,12 @@ public struct GoogleDriveClient: DriveFiling {
         self.sender = sender
     }
 
+    /// The first folder called `name`, or a new one when none exists.
     public func folderID(named name: String) async throws -> String {
         let escapedName = name.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
-        let query = "name = '\(escapedName)' and mimeType = '\(Self.folderType)' and trashed = false"
+        let query =
+            "name = '\(escapedName)' and mimeType = '\(Self.folderType)' and trashed = false"
         let listURL = GoogleAPI.withQuery(
             [
                 (key: "q", value: query), (key: "spaces", value: "drive"),
@@ -42,7 +44,7 @@ public struct GoogleDriveClient: DriveFiling {
         if let id = try decode(FilesPage.self, listed).files.first?.id {
             return id
         }
-        let body = try encode(["mimeType": Self.folderType, "name": name])
+        let body = encode(["mimeType": Self.folderType, "name": name])
         let created = try await sender.send(
             HTTPRequest(
                 method: .post,
@@ -51,17 +53,18 @@ public struct GoogleDriveClient: DriveFiling {
         return try decode(FileID.self, created).id
     }
 
+    /// Uploads `data` as a PDF in one resumable `PUT`; a gone `fileID` falls back to a new file.
     public func uploadPDF(
         _ data: Data, name: String, folderID: String, replacing fileID: String?
     ) async throws -> String {
-        let creation = try encode(
+        let creation = encode(
             Metadata(mimeType: "application/pdf", name: name, parents: [folderID]))
         let location: URL
         if let fileID {
             do {
                 location = try await initiateUpload(
-                    method: .patch, url: Self.uploadURL.appending(path: fileID), body: Data("{}".utf8),
-                    length: data.count)
+                    method: .patch, url: Self.uploadURL.appending(path: fileID),
+                    body: Data("{}".utf8), length: data.count)
             } catch GoogleAPIError.notFound {
                 location = try await initiateUpload(
                     method: .post, url: Self.uploadURL, body: creation, length: data.count)
@@ -77,16 +80,15 @@ public struct GoogleDriveClient: DriveFiling {
         return try decode(FileID.self, uploaded).id
     }
 
+    /// Creates a Google Doc from `text` with one multipart request.
     public func createDoc(name: String, folderID: String, text: String) async throws -> String {
-        let metadata = try encode(
+        let metadata = encode(
             Metadata(mimeType: Self.docType, name: name, parents: [folderID]))
         let delimiter = "--\(Self.boundary)"
         var body = Data("\(delimiter)\r\nContent-Type: \(Self.jsonType)\r\n\r\n".utf8)
         body.append(metadata)
-        body.append(
-            Data(
-                "\r\n\(delimiter)\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n\(text)\r\n\(delimiter)--\r\n"
-                    .utf8))
+        let textHeader = "\r\n\(delimiter)\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n"
+        body.append(Data("\(textHeader)\(text)\r\n\(delimiter)--\r\n".utf8))
         let response = try await sender.send(
             HTTPRequest(
                 method: .post,
@@ -98,6 +100,7 @@ public struct GoogleDriveClient: DriveFiling {
         return try decode(FileID.self, response).id
     }
 
+    /// The Doc as plain text, without the byte order mark Drive puts first.
     public func exportText(ofDoc docID: String) async throws -> String {
         let url = GoogleAPI.withQuery(
             [(key: "mimeType", value: "text/plain")],
@@ -150,14 +153,12 @@ public struct GoogleDriveClient: DriveFiling {
         }
     }
 
-    private func encode<T: Encodable>(_ value: T) throws -> Data {
+    private func encode<T: Encodable>(_ value: T) -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        do {
-            return try encoder.encode(value)
-        } catch {
-            throw GoogleAPIError.unexpectedResponse
-        }
+        // Encoding plain strings and arrays cannot fail; `compactMap` keeps that impossible
+        // failure from needing a branch of its own.
+        return [try? encoder.encode(value)].compactMap { $0 }.reduce(Data()) { $1 }
     }
 }
 

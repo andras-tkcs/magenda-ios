@@ -31,12 +31,15 @@ struct GoogleDriveClientTests {
         _ = try await GoogleDriveClient(sender: sender).folderID(named: "It's a\\b")
         let request = try #require(sender.requests.first)
         let query =
-            "name = 'It\\'s a\\\\b' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-        let components = try #require(URLComponents(url: request.url, resolvingAgainstBaseURL: false))
+            "name = 'It\\'s a\\\\b' and mimeType = 'application/vnd.google-apps.folder'"
+            + " and trashed = false"
+        let components = try #require(
+            URLComponents(url: request.url, resolvingAgainstBaseURL: false))
         #expect(components.queryItems?.first { $0.name == "q" }?.value == query)
         #expect(request.url.absoluteString.contains("It%5C%27s%20a%5C%5Cb"))
-        #expect(request.url.absoluteString.hasPrefix("https://www.googleapis.com/drive/v3/files?q="))
-        #expect(request.url.absoluteString.hasSuffix("&spaces=drive&fields=files%28id%29&pageSize=10"))
+        let url = request.url.absoluteString
+        #expect(url.hasPrefix("https://www.googleapis.com/drive/v3/files?q="))
+        #expect(url.hasSuffix("&spaces=drive&fields=files%28id%29&pageSize=10"))
     }
 
     @Test("A missing folder is created with the exact JSON body")
@@ -68,13 +71,15 @@ struct GoogleDriveClientTests {
         #expect(initiation.method == .post)
         #expect(
             initiation.url.absoluteString
-                == "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id")
+                == "https://www.googleapis.com/upload/drive/v3/files"
+                + "?uploadType=resumable&fields=id")
         #expect(initiation.headers["Content-Type"] == "application/json; charset=UTF-8")
         #expect(initiation.headers["X-Upload-Content-Type"] == "application/pdf")
         #expect(initiation.headers["X-Upload-Content-Length"] == "6")
         #expect(
             text(initiation.body)
-                == #"{"mimeType":"application/pdf","name":"Magenda 2026-10-24.pdf","parents":["folder-1"]}"#
+                == #"{"mimeType":"application/pdf","name":"Magenda 2026-10-24.pdf","#
+                + #""parents":["folder-1"]}"#
         )
         let upload = sender.requests[1]
         #expect(upload.method == .put)
@@ -95,8 +100,8 @@ struct GoogleDriveClientTests {
         #expect(initiation.method == .patch)
         #expect(
             initiation.url.absoluteString
-                == "https://www.googleapis.com/upload/drive/v3/files/old%23id?uploadType=resumable&fields=id"
-        )
+                == "https://www.googleapis.com/upload/drive/v3/files/old%23id"
+                + "?uploadType=resumable&fields=id")
         #expect(text(initiation.body) == "{}")
         #expect(initiation.headers["X-Upload-Content-Length"] == "6")
         #expect(sender.requests[1].method == .put)
@@ -138,18 +143,21 @@ struct GoogleDriveClientTests {
         let sender = FakeSender()
         try sender.enqueue(fixture: "drive-file-id")
         let id = try await GoogleDriveClient(sender: sender)
-            .createDoc(name: "Magenda 2026-10-24 notes", folderID: "folder-1", text: "Line one\nLine two")
+            .createDoc(
+                name: "Magenda 2026-10-24 notes", folderID: "folder-1", text: "Line one\nLine two")
         #expect(id == "file-id-01")
         let request = try #require(sender.requests.first)
         #expect(request.method == .post)
         #expect(
             request.url.absoluteString
-                == "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id")
+                == "https://www.googleapis.com/upload/drive/v3/files"
+                + "?uploadType=multipart&fields=id")
         #expect(
             request.headers["Content-Type"] == "multipart/related; boundary=magenda-part-boundary")
         let expected =
             "--magenda-part-boundary\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
-            + #"{"mimeType":"application/vnd.google-apps.document","name":"Magenda 2026-10-24 notes","parents":["folder-1"]}"#
+            + #"{"mimeType":"application/vnd.google-apps.document","#
+            + #""name":"Magenda 2026-10-24 notes","parents":["folder-1"]}"#
             + "\r\n--magenda-part-boundary\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n"
             + "Line one\nLine two\r\n--magenda-part-boundary--\r\n"
         #expect(request.body == Data(expected.utf8))
@@ -166,7 +174,15 @@ struct GoogleDriveClientTests {
         #expect(request.method == .get)
         #expect(
             request.url.absoluteString
-                == "https://www.googleapis.com/drive/v3/files/doc/1/export?mimeType=text%2Fplain")
+                == "https://www.googleapis.com/drive/v3/files/doc/1/export"
+                + "?mimeType=text%2Fplain")
+    }
+
+    @Test("An export without a byte order mark is returned as it is")
+    func exportPlain() async throws {
+        let sender = FakeSender()
+        sender.enqueue(.success(HTTPResponse(status: 200, body: Data("Hello".utf8))))
+        #expect(try await GoogleDriveClient(sender: sender).exportText(ofDoc: "d") == "Hello")
     }
 
     @Test("An export that is not UTF-8 is unexpected")
