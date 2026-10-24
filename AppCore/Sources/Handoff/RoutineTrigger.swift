@@ -163,10 +163,12 @@ public struct RoutineTriggerClient: RoutineFiring {
         self.credentials = credentials
     }
 
+    /// Whether the routine's URL and token are stored and readable.
     public func isConfigured() -> Bool {
         stored() != nil
     }
 
+    /// Sends `text` to the routine and returns the URL of the session it started.
     public func fire(text: String) async throws -> URL {
         guard let routine = stored() else {
             throw RoutineTriggerError.notConfigured
@@ -192,7 +194,9 @@ public struct RoutineTriggerClient: RoutineFiring {
         case 403: throw RoutineTriggerError.forbidden
         case 404: throw RoutineTriggerError.notFound
         case 429:
-            let seconds = response.header("Retry-After").flatMap { Int($0) }.filter { $0 >= 0 }
+            let seconds = response.header("Retry-After")
+                .flatMap { Int($0) }
+                .flatMap { $0 >= 0 ? $0 : nil }
             throw RoutineTriggerError.rateLimited(retryAfter: seconds.map(TimeInterval.init))
         case 500...599: throw RoutineTriggerError.unavailable
         default: throw RoutineTriggerError.unexpectedResponse

@@ -24,7 +24,8 @@ private func client(
     _ http: FakeHTTPClient, stored: Bool = true
 ) -> RoutineTriggerClient {
     let credentials = stored ? RoutineCredentials(fireURL: goodURL, token: goodToken) : nil
-    return RoutineTriggerClient(http: http, credentials: InMemoryRoutineCredentialsStore(credentials))
+    return RoutineTriggerClient(
+        http: http, credentials: InMemoryRoutineCredentialsStore(credentials))
 }
 
 private func failure(of http: FakeHTTPClient, text: String = "x") async -> RoutineTriggerError? {
@@ -143,8 +144,10 @@ struct RoutineTriggerTests {
     @Test("Without credentials, or when the store cannot be read, fire is not configured")
     func notConfigured() async {
         let http = FakeHTTPClient()
-        for store: any RoutineCredentialsStore in [InMemoryRoutineCredentialsStore(), BrokenStore()]
-        {
+        let stores: [any RoutineCredentialsStore] = [
+            InMemoryRoutineCredentialsStore(), BrokenStore(),
+        ]
+        for store in stores {
             let trigger = RoutineTriggerClient(http: http, credentials: store)
             #expect(!trigger.isConfigured())
             await #expect(throws: RoutineTriggerError.notConfigured) {
