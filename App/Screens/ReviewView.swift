@@ -77,7 +77,7 @@ struct ReviewView: View {
                         Task { await handoff.perform(action, on: day.date) }
                     }
                     .disabled(handoff.isBusy)
-                    .accessibilityLabel(Self.accessibilityLabel(of: action, on: day.date))
+                    .accessibilityLabel(Self.spokenTitle(of: action, on: day.date))
                     .accessibilityIdentifier(ID.reviewAction(index))
                 }
             }
@@ -95,12 +95,12 @@ struct ReviewView: View {
         }
     }
 
-    private static func accessibilityLabel(of action: HandoffAction, on date: CalendarDay) -> String
-    {
+    private static func spokenTitle(of action: HandoffAction, on date: CalendarDay) -> String {
+        let day = date.isoString
         switch action {
-        case .retry: "Try again for \(date.isoString)"
-        case .approve(.approveNotes): "Approve the notes for \(date.isoString)"
-        case .approve: "Approve the summary for \(date.isoString)"
+        case .retry: return "Try again for \(day)"
+        case .approve(.approveNotes): return "Approve the notes for \(day)"
+        case .approve: return "Approve the summary for \(day)"
         }
     }
 }

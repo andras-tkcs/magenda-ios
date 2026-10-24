@@ -75,7 +75,8 @@ final class HandoffUITests: XCTestCase {
         let status = openReview(app)
         XCTAssertEqual(status.label, "Notes ready for review")
         XCTAssertTrue(
-            element(app, "reviewOpenDoc.0").waitForExistence(timeout: 30), "Open Doc never appeared")
+            element(app, "reviewOpenDoc.0").waitForExistence(timeout: 30),
+            "Open Doc never appeared")
     }
 
     @MainActor
