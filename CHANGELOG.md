@@ -34,14 +34,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- On iPad, Render opens the day's binder: write on its pages with Apple Pencil, and the
-  handwriting is saved with the day, also offline once the day is started.
+- On iPad, Render opens the day's binder: one whole page at a time, swiped left and right. Write on
+  its pages with Apple Pencil, and the handwriting is saved with the day, also offline once the day
+  is started.
 - The binder toolbar has black, blue, red and green pens, an eraser, undo and redo, buttons to jump
-  to the overview, delegated tasks and notes, and Add page, which puts a blank copy of the current
-  page after it.
+  to the overview, delegated tasks and notes, Add page, which puts a blank copy of the current page
+  after it (titled "cont." before the meeting's title on a meeting page), and Delete page, which
+  removes a page you added after asking. Undo and redo reach every page you wrote on since the day
+  was opened, and go to the page they change. Undo and Redo are greyed out when there is
+  nothing to undo or redo.
+- Double-tap the Apple Pencil (or squeeze a Pencil Pro) to switch between the pen and the eraser.
 - Share PDF in the binder shares the day with your handwriting on its pages.
+- The binder's saved handwriting and the PDFs it shares can't be read while the device is locked.
 - Rendering a day again keeps your handwriting on its pages; a meeting page you wrote on stays even
   when the meeting is no longer on the agenda.
+- Start over, on a started day, deletes all of its handwriting and added pages after asking and
+  renders it fresh.
 
 ## [0.1.1] — 2026-10-15
 

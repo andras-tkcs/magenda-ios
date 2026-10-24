@@ -40,4 +40,13 @@ public enum BinderTool: Equatable, Sendable {
     case pen(BinderPen)
     /// Erases strokes.
     case eraser
+
+    /// The tool a Pencil double-tap or squeeze switches to: the eraser from a pen, and `pen` from
+    /// the eraser.
+    public func switched(backTo pen: BinderPen) -> BinderTool {
+        switch self {
+        case .pen: .eraser
+        case .eraser: .pen(pen)
+        }
+    }
 }

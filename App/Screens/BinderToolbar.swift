@@ -2,17 +2,21 @@ import AppCore
 import SwiftUI
 
 /// The binder's controls in one scrolling row: go to a page, pick a pen or the eraser, undo and
-/// redo, and add a page.
+/// redo, and add or delete a page.
 struct BinderToolbar: View {
     @Binding var tool: BinderTool
     /// Whether the plan has a delegated-tasks page to go to.
     let hasDelegatedPage: Bool
+    let canUndo: Bool
+    let canRedo: Bool
     let goToOverview: () -> Void
     let goToDelegated: () -> Void
     let goToNotes: () -> Void
     let undo: () -> Void
     let redo: () -> Void
     let addPage: () -> Void
+    let canDeletePage: Bool
+    let deletePage: () -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -39,12 +43,20 @@ struct BinderToolbar: View {
                     .eraser, image: "eraser", label: "Eraser",
                     identifier: BinderView.ID.eraserButton, tint: .primary)
                 Divider().frame(height: 24)
-                button("arrow.uturn.backward", "Undo", BinderView.ID.undoButton) { undo() }
-                button("arrow.uturn.forward", "Redo", BinderView.ID.redoButton) { redo() }
+                button(
+                    "arrow.uturn.backward", "Undo", BinderView.ID.undoButton, isEnabled: canUndo
+                ) { undo() }
+                button(
+                    "arrow.uturn.forward", "Redo", BinderView.ID.redoButton, isEnabled: canRedo
+                ) { redo() }
                 Divider().frame(height: 24)
                 button("doc.badge.plus", "Add page after this one", BinderView.ID.addPageButton) {
                     addPage()
                 }
+                button(
+                    "trash", "Delete this page", BinderView.ID.deletePageButton,
+                    isEnabled: canDeletePage
+                ) { deletePage() }
             }
             .padding(.horizontal)
             .padding(.vertical, 6)
@@ -53,13 +65,15 @@ struct BinderToolbar: View {
     }
 
     private func button(
-        _ image: String, _ label: String, _ identifier: String, action: @escaping () -> Void
+        _ image: String, _ label: String, _ identifier: String, isEnabled: Bool = true,
+        action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: image)
                 .frame(minWidth: 36, minHeight: 36)
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }

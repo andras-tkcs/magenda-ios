@@ -3,26 +3,6 @@ import PencilKit
 import SwiftUI
 import UIKit
 
-/// The canvases of the pages on screen, so undo and redo can reach the one last drawn on.
-@MainActor
-final class CanvasRegistry {
-    private struct Entry {
-        weak var canvas: PKCanvasView?
-    }
-
-    private var entries: [PageKey: Entry] = [:]
-
-    /// Remembers `canvas` as the canvas of the page `key`.
-    func register(_ canvas: PKCanvasView, for key: PageKey) {
-        entries[key] = Entry(canvas: canvas)
-    }
-
-    /// The canvas of the page `key`, or nil when it is not on screen.
-    func canvas(for key: PageKey) -> PKCanvasView? {
-        entries[key]?.canvas
-    }
-}
-
 /// One page of the binder: the page as `PageDrawer` draws it, with a PencilKit canvas on top that
 /// keeps its strokes in page points.
 struct BinderPageView: UIViewRepresentable {
@@ -34,8 +14,6 @@ struct BinderPageView: UIViewRepresentable {
     let allowsFingerDrawing: Bool
     /// What a touch on the canvas does.
     let tool: BinderTool
-    /// Where this page's canvas is registered for undo and redo.
-    let registry: CanvasRegistry
     /// The page a tap at a point of this page jumps to, if the point is on a link.
     let linkTarget: (PlanPoint) -> Int?
     /// Called with the index of the page a tapped link jumps to.
@@ -52,7 +30,6 @@ struct BinderPageView: UIViewRepresentable {
     func makeUIView(context: Context) -> BinderPageUIView {
         let view = BinderPageUIView()
         view.canvas.delegate = context.coordinator
-        registry.register(view.canvas, for: page.key)
         // Only a finger follows links; the pencil writes.
         let tap = UITapGestureRecognizer(
             target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
@@ -80,6 +57,9 @@ struct BinderPageView: UIViewRepresentable {
         // The handwriting last applied to or reported from the canvas; nil for none.
         private var lastData: Data?
         private var isApplying = false
+        // What apply(_:to:) last put on the canvas, so a late change callback for it is not
+        // reported as the person's own change, which would clear redo.
+        private var appliedDrawing: PKDrawing?
         private var appliedTool: BinderTool?
 
         init(parent: BinderPageView) {
@@ -126,14 +106,17 @@ struct BinderPageView: UIViewRepresentable {
             }
             lastData = ink
             isApplying = true
-            canvas.drawing = ink.flatMap { try? PKDrawing(data: $0) } ?? PKDrawing()
+            let drawing = ink.flatMap { try? PKDrawing(data: $0) } ?? PKDrawing()
+            appliedDrawing = drawing
+            canvas.drawing = drawing
             isApplying = false
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-            guard !isApplying else {
+            guard !isApplying, canvasView.drawing != appliedDrawing else {
                 return
             }
+            appliedDrawing = nil
             let drawing = canvasView.drawing
             let data = drawing.strokes.isEmpty ? Data() : drawing.dataRepresentation()
             lastData = data.isEmpty ? nil : data

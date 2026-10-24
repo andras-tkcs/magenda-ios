@@ -20,7 +20,8 @@ public struct BinderLayout: Sendable {
         AgendaLayout(manifest: manifest, measurer: measurer, theme: theme)
     }
 
-    /// The plan for `day`: the content's pages, the retained pages and the added pages.
+    /// The plan for `day`: the content's pages, the retained pages and the added pages. An added
+    /// copy of a meeting page is titled as continued.
     public func plan(for day: BinderDay) -> RenderPlan {
         let base = composeBase(day)
         var contents: [AgendaContent] = []
@@ -32,8 +33,10 @@ public struct BinderLayout: Sendable {
             return (retained, contents.count)
         }
         let origins = [base.plan] + contents.map { layout(day.theme).plan(for: $0) }
+        let originContents = [day.content] + contents
         let withRetained = insertRetained(placed, origins: origins, into: base.pages)
-        let composed = insertExtras(day.extras, into: withRetained)
+        let composed = insertExtras(
+            day.extras, into: withRetained, layout: layout(day.theme), contents: originContents)
         return RenderPlan(
             pageWidth: base.plan.pageWidth, pageHeight: base.plan.pageHeight,
             pages: remapLinks(composed, origins: origins),
@@ -69,7 +72,8 @@ public struct BinderLayout: Sendable {
     /// Steps 4 and 5: the added pages, each a copy of its source page, right after the page they
     /// follow; those whose page is gone follow their source's run.
     private func insertExtras(
-        _ extras: [ExtraPage], into pages: [ComposedPage]
+        _ extras: [ExtraPage], into pages: [ComposedPage], layout agenda: AgendaLayout,
+        contents: [AgendaContent]
     ) -> [ComposedPage] {
         let live = extras.compactMap { extra in
             pages.first { $0.page.key == extra.source }.map { (extra: extra, source: $0) }
@@ -80,7 +84,8 @@ public struct BinderLayout: Sendable {
             ComposedPage(
                 page: PagePlan(
                     key: .extra(entry.extra.id), chrome: entry.source.page.chrome,
-                    operations: entry.source.page.operations),
+                    operations: agenda.continuedOperations(
+                        of: entry.source.page, in: contents[entry.source.origin])),
                 origin: entry.source.origin)
         }
 

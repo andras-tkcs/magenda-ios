@@ -328,7 +328,7 @@ public final class AgendaController {
         guard generation == renderGeneration else {
             return
         }
-        saveBinder(laidOut, base: base, content: content, theme: theme)
+        saveBinder(laidOut, base: base, inked: inked, content: content, theme: theme)
         switch outcome {
         case .success(let url):
             rendered = RenderedAgenda(
@@ -338,6 +338,27 @@ public final class AgendaController {
             message = "Couldn't create the PDF. Try again."
         }
         status = .ready
+    }
+
+    /// Deletes the day's handwriting and added pages and renders the day fresh, as if it had never
+    /// been started.
+    public func startOver() async {
+        guard let draft else {
+            return
+        }
+        do {
+            for key in try binderStore.ink(on: day).keys {
+                try binderStore.saveInk(Data(), for: key, on: day)
+            }
+            try binderStore.saveDay(BinderDay(content: draft.content(), theme: settings.theme))
+        } catch {
+            message =
+                "Couldn't delete this day's handwriting. Free some space on this device and try again."
+            return
+        }
+        binder = nil
+        binderExport = nil
+        await render()
     }
 
     /// Writes the PDF of the open binder, with its handwriting on each page, and keeps it in
@@ -402,13 +423,14 @@ public final class AgendaController {
     }
 
     // A page added or handwriting written while the render ran is in the open session but not in
-    // `base`, so the day is rebased again from the session before it is saved.
+    // `base` or `inked`, so the day is rebased again from the session before it is saved.
     private func saveBinder(
-        _ laidOut: LaidOut, base: BinderDay?, content: AgendaContent, theme: Theme
+        _ laidOut: LaidOut, base: BinderDay?, inked: Set<PageKey>, content: AgendaContent,
+        theme: Theme
     ) {
         var binderDay = laidOut.binderDay
         var binderPlan = laidOut.binderPlan
-        if let session = binder, session.day != base {
+        if let session = binder, session.day != base || session.inkedKeys != inked {
             binderDay = Self.binderDay(
                 binderLayout, base: session.day, content: content, theme: theme,
                 inked: session.inkedKeys)

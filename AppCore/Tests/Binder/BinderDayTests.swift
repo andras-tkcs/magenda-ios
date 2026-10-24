@@ -1,4 +1,4 @@
-// AppCore's `BinderDay`: adding pages, the saved format and its version check.
+// AppCore's `BinderDay`: adding and removing pages, the saved format and its version check.
 
 import Foundation
 import Testing
@@ -75,5 +75,23 @@ struct BinderDayTests {
         #expect(throws: DecodingError.self) {
             try JSONDecoder().decode(BinderDay.self, from: Data(changed.utf8))
         }
+    }
+
+    @Test("Removing an added page makes the pages after it follow the page it followed")
+    func removePage() throws {
+        var day = try day()
+        day.addPage(after: .meeting("a"), id: "x")
+        day.addPage(after: .extra("x"), id: "y")
+        day.removePage(id: "x")
+        #expect(day.extras == [ExtraPage(id: "y", after: .meeting("a"), source: .meeting("a"))])
+    }
+
+    @Test("Removing an unknown page changes nothing")
+    func removeUnknownPage() throws {
+        var day = try day()
+        day.addPage(after: .meeting("a"), id: "x")
+        let before = day.extras
+        day.removePage(id: "zz")
+        #expect(day.extras == before)
     }
 }
