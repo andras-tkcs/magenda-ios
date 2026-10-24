@@ -337,7 +337,7 @@ struct AgendaControllerBinderTests {
         #expect(try context.binderStore.day(wednesday) == nil)
     }
 
-    @Test("a failed delete of the handwriting leaves the binder and a message")
+    @Test("a failed delete of the handwriting keeps it in the binder and leaves a message")
     func startOverFails() async throws {
         let store = FailingBinderStore(.unwritable, failing: [])
         let context = try make(binderStore: store)
@@ -347,8 +347,30 @@ struct AgendaControllerBinderTests {
         binder.setInk(Data([1]), on: .overview)
         store.setFailing([.saveInk])
         await context.controller.startOver()
-        #expect(context.controller.binder === binder)
-        #expect(binder.ink == [.overview: Data([1])])
+        let reopened = try #require(context.controller.binder)
+        #expect(reopened.ink == [.overview: Data([1])])
+        #expect(
+            context.controller.message
+                == "Couldn't delete this day's handwriting. Free some space on this device and try again."
+        )
+    }
+
+    @Test("a delete that fails partway reopens the binder with what is stored")
+    func startOverFailsPartway() async throws {
+        let store = FailingBinderStore(.unwritable, failing: [])
+        let context = try make(binderStore: store)
+        await context.controller.start()
+        await context.controller.render()
+        let binder = try #require(context.controller.binder)
+        try store.base.saveInk(Data([1]), for: .overview, on: wednesday)
+        try store.base.saveInk(Data([2]), for: .meeting("a"), on: wednesday)
+        try store.base.saveInk(Data([3]), for: .notes, on: wednesday)
+        store.failSaveInk(after: 1)
+        await context.controller.startOver()
+        let reopened = try #require(context.controller.binder)
+        #expect(reopened !== binder)
+        #expect(reopened.ink.count == 2)
+        #expect(reopened.ink == (try store.base.ink(on: wednesday)))
         #expect(
             context.controller.message
                 == "Couldn't delete this day's handwriting. Free some space on this device and try again."

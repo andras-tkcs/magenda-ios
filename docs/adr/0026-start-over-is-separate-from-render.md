@@ -26,7 +26,9 @@ to discard a day's notes and begin again.
    while it runs drops its result) cannot leave the old added pages stored without their ink.
 5. Start Over is not in the Agenda menu: the confirmation lives in the view, and a menu item
    without it would delete notes with one keystroke.
-6. If deleting fails, the binder stays as it was and a message asks the person to free some space.
+6. If deleting fails, the binder is reopened from the store, so it shows what is really stored
+   (pages whose handwriting was already deleted are blank), and a message asks the person to free
+   some space. The reopened session starts with an empty undo history.
 
 ## Alternatives considered
 

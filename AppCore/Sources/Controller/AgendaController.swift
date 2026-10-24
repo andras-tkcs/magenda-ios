@@ -352,6 +352,8 @@ public final class AgendaController {
             }
             try binderStore.saveDay(BinderDay(content: draft.content(), theme: settings.theme))
         } catch {
+            // Some ink may already be gone, so the binder is reopened to show what is stored.
+            openStoredBinder()
             message =
                 "Couldn't delete this day's handwriting. Free some space on this device and try again."
             return

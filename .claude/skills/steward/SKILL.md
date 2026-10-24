@@ -22,7 +22,7 @@ back.
 | You need | Dispatch | Notes |
 |---|---|---|
 | `swift test`, the coverage floor or `swift format`, with no toolchain here | `tests.yml` | Read the `core` and `lint` jobs. With a toolchain, run them here instead (`docs/testing-policy.md`, "Fast checks"). |
-| The app built, its hosted tests and its UI tests on simulators | `tests.yml` | Read the three `app (...)` jobs (build and hosted tests) and the nine `ui (...)` jobs (UI tests, three shards per device). Re-run a failed `ui` job on its own. On a failure, download the job's `xcresult-*` artifact or read the log; never guess. |
+| The app built, its hosted tests and its UI tests on simulators | `tests.yml` | Read the three `app (...)` jobs (build and hosted tests) and the ten `ui (...)` jobs (UI tests, three shards per device plus an iPad-only `binder` shard). Re-run a failed `ui` job on its own. On a failure, download the job's `xcresult-*` artifact or read the log; never guess. |
 | A Release archive with a version stamped in | `build.yml` | No inputs. Archives unsigned and uploads nothing off a tag. |
 | To cut a release tag | `release.yml` | Inputs `version` and `dry_run`. **`dry_run` defaults to true** — dispatch it that way first. Only cut for real when the maintainer has seen the dry run and said to. See `/cut-release`. |
 | A signed build in TestFlight | — | Only a tag does this (ADR 0009). Never try to sign or upload from a session. |
