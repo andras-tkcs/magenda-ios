@@ -507,10 +507,8 @@ struct HandoffControllerTests {
         #expect(controller.days.first?.purged == true)
         #expect(try binderStore.day(date) == nil)
         #expect(try store.pdf(for: date) == nil)
-        #expect(
-            controller.days.first?.phase
-                == .closed(deleteOn: try #require(CalendarDay(year: 2026, month: 10, day: 6)),
-                    purged: true))
+        let deleteOn = try #require(CalendarDay(year: 2026, month: 10, day: 6))
+        #expect(controller.days.first?.phase == .closed(deleteOn: deleteOn, purged: true))
         #expect(!controller.canFinish(date))
         await controller.finish(binder)
         #expect(controller.message == "This day was already sent to Claude.")

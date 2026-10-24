@@ -182,7 +182,7 @@ public final class HandoffController {
 
     // MARK: - Steps
 
-    private func handoff(on date: CalendarDay) -> DayHandoff? {
+    private func stored(on date: CalendarDay) -> DayHandoff? {
         days.first { $0.date == date }
     }
 
