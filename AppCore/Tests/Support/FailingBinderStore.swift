@@ -8,7 +8,7 @@ import Foundation
 // `base` is itself thread-safe.
 final class FailingBinderStore: BinderStore, @unchecked Sendable {
     enum Method: Sendable {
-        case day, saveDay, ink, saveInk
+        case day, saveDay, ink, saveInk, deleteDay
     }
 
     /// Where everything that does not fail is kept; tests seed and inspect it directly.
@@ -62,6 +62,11 @@ final class FailingBinderStore: BinderStore, @unchecked Sendable {
             throw error
         }
         try base.saveInk(data, for: key, on: date)
+    }
+
+    func deleteDay(_ date: CalendarDay) throws {
+        try check(.deleteDay)
+        try base.deleteDay(date)
     }
 
     private func check(_ method: Method) throws {

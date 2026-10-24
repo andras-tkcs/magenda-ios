@@ -18,6 +18,8 @@ public protocol BinderStore: Sendable {
     func ink(on date: CalendarDay) throws -> [PageKey: Data]
     /// Saves the handwriting of `key` on `date`; empty `data` deletes it.
     func saveInk(_ data: Data, for key: PageKey, on date: CalendarDay) throws
+    /// Removes the day saved for `date` and all its handwriting; nothing saved is not an error.
+    func deleteDay(_ date: CalendarDay) throws
 }
 
 /// A store that keeps days and handwriting in memory, for tests and previews.
@@ -49,6 +51,14 @@ public final class InMemoryBinderStore: BinderStore, @unchecked Sendable {
     /// Replaces the held handwriting of `key`; empty `data` removes it.
     public func saveInk(_ data: Data, for key: PageKey, on date: CalendarDay) throws {
         lock.withLock { inks[date, default: [:]][key] = data.isEmpty ? nil : data }
+    }
+
+    /// Drops the held day and handwriting of `date`.
+    public func deleteDay(_ date: CalendarDay) throws {
+        lock.withLock {
+            days[date] = nil
+            inks[date] = nil
+        }
     }
 }
 
@@ -130,6 +140,16 @@ public struct FileBinderStore: BinderStore {
             entries[id] = name
             try encode(entries).write(
                 to: inkFolder.appending(path: "index.json"), options: writeOptions)
+        }
+    }
+
+    /// Removes the date's folder, `day.json` and handwriting with it; throws `.unwritable` when it
+    /// cannot be removed.
+    public func deleteDay(_ date: CalendarDay) throws {
+        try writing {
+            if FileManager.default.fileExists(atPath: folder(date).path) {
+                try FileManager.default.removeItem(at: folder(date))
+            }
         }
     }
 
