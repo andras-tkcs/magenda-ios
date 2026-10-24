@@ -9,6 +9,8 @@ struct BinderView: View {
         static let binderView = "binderView"
         static let binderPageIndicator = "binderPageIndicator"
         static let binderShareButton = "binderShareButton"
+        static let finishDayButton = "finishDayButton"
+        static let handoffMessage = "handoffMessage"
         static let overviewButton = "binderOverviewButton"
         static let delegatedButton = "binderDelegatedButton"
         static let notesButton = "binderNotesButton"
@@ -28,6 +30,7 @@ struct BinderView: View {
     let binder: BinderSession
 
     @Environment(AgendaController.self) private var controller
+    @Environment(HandoffController.self) private var handoff
     @Environment(\.allowsFingerDrawing) private var allowsFingerDrawing
 
     @State private var visibleKey: PageKey?
@@ -112,6 +115,16 @@ struct BinderView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.bar)
             }
+            if let message = handoff.message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.bar)
+                    .accessibilityIdentifier(ID.handoffMessage)
+            }
             pages(plan)
             Text("Page \(visibleIndex + 1) of \(plan.pages.count)")
                 .font(.footnote.monospacedDigit())
@@ -123,6 +136,16 @@ struct BinderView: View {
         }
         .background(Color(.secondarySystemBackground))
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await handoff.finish(binder) }
+                } label: {
+                    Label("Finish Day", systemImage: "checkmark.seal")
+                }
+                .disabled(handoff.isBusy || !handoff.canFinish(binder.date))
+                .accessibilityLabel("Finish this day and send it to Claude")
+                .accessibilityIdentifier(ID.finishDayButton)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { await controller.exportBinder() }
@@ -212,6 +235,7 @@ struct BinderView: View {
             }
         }
         .environment(services.controller)
+        .environment(services.handoff)
         .environment(\.pageDrawer, services.pageDrawer)
         .task {
             await services.controller.start()

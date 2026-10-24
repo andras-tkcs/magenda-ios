@@ -12,6 +12,7 @@ struct AgendaView: View {
         static let datePicker = "datePicker"
         static let nextDayButton = "nextDayButton"
         static let settingsButton = "settingsButton"
+        static let reviewButton = "reviewButton"
         static let renderButton = "renderButton"
         static let startOverButton = "startOverButton"
         static let confirmStartOverButton = "confirmStartOverButton"
@@ -33,6 +34,7 @@ struct AgendaView: View {
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var preferredColumn = NavigationSplitViewColumn.sidebar
     @State private var showsSettings = false
+    @State private var showsReview = false
     @State private var editing: EditTarget?
     @State private var confirmsStartOver = false
 
@@ -68,6 +70,9 @@ struct AgendaView: View {
         .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showsSettings) {
             SettingsView(appInfo: appInfo)
+        }
+        .sheet(isPresented: $showsReview) {
+            ReviewView()
         }
         .sheet(item: $editing) { target in
             editSheet(for: target)
@@ -256,6 +261,15 @@ struct AgendaView: View {
             .keyboardShortcut(",", modifiers: .command)
             .accessibilityLabel("Settings")
             .accessibilityIdentifier(ID.settingsButton)
+        }
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                showsReview = true
+            } label: {
+                Image(systemName: "tray.full")
+            }
+            .accessibilityLabel("Review")
+            .accessibilityIdentifier(ID.reviewButton)
         }
         ToolbarItemGroup(placement: .bottomBar) {
             Button {

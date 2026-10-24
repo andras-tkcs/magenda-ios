@@ -298,6 +298,7 @@ struct HandoffControllerTests {
         trigger.setError(nil)
         await controller.refresh(excluding: otherDay)
         #expect(try saved().stage == .uploaded)
+        #expect(try saved().lastError == RoutineTriggerError.rejectedToken.userMessage)
         #expect(trigger.texts.count == 1)
         await controller.perform(.retry, on: date)
         #expect(try saved().stage == .notesRequested)
@@ -444,6 +445,32 @@ struct HandoffControllerTests {
         await controller.refresh(excluding: otherDay)
         #expect(try saved().lastError == GoogleAPIError.notFound.userMessage)
         #expect(try saved().stage == .notesRequested)
+    }
+
+    @Test("a refresh clears the error of a day once its Doc read succeeds past the upload")
+    func refreshClearsErrorAfterUpload() async throws {
+        await controller.finish(binder)
+        await drive.setError(GoogleAPIError.notFound, for: .exportText)
+        await controller.refresh(excluding: otherDay)
+        #expect(try saved().lastError == GoogleAPIError.notFound.userMessage)
+        await drive.setError(nil, for: .exportText)
+        await controller.refresh(excluding: otherDay)
+        #expect(try saved().stage == .notesRequested)
+        #expect(try saved().lastError == nil)
+    }
+
+    @Test("a refresh keeps the error of a queued day that has a Doc")
+    func refreshKeepsQueuedError() async throws {
+        await drive.setError(GoogleAPIError.network, for: .folderID)
+        await controller.finish(binder)
+        var queued = try saved()
+        queued.docID = "doc-1"
+        try store.save(queued)
+        controller.start()
+        await controller.refresh(excluding: otherDay)
+        #expect(try saved().stage == .queued)
+        #expect(try saved().lastError == GoogleAPIError.network.userMessage)
+        #expect(await drive.calls.last == .exportText(docID: "doc-1"))
     }
 
     @Test("approving the notes fires the step and reads the Doc again")
