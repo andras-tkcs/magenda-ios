@@ -103,6 +103,37 @@ struct BinderStoreTests {
         }
     }
 
+    @Test(
+        "Deleting a day removes it and its handwriting, and only that day",
+        arguments: Kind.allCases)
+    func deleteDay(kind: Kind) throws {
+        try withStore(kind) { store in
+            let (date, other) = (try Self.date(), try Self.date(29))
+            try store.deleteDay(date)
+            try store.saveDay(try Self.binderDay())
+            try store.saveInk(Data([1]), for: .overview, on: date)
+            try store.saveDay(try Self.binderDay(29))
+            try store.saveInk(Data([2]), for: .overview, on: other)
+            try store.deleteDay(date)
+            #expect(try store.day(date) == nil)
+            #expect(try store.ink(on: date).isEmpty)
+            #expect(try store.day(other) == (try Self.binderDay(29)))
+            #expect(try store.ink(on: other) == [.overview: Data([2])])
+            try store.deleteDay(date)
+        }
+    }
+
+    @Test("Deleting a day that has only handwriting removes the folder")
+    func deleteFolder() throws {
+        try withDirectory { directory in
+            let store = FileBinderStore(directory: directory)
+            try store.saveInk(Data([1]), for: .overview, on: try Self.date())
+            try store.deleteDay(try Self.date())
+            let folder = directory.appending(path: "2026-09-30")
+            #expect(!FileManager.default.fileExists(atPath: folder.path))
+        }
+    }
+
     @Test("A day.json that cannot be decoded is unreadable")
     func garbageDay() throws {
         try withDirectory { directory in
