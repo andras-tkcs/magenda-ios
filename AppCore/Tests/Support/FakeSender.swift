@@ -26,8 +26,8 @@ final class FakeSender: AuthorizedHTTPSending, @unchecked Sendable {
         locked { queued.append(result) }
     }
 
-    func enqueue(status: Int = 200, json: String) {
-        enqueue(.success(HTTPResponse(status: status, body: Data(json.utf8))))
+    func enqueue(status: Int = 200, json: String, headers: [String: String] = [:]) {
+        enqueue(.success(HTTPResponse(status: status, body: Data(json.utf8), headers: headers)))
     }
 
     func enqueue(status: Int = 200, fixture name: String) throws {
