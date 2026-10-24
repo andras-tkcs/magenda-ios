@@ -6,12 +6,14 @@ public enum GoogleAPIError: Error, Equatable, Sendable {
     case authorizationCancelled
     /// Sign-in failed for any other reason.
     case authorizationFailed
-    /// Google granted access without both read-only scopes.
+    /// Google granted access without every scope the app needs.
     case missingScopes
     /// The stored sign-in is no longer valid.
     case signedOut
     /// Google answered 403.
     case forbidden
+    /// Google answered 404.
+    case notFound
     /// Google answered 429.
     case rateLimited
     /// Google could not be reached.
@@ -30,11 +32,13 @@ public enum GoogleAPIError: Error, Equatable, Sendable {
         case .authorizationFailed:
             "Google sign-in didn't complete. Try again."
         case .missingScopes:
-            "Magenda needs to see your calendars and tasks. Sign in again and allow both."
+            "Magenda needs your calendars, your tasks and the files it creates in Google Drive. Sign in again and allow all three."
         case .signedOut:
             "Your Google sign-in expired. Sign in again."
         case .forbidden:
-            "Google refused the request. Check that the Calendar and Tasks APIs are enabled for this app."
+            "Google refused the request. Check that the Calendar, Tasks and Drive APIs are enabled for this app."
+        case .notFound:
+            "Google couldn't find that file. It may have been deleted."
         case .rateLimited:
             "Google is limiting requests right now. Try again in a minute."
         case .network:

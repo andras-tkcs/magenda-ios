@@ -26,8 +26,8 @@ final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
         locked { queued.append(result) }
     }
 
-    func enqueue(status: Int, json: String) {
-        enqueue(.success(HTTPResponse(status: status, body: Data(json.utf8))))
+    func enqueue(status: Int, json: String, headers: [String: String] = [:]) {
+        enqueue(.success(HTTPResponse(status: status, body: Data(json.utf8), headers: headers)))
     }
 
     func send(_ request: HTTPRequest) async throws -> HTTPResponse {

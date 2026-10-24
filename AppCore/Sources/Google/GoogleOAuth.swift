@@ -38,10 +38,11 @@ public struct GoogleOAuthConfiguration: Equatable, Sendable {
         redirectScheme + ":/oauth2redirect"
     }
 
-    /// The read-only scopes the app asks for, and needs both of.
+    /// The scopes the app asks for, and needs all of.
     public static let scopes = [
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/tasks.readonly",
+        "https://www.googleapis.com/auth/drive.file",
     ]
 
     private static let clientIDSuffix = ".apps.googleusercontent.com"
@@ -96,12 +97,17 @@ public struct OAuthTokens: Codable, Equatable, Sendable {
     public let refreshToken: String
     /// When the access token stops working.
     public let expiresAt: Date
+    /// The scopes the grant covers; `nil` for tokens stored before the app recorded them.
+    public let scopes: [String]?
 
     /// Creates a set of tokens.
-    public init(accessToken: String, refreshToken: String, expiresAt: Date) {
+    public init(
+        accessToken: String, refreshToken: String, expiresAt: Date, scopes: [String]? = nil
+    ) {
         self.accessToken = accessToken
         self.refreshToken = refreshToken
         self.expiresAt = expiresAt
+        self.scopes = scopes
     }
 }
 
@@ -202,12 +208,14 @@ public enum GoogleOAuth {
     ///
     /// A 200 needs a non-empty `access_token`, a numeric `expires_in` and a `Bearer` token type,
     /// else `.unexpectedResponse`. The refresh token is the response's, else
-    /// `previousRefreshToken`, else `.unexpectedResponse`. A `scope` that lacks either read-only
-    /// scope is `.missingScopes`, and so is a missing `scope` when `requireScopes` is set. A 400
-    /// `invalid_grant` is `.signedOut`; any other status is `.authorizationFailed`.
+    /// `previousRefreshToken`, else `.unexpectedResponse`. The granted scopes are the response's
+    /// `scope`, else `previousScopes`; when they are unknown or lack any of
+    /// `GoogleOAuthConfiguration.scopes` the answer is `.missingScopes`, and so is a missing
+    /// `scope` when `requireScopes` is set. A 400 `invalid_grant` is `.signedOut`; any other
+    /// status is `.authorizationFailed`.
     public static func tokens(
-        from response: HTTPResponse, previousRefreshToken: String?, requireScopes: Bool,
-        now: Date
+        from response: HTTPResponse, previousRefreshToken: String?, previousScopes: [String]?,
+        requireScopes: Bool, now: Date
     ) throws -> OAuthTokens {
         guard response.status == 200 else {
             let error = try? JSONDecoder().decode(ErrorBody.self, from: response.body)
@@ -219,12 +227,10 @@ public enum GoogleOAuth {
         else {
             throw GoogleAPIError.unexpectedResponse
         }
-        if let scope = body.scope {
-            let granted = Set(scope.split(separator: " ").map(String.init))
-            guard granted.isSuperset(of: GoogleOAuthConfiguration.scopes) else {
-                throw GoogleAPIError.missingScopes
-            }
-        } else if requireScopes {
+        let responseScopes = body.scope.map { $0.split(separator: " ").map(String.init) }
+        guard let scopes = responseScopes ?? (requireScopes ? nil : previousScopes),
+            Set(scopes).isSuperset(of: GoogleOAuthConfiguration.scopes)
+        else {
             throw GoogleAPIError.missingScopes
         }
         let refreshToken = [body.refreshToken, previousRefreshToken].compactMap { $0 }
@@ -234,7 +240,7 @@ public enum GoogleOAuth {
         }
         return OAuthTokens(
             accessToken: body.accessToken, refreshToken: refreshToken,
-            expiresAt: now.addingTimeInterval(body.expiresIn))
+            expiresAt: now.addingTimeInterval(body.expiresIn), scopes: scopes)
     }
 
     private struct TokenBody: Decodable {

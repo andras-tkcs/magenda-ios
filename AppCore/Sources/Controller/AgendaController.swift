@@ -233,7 +233,7 @@ public final class AgendaController {
             status = .ready
         case .failure(let error):
             let failure = Self.apiError(error)
-            if failure == .signedOut {
+            if failure == .signedOut || failure == .missingScopes {
                 status = .signedOut
                 message = failure.userMessage
             } else {
