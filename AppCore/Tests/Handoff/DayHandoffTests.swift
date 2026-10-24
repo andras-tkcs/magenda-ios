@@ -82,7 +82,7 @@ struct DayHandoffTests {
         let plan = Self.plan(
             [
                 .overview, .meeting("work@x.com|ev1|part"), .meeting("bare"), .extra("x"),
-                .meeting("cal|old"), .meeting("#3"), .meeting("cal|gone"), .notes,
+                .meeting("cal|old"), .meeting("#\(3)"), .meeting("cal|gone"), .notes,
             ],
             omitted: [TodoItem(text: "A", notes: "", due: "10/27")])
 
@@ -100,7 +100,7 @@ struct DayHandoffTests {
                 HandoffPage(
                     page: 5, key: "meeting:cal|old", calendarID: "cal", eventID: "old",
                     title: "Old", summarySkill: "old-skill"),
-                HandoffPage(page: 6, key: "meeting:#3", title: "Odd"),
+                HandoffPage(page: 6, key: "meeting:#\(3)", title: "Odd"),
                 HandoffPage(page: 7, key: "meeting:cal|gone", calendarID: "cal", eventID: "gone"),
                 HandoffPage(page: 8, key: "notes"),
             ])

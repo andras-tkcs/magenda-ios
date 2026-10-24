@@ -93,7 +93,9 @@ struct HandoffStoreTests {
     @Test("handoffs() is empty when the directory does not exist")
     func missingDirectory() throws {
         try withDirectory { directory in
-            #expect(try FileHandoffStore(directory: directory).handoffs().isEmpty)
+            let store = FileHandoffStore(directory: directory)
+            let listed = try store.handoffs()
+            #expect(listed.isEmpty)
         }
     }
 
