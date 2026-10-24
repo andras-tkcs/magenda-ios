@@ -20,8 +20,14 @@ struct URLSessionHTTPClient: HTTPClient {
         }
         do {
             let (body, response) = try await session.data(for: urlRequest)
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            return HTTPResponse(status: status, body: body)
+            let http = response as? HTTPURLResponse
+            var headers: [String: String] = [:]
+            for (name, value) in http?.allHeaderFields ?? [:] {
+                if let name = name as? String, let value = value as? String {
+                    headers[name] = value
+                }
+            }
+            return HTTPResponse(status: http?.statusCode ?? 0, body: body, headers: headers)
         } catch let error as URLError {
             throw TransportError(code: error.code)
         }

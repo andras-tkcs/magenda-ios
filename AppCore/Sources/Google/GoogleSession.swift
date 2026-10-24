@@ -165,7 +165,8 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
                 code: code, verifier: request.verifier, configuration: configuration),
             over: http)
         let tokens = try GoogleOAuth.tokens(
-            from: response, previousRefreshToken: nil, requireScopes: true, now: now())
+            from: response, previousRefreshToken: nil, previousScopes: nil, requireScopes: true,
+            now: now())
         tokenGeneration += 1
         do {
             try tokenStore.save(tokens)
@@ -175,13 +176,17 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
     }
 
     /// Sends `request` with the access token, refreshing it first when it expires within a
-    /// minute, and once more after a 401. A second 401 signs the person out.
+    /// minute or its recorded scopes are missing or incomplete, and once more after a 401. A
+    /// second 401 signs the person out.
     public func send(_ request: HTTPRequest) async throws -> HTTPResponse {
         let configuration = try requireConfiguration()
         guard var tokens = try? tokenStore.load() else {
             throw GoogleAPIError.signedOut
         }
-        if tokens.expiresAt.addingTimeInterval(-60) <= now() {
+        let grantsEveryScope = tokens.scopes.map {
+            Set($0).isSuperset(of: GoogleOAuthConfiguration.scopes)
+        }
+        if tokens.expiresAt.addingTimeInterval(-60) <= now() || grantsEveryScope != true {
             tokens = try await refreshed(tokens, configuration: configuration)
         }
         var response = try await Self.transmit(authorized(request, tokens), over: http)
@@ -198,6 +203,8 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
             return response
         case 403:
             throw GoogleAPIError.forbidden
+        case 404:
+            throw GoogleAPIError.notFound
         case 429:
             throw GoogleAPIError.rateLimited
         default:
@@ -256,10 +263,11 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
             over: http)
         do {
             return try GoogleOAuth.tokens(
-                from: response, previousRefreshToken: tokens.refreshToken, requireScopes: false,
-                now: now())
+                from: response, previousRefreshToken: tokens.refreshToken,
+                previousScopes: tokens.scopes, requireScopes: false, now: now())
         } catch {
-            if error as? GoogleAPIError == .signedOut {
+            let failure = error as? GoogleAPIError
+            if failure == .signedOut || failure == .missingScopes {
                 try? store.delete()
             }
             throw error
