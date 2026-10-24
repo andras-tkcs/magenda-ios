@@ -4,7 +4,7 @@
 import AppCore
 import Foundation
 
-// `@unchecked Sendable` is safe because `failing` is only read or written while `lock` is held, and
+// `@unchecked Sendable` is safe because `failing` and `saveInkSuccesses` are only read or written while `lock` is held, and
 // `base` is itself thread-safe.
 final class FailingBinderStore: BinderStore, @unchecked Sendable {
     enum Method: Sendable {
@@ -17,6 +17,7 @@ final class FailingBinderStore: BinderStore, @unchecked Sendable {
 
     private let lock = NSLock()
     private var failing: Set<Method>
+    private var saveInkSuccesses: Int?
 
     init(_ error: BinderStoreError, failing: Set<Method>) {
         self.error = error
@@ -26,6 +27,11 @@ final class FailingBinderStore: BinderStore, @unchecked Sendable {
     /// Chooses which methods throw from now on.
     func setFailing(_ methods: Set<Method>) {
         lock.withLock { failing = methods }
+    }
+
+    /// Lets `saveInk` succeed `count` more times, then makes it throw from then on.
+    func failSaveInk(after count: Int) {
+        lock.withLock { saveInkSuccesses = count }
     }
 
     func day(_ date: CalendarDay) throws -> BinderDay? {
@@ -45,6 +51,16 @@ final class FailingBinderStore: BinderStore, @unchecked Sendable {
 
     func saveInk(_ data: Data, for key: PageKey, on date: CalendarDay) throws {
         try check(.saveInk)
+        let exhausted = lock.withLock { () -> Bool in
+            guard let remaining = saveInkSuccesses else {
+                return false
+            }
+            saveInkSuccesses = remaining - 1
+            return remaining <= 0
+        }
+        if exhausted {
+            throw error
+        }
         try base.saveInk(data, for: key, on: date)
     }
 

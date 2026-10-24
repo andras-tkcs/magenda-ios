@@ -128,13 +128,21 @@ struct AgendaLayoutTests {
         let layout = try layout()
         let page = try #require(layout.plan(for: content).pages.dropFirst().first)
         let operations = layout.continuedOperations(of: page, in: content)
-        let run = try #require(
-            operations.compactMap { operation -> TextRun? in
-                if case .text(let run) = operation, run.text.hasPrefix("cont. ") {
-                    return run
-                }
-                return nil
-            }.first)
+        let continued = operations.compactMap { operation -> TextRun? in
+            if case .text(let run) = operation, run.text.hasPrefix("cont. ") {
+                return run
+            }
+            return nil
+        }
+        #expect(continued.count == 1)
+        // The title is drawn right after the "Meeting title:" label runs.
+        let titleIndex = layout.labelRuns(of: layout.slots(on: "meeting_unit")).count
+        try #require(operations.indices.contains(titleIndex))
+        guard case .text(let run) = operations[titleIndex] else {
+            Issue.record("Expected a text run after the label runs")
+            return
+        }
+        #expect(run.text.hasPrefix("cont. "))
         #expect(run.text.hasSuffix("…"))
         #expect(run.width <= TemplateGeometry.meetingTitleWidth)
     }
