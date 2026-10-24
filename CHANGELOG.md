@@ -50,6 +50,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   when the meeting is no longer on the agenda.
 - Start over, on a started day, deletes all of its handwriting and added pages after asking and
   renders it fresh.
+- Finish Day, in the binder, uploads the day as a PDF to a `Magenda` folder in your Google Drive,
+  creates the day's notes Doc next to it and starts your end-of-day Claude routine. Enter the
+  routine's fire URL and token in Settings → End-of-day routine. A day finished offline is sent
+  when the app is next active.
+- The Review list, from the agenda's toolbar, shows each finished day's state, opens its Doc with
+  Open Doc, and has the Try again, Approve notes or Approve button the state calls for.
+- Summary skills: map a meeting title to a skill under Settings → Binder rules → Meeting
+  summaries. Every meeting page prints a Summary line, with the skill on it, or ruled so you can
+  write one.
+
+### Changed
+
+- A closed day's handwriting and stored PDF are deleted from the device five days after the day is
+  closed. A small record of the day stays.
+- Magenda now asks for access to the files it creates in Google Drive, so sign in again after
+  updating. Enable the Google Drive API and add the `drive.file` scope in your Google Cloud
+  project.
 
 ## [0.1.1] — 2026-10-15
 

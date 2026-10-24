@@ -69,6 +69,22 @@ MODULE_FLOORS: dict[str, float] = {
     "AppCore/Sources/Binder/BinderLayout.swift": 100.0,
     # Saves handwriting and the day's snapshot; a wrong branch loses ink.
     "AppCore/Sources/Binder/BinderStore.swift": 100.0,
+    # Uploads the day's PDF and creates its Doc; a wrong request loses a day or files it twice.
+    "AppCore/Sources/Google/GoogleDriveClient.swift": 100.0,
+    # Validates the routine's credentials and fires it; a wrong branch leaks a token or misreports a fire.
+    "AppCore/Sources/Handoff/RoutineTrigger.swift": 100.0,
+    # The finished-day record, its phases and the payload the routine receives.
+    "AppCore/Sources/Handoff/DayHandoff.swift": 100.0,
+    # Reads the Doc's status line; a wrong reading offers the wrong approve button.
+    "AppCore/Sources/Handoff/DocStatus.swift": 100.0,
+    # Saves the finished-day records and PDFs; a wrong branch loses a day's hand-off state.
+    "AppCore/Sources/Handoff/HandoffStore.swift": 100.0,
+    # Drives upload, fire, approve and the five-day deletion; an error sends a day twice or deletes ink early.
+    "AppCore/Sources/Handoff/HandoffController.swift": 100.0,
+    # The fixture Drive and routine behind the hand-off UI tests.
+    "AppCore/Sources/Handoff/HandoffFixtures.swift": 100.0,
+    # Picks the summary skill a meeting asks for; a wrong match prints the wrong skill on the page.
+    "AppCore/Sources/Settings/SummarySkill.swift": 100.0,
 }
 
 

@@ -134,3 +134,8 @@ until a later ADR supersedes it.
 | [0024](0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md) | The binder shows one whole page per screen and pages turn with a horizontal swipe | Accepted |
 | [0025](0025-only-added-binder-pages-can-be-deleted.md) | Only pages added in the binder can be deleted, with their handwriting and undo history, after a confirmation | Accepted |
 | [0026](0026-start-over-is-separate-from-render.md) | Render keeps a started day's handwriting; Start over is a separate, confirmed action that deletes it and renders the day fresh | Accepted |
+| [0027](0027-finished-days-are-uploaded-to-google-drive-with-drive-file.md) | Finished days are uploaded to the person's Google Drive as one PDF, with the `drive.file` scope; existing users sign in again | Accepted |
+| [0028](0028-the-end-of-day-routine-is-started-through-its-api-trigger.md) | Magenda starts the end-of-day Claude routine through its API trigger and never repeats a fire on its own | Accepted |
+| [0029](0029-the-days-google-doc-is-the-review-record.md) | The day's Google Doc is the review record, and approve buttons start the routine's next step | Accepted |
+| [0030](0030-a-closed-days-handwriting-is-deleted-five-days-later.md) | A closed day's handwriting is deleted from the device five days after Magenda first reads Closed | Accepted |
+| [0031](0031-meeting-summaries-are-requested-by-skill.md) | A meeting's summary is requested with a title-to-skill map in the rules, or by writing a skill on its page | Accepted |

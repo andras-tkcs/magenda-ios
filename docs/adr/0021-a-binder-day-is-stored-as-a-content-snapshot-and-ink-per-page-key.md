@@ -7,6 +7,7 @@ Qualifies [ADR 0014](0014-agenda-inputs-come-live-from-google-calendar-and-googl
 started day opens without a network connection.
 Amended by [ADR 0022](0022-binder-files-and-agenda-pdfs-are-written-with-complete-unless-open-protection.md): its files are written with complete-unless-open protection.
 Amended by [ADR 0026](0026-start-over-is-separate-from-render.md): Start over deletes a day's handwriting and renders it fresh.
+Amended by [ADR 0030](0030-a-closed-days-handwriting-is-deleted-five-days-later.md): a closed day's binder files are deleted five days after closure.
 
 ## Context
 

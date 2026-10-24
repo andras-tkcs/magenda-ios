@@ -2,8 +2,12 @@
 
 What Magenda sends when the person finishes a day, and what the end-of-day Claude routine must do
 with it. The routine lives in the person's own end-of-day skill, outside this repository; adapt
-that skill to this page. The decisions behind it are in the ADRs (numbers are added when they are
-written; this page links them by number only).
+that skill to this page. The decisions behind it are in
+[ADR 0027](adr/0027-finished-days-are-uploaded-to-google-drive-with-drive-file.md) (Drive),
+[ADR 0028](adr/0028-the-end-of-day-routine-is-started-through-its-api-trigger.md) (the trigger),
+[ADR 0029](adr/0029-the-days-google-doc-is-the-review-record.md) (the Doc and the review),
+[ADR 0030](adr/0030-a-closed-days-handwriting-is-deleted-five-days-later.md) (deletion) and
+[ADR 0031](adr/0031-meeting-summaries-are-requested-by-skill.md) (summaries).
 
 ## Drive layout
 
