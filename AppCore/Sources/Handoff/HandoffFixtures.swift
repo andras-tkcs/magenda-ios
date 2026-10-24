@@ -103,7 +103,7 @@ public struct FixtureRoutineTrigger: RoutineFiring {
     public func fire(text: String) async throws -> URL {
         guard stored() else { throw RoutineTriggerError.notConfigured }
         await state.record(payload: text)
-        return URL(string: "https://claude.ai/code/session_fixture")!
+        return GoogleAPI.url(host: "claude.ai", path: "/code/session_fixture")
     }
 
     // Read on every call so saving or forgetting the routine takes effect at once.
