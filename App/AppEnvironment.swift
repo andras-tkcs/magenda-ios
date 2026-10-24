@@ -1,9 +1,10 @@
 import AppCore
 import Foundation
 
-/// What the app runs on: the controller and the services the binder's pages are drawn with.
+/// What the app runs on: the controllers and the services the binder's pages are drawn with.
 struct AppServices {
     let controller: AgendaController
+    let handoff: HandoffController
     let pageDrawer: PageDrawer
     let allowsFingerDrawing: Bool
 }
@@ -13,6 +14,19 @@ struct AppServices {
 enum AppEnvironment {
     /// The day fixtures pretend it is, so the first day shown is the next weekday after it.
     private static let fixtureToday = "2026-09-29"
+
+    /// The routine the fixtures pretend was entered, unless `-MagendaNoRoutine` is given.
+    private static let fixtureRoutine = RoutineCredentials(
+        fireURL: "https://api.anthropic.com/v1/claude_code/routines/trig_fixture/fire",
+        token: "sk-ant-oat01-fixture")
+
+    /// Reads the rendered PDF back for the hand-off.
+    private static let readFile: @Sendable (URL) throws -> Data = { try Data(contentsOf: $0) }
+
+    /// Deletes the rendered PDF once it has been read.
+    private static let removeFile: @Sendable (URL) -> Void = {
+        try? FileManager.default.removeItem(at: $0)
+    }
 
     /// Creates the services. Template and font errors propagate.
     @MainActor
@@ -32,24 +46,37 @@ enum AppEnvironment {
                 : GoogleClientCredentials(
                     clientID: "123456789012-fixture.apps.googleusercontent.com",
                     clientSecret: nil)
+            let binderStore = fixtureBinderStore(arguments: arguments)
+            let fixtureDay =
+                CalendarDay(isoString: fixtureToday) ?? CalendarDay.today(in: timeZone, now: Date())
             let controller = AgendaController(
                 account: FixtureGoogleAccount(signedIn: !arguments.contains("-MagendaSignedOut")),
                 data: FixtureGoogleDataSource(fixture),
                 settingsStore: InMemorySettingsStore(AgendaSettings()),
                 credentials: InMemoryClientCredentialsStore(credentials),
                 measurer: measurer, renderer: renderer,
-                binderStore: fixtureBinderStore(arguments: arguments),
-                manifest: manifest, timeZone: timeZone,
-                today: CalendarDay(isoString: fixtureToday)
-                    ?? CalendarDay.today(in: timeZone, now: Date()))
+                binderStore: binderStore,
+                manifest: manifest, timeZone: timeZone, today: fixtureDay)
+            let routine = InMemoryRoutineCredentialsStore(
+                arguments.contains("-MagendaNoRoutine") ? nil : fixtureRoutine)
+            let endOfDay = FixtureEndOfDay()
+            let handoff = HandoffController(
+                store: InMemoryHandoffStore(), binderStore: binderStore,
+                drive: FixtureDrive(state: endOfDay),
+                trigger: FixtureRoutineTrigger(state: endOfDay, credentials: routine),
+                routineCredentials: routine, renderer: renderer, hasher: CryptoKitHasher(),
+                today: { fixtureDay }, readFile: readFile, removeFile: removeFile)
             return AppServices(
-                controller: controller, pageDrawer: drawer,
+                controller: controller, handoff: handoff, pageDrawer: drawer,
                 allowsFingerDrawing: allowsFingerDrawing)
         }
 
         let session = GoogleSession(
             configuration: nil, http: URLSessionHTTPClient(), tokens: KeychainTokenStore(),
             hasher: CryptoKitHasher(), now: { Date() })
+        let binderStore = FileBinderStore(
+            directory: URL.applicationSupportDirectory.appending(path: "Binder"),
+            protection: FileProtection.writingOptions)
         let controller = AgendaController(
             account: session,
             data: LiveGoogleDataSource(
@@ -58,13 +85,22 @@ enum AppEnvironment {
             settingsStore: UserDefaultsSettingsStore(defaults: .standard),
             credentials: KeychainClientCredentialsStore(),
             measurer: measurer, renderer: renderer,
-            binderStore: FileBinderStore(
-                directory: URL.applicationSupportDirectory.appending(path: "Binder"),
-                protection: FileProtection.writingOptions),
+            binderStore: binderStore,
             manifest: manifest, timeZone: timeZone,
             today: CalendarDay.today(in: timeZone, now: Date()))
+        let routine = KeychainRoutineCredentialsStore()
+        let handoff = HandoffController(
+            store: FileHandoffStore(
+                directory: URL.applicationSupportDirectory.appending(path: "Handoff"),
+                protection: FileProtection.writingOptions),
+            binderStore: binderStore, drive: GoogleDriveClient(sender: session),
+            trigger: RoutineTriggerClient(http: URLSessionHTTPClient(), credentials: routine),
+            routineCredentials: routine, renderer: renderer, hasher: CryptoKitHasher(),
+            today: { CalendarDay.today(in: timeZone, now: Date()) },
+            readFile: readFile, removeFile: removeFile)
         return AppServices(
-            controller: controller, pageDrawer: drawer, allowsFingerDrawing: allowsFingerDrawing)
+            controller: controller, handoff: handoff, pageDrawer: drawer,
+            allowsFingerDrawing: allowsFingerDrawing)
     }
 
     /// The binder store of a fixture launch: in memory, or with `-MagendaBinderStoreFile <name>`
