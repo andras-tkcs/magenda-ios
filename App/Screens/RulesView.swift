@@ -41,6 +41,10 @@ struct RulesView: View {
         static let peopleName = "peopleName"
         static let peopleEmail = "peopleEmail"
         static let peopleAdd = "peopleAdd"
+        static let summaryTitleField = "summaryTitleField"
+        static let summarySkillField = "summarySkillField"
+        static let summaryAdd = "summaryAdd"
+        static let summarySkillError = "summarySkillError"
         static let lookAheadStepper = "lookAheadStepper"
         static let resetRulesButton = "resetRulesButton"
 
@@ -53,6 +57,9 @@ struct RulesView: View {
     @State private var drafts: [ListSection: String] = [:]
     @State private var personName = ""
     @State private var personEmail = ""
+    @State private var summaryTitle = ""
+    @State private var summarySkill = ""
+    @State private var summaryError: String?
 
     private var rules: BinderRules { controller.settings.rules }
 
@@ -62,6 +69,7 @@ struct RulesView: View {
                 listSection(section)
             }
             shortNamesSection
+            summariesSection
             peopleSection
             Section("Look-ahead") {
                 Stepper(
@@ -77,6 +85,7 @@ struct RulesView: View {
                             var restored = BinderRules.default
                             restored.shortNames = settings.rules.shortNames
                             restored.personAliases = settings.rules.personAliases
+                            restored.summarySkills = settings.rules.summarySkills
                             settings.rules = restored
                         }
                     }
@@ -175,6 +184,71 @@ struct RulesView: View {
 
     private static func caption(forKey key: String) -> String {
         key.hasPrefix("r:") ? "Recurring meeting" : String(key.dropFirst(2))
+    }
+
+    // MARK: Meeting summaries
+
+    /// The summary skills, sorted by meeting title.
+    private var summaryEntries: [(title: String, skill: String)] {
+        rules.summarySkills.map { (title: $0.key, skill: $0.value) }
+            .sorted { ($0.title, $0.skill) < ($1.title, $1.skill) }
+    }
+
+    private var summariesSection: some View {
+        let entries = summaryEntries
+        return Section {
+            ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
+                Text("\(entry.title) → \(entry.skill)")
+                    .accessibilityIdentifier(ID.row("summaries", index))
+            }
+            .onDelete { offsets in
+                let titles = offsets.map { entries[$0].title }
+                Task {
+                    await controller.updateSettings { settings in
+                        for title in titles { settings.rules.summarySkills[title] = nil }
+                    }
+                }
+            }
+            TextField("Meeting title", text: $summaryTitle)
+                .accessibilityIdentifier(ID.summaryTitleField)
+            TextField("Summary skill", text: $summarySkill)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier(ID.summarySkillField)
+            Button("Add", action: addSummary)
+                .accessibilityIdentifier(ID.summaryAdd)
+            if let summaryError {
+                Text(summaryError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier(ID.summarySkillError)
+            }
+        } header: {
+            Text("Meeting summaries")
+        } footer: {
+            Text(
+                "A meeting whose title matches gets this summary skill printed on its page. For a one-off meeting, write the skill on the page's Summary line."
+            )
+        }
+    }
+
+    private func addSummary() {
+        let title = TextFitter.normalized(summaryTitle)
+        let skill = summarySkill.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        guard SummarySkill.isValidName(skill) else {
+            summaryError = "A skill name uses letters, digits, -, _, : and . only."
+            return
+        }
+        let folded = BinderText.fold(title)
+        guard !rules.summarySkills.keys.contains(where: { BinderText.fold($0) == folded }) else {
+            summaryError = "There is already a summary skill for that meeting title."
+            return
+        }
+        summaryError = nil
+        summaryTitle = ""
+        summarySkill = ""
+        Task { await controller.updateSettings { $0.rules.summarySkills[title] = skill } }
     }
 
     // MARK: People

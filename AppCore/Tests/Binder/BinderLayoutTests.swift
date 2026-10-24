@@ -99,6 +99,23 @@ struct BinderLayoutTests {
         #expect(texts(plan.pages[3]).contains("cont. A"))
     }
 
+    @Test("An added copy of a meeting page carries the same summary operations")
+    func copyKeepsSummary() throws {
+        var day = binder(
+            AgendaContent(
+                date: self.day, todoItems: [], schedule: [], meetings: ["A"], meetingIDs: ["a"],
+                delegated: [], meetingSummarySkills: ["board-summary"]))
+        day.addPage(after: .meeting("a"), id: "x")
+        let plan = layout.plan(for: day)
+        let source = try #require(plan.pages.first { $0.key == .meeting("a") })
+        let copy = try #require(plan.pages.first { $0.key == .extra("x") })
+        #expect(texts(copy).contains("Summary:"))
+        #expect(texts(copy).contains("board-summary"))
+        #expect(texts(copy).filter { $0 == "board-summary" } == ["board-summary"])
+        #expect(texts(source).contains("cont. A") == false)
+        #expect(texts(copy).contains("cont. A"))
+    }
+
     @Test("An added copy of the blank meeting page is titled cont.")
     func blankMeetingCopy() throws {
         var day = binder(content([]))
