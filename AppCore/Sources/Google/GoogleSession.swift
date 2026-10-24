@@ -176,7 +176,8 @@ public actor GoogleSession: GoogleAccount, AuthorizedHTTPSending {
     }
 
     /// Sends `request` with the access token, refreshing it first when it expires within a
-    /// minute or its recorded scopes are missing or incomplete, and once more after a 401. A second 401 signs the person out.
+    /// minute or its recorded scopes are missing or incomplete, and once more after a 401. A
+    /// second 401 signs the person out.
     public func send(_ request: HTTPRequest) async throws -> HTTPResponse {
         let configuration = try requireConfiguration()
         guard var tokens = try? tokenStore.load() else {
