@@ -91,4 +91,11 @@ struct AgendaSettingsTests {
         #expect(store.load() == changed)
         #expect(InMemorySettingsStore(changed).load() == changed)
     }
+
+    @Test("Rules without summary skills decode with none")
+    func rulesWithoutSummarySkills() throws {
+        #expect(try decode(#"{"rules":{"lookAheadDays":3}}"#).rules.summarySkills == [:])
+        let settings = try decode(#"{"rules":{"summarySkills":{"Sync":"s"}}}"#)
+        #expect(settings.rules.summarySkills == ["Sync": "s"])
+    }
 }

@@ -14,11 +14,13 @@ public struct AgendaDraft: Equatable, Sendable {
     public var tasks: [DraftTask]
     /// The delegated tasks.
     public var delegated: [DraftDelegated]
+    /// The summary skill per meeting title, see ``SummarySkill``.
+    public let summarySkills: [String: String]
 
     /// Creates a draft with every field given.
     public init(
         date: CalendarDay, notices: [String], titlePrefixes: [String], events: [DraftEvent],
-        tasks: [DraftTask], delegated: [DraftDelegated]
+        tasks: [DraftTask], delegated: [DraftDelegated], summarySkills: [String: String] = [:]
     ) {
         self.date = date
         self.notices = notices
@@ -26,13 +28,17 @@ public struct AgendaDraft: Equatable, Sendable {
         self.events = events
         self.tasks = tasks
         self.delegated = delegated
+        self.summarySkills = summarySkills
     }
 
     /// Sets an event's meeting-page title; a blank title restores the default.
     public mutating func setTitle(_ text: String, forEvent id: String) {
         let title = TextFitter.normalized(text)
+        let skills = summarySkills
         Self.update(&events, id: id) {
             $0.title = title.isEmpty ? $0.defaultTitle : title
+            $0.summarySkill = SummarySkill.skill(
+                pageTitle: $0.title, originalTitle: $0.originalTitle, skills: skills)
         }
     }
 
@@ -47,6 +53,8 @@ public struct AgendaDraft: Equatable, Sendable {
                 ? MeetingTitle.stripped(events[index].originalTitle, prefixes: prefixes) : name
             events[index].title = value
             events[index].defaultTitle = value
+            events[index].summarySkill = SummarySkill.skill(
+                pageTitle: value, originalTitle: events[index].originalTitle, skills: summarySkills)
         }
     }
 
@@ -102,10 +110,12 @@ public struct AgendaDraft: Equatable, Sendable {
         var meetingIndexes: [String: Int] = [:]
         var meetings: [String] = []
         var meetingIDs: [String] = []
+        var meetingSummarySkills: [String] = []
         for event in events where event.includesMeetingPage {
             meetingIndexes[event.id] = meetings.count
             meetings.append(event.title)
             meetingIDs.append(event.id)
+            meetingSummarySkills.append(event.summarySkill ?? "")
         }
         let scheduled = events.filter { $0.isIncluded && $0.scheduleSlot != nil }
         let schedule = Set(scheduled.compactMap(\.scheduleSlot)).sorted().map { slot in
@@ -117,14 +127,15 @@ public struct AgendaDraft: Equatable, Sendable {
         return AgendaContent(
             date: date,
             todoItems: tasks.filter(\.isIncluded).map {
-                TodoItem(text: $0.text, notes: $0.notes, due: $0.dueText)
+                TodoItem(text: $0.text, notes: $0.notes, due: $0.dueText, taskID: $0.id)
             },
             schedule: schedule, meetings: meetings, meetingIDs: meetingIDs,
             delegated: delegated.filter(\.isIncluded).map {
                 DelegatedItem(
                     text: $0.text, owner: $0.owner, cadence: $0.cadence, marked: $0.marked,
-                    status: $0.status)
-            })
+                    status: $0.status, taskID: $0.id)
+            },
+            meetingSummarySkills: meetingSummarySkills)
     }
 
     private static func update<Element: Identifiable>(
