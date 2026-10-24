@@ -687,6 +687,40 @@ answers. Step-by-step: https://claude.ai/artifact/TJ1ovBZqCJEiDqfdvjMHN1
   reached without a fake is a sign the code should take that dependency as a protocol (D10 does
   this for file reads).
 
+## Orchestrator: stuck or flaky iOS CI
+
+The macOS jobs of `tests.yml` (the three `app (...)` jobs and the ten `ui (...)` shards) often
+flake or hang on GitHub's runners: a simulator that never finishes booting, a UI test that times
+out waiting for an element, or a job that sits queued or running far past its usual 10–20 minutes.
+A Sonnet worker must not spend its session on that. The orchestrator (`/implement`) handles it
+this way, for every phase and for the final pull request:
+
+1. **What a worker does.** Every phase whose acceptance depends on an `app (...)` or `ui (...)`
+   job carries this rule in its brief. If such a job fails on a test or a step the phase did not
+   change, it re-runs the failed job once. A job that is still queued or running 60 minutes after
+   dispatch counts as stuck. If the re-run is red or stuck again, the worker stops with
+   `status=blocked`, and its report's reason starts with `CI-IOS:` followed by the run URL, the job
+   names and the failing test or step. Workers never skip, disable, `XCTSkip` or `sleep` their way
+   past it (`.claude/skills/steward/SKILL.md`).
+2. **What the orchestrator does with a `CI-IOS:` block.** It does not ask the user and does not
+   send the Sonnet worker back. It starts one **Opus** session (`create_session` with
+   `model: claude-opus-5-5`) on the same phase branch, with this brief: "Make the iOS jobs of
+   `tests.yml` reliably green on this branch. The phase's own work is done (see its PHASE-REPORT,
+   quoted below). Root-cause each flaky or stuck job from the run's log and its `xcresult-*`
+   artifact. The cause may be in the test, in the app's accessibility identifiers or waits, in
+   `scripts/simulator.py` or in `.github/workflows/tests.yml`. Fix it, including in files outside
+   the phase's `touches`, and explain each such file. Never skip, disable or quarantine a test,
+   never add a fixed sleep, and never push an empty commit to re-run CI. Dispatch `tests.yml` and
+   confirm the fix with two consecutive green runs of the affected jobs. End with
+   `PHASE-REPORT <phase id> status=<done|blocked> head=<sha>`."
+3. The orchestrator then merges the phase as usual once that report is `done`. Its diff review
+   accepts the Opus session's out-of-`touches` CI and test-stability changes when each one is
+   explained. If the Opus session also reports `blocked`, the orchestrator marks the phase
+   `failed` and asks the user, quoting both reports.
+4. The same applies to a red or stuck iOS job on the feature branch after a merge, or on the final
+   pull request. In that case the Opus session works on a `<feature_branch>--ci-fix-<n>` branch cut
+   from the feature branch, and the orchestrator merges it like a phase.
+
 ## Implementation manifest
 
 ```yaml
@@ -743,7 +777,7 @@ phases:
       - AppCore/Tests/Controller/AgendaControllerTests.swift
       - AppCore/Tests/Support/FakeHTTPClient.swift
     brief: |
-      Implement Design D1 and D2 of docs/drive-handoff-plan.md exactly. Do not edit CHANGELOG.md or README.md; the last phase writes them.
+      Implement Design D1 and D2 of docs/drive-handoff-plan.md exactly. Do not edit CHANGELOG.md or README.md; the last phase writes them. If an app (...) or ui (...) job of tests.yml fails on something this phase did not change, or is still queued or running 60 minutes after dispatch, re-run it once; if it is red or stuck again, stop with status=blocked and start the reason with `CI-IOS:` (see "Orchestrator: stuck or flaky iOS CI" in the plan).
       1. HTTP.swift: add `put` and `patch` to HTTPMethod; add `headers` and `header(_:)` to HTTPResponse (D2), keeping every existing call site compiling through the defaulted parameter.
       2. URLSessionHTTPClient.swift: copy `HTTPURLResponse.allHeaderFields` into `headers` (String keys and values only).
       3. GoogleOAuth.swift: add drive.file as the third entry of `GoogleOAuthConfiguration.scopes`; update its doc comment ("The scopes the app asks for, and needs all of"). Add `scopes: [String]?` to OAuthTokens with a trailing defaulted initializer parameter. Add `previousScopes:` to `GoogleOAuth.tokens` after `previousRefreshToken` and fill `scopes` per D1. Update the doc comments that say "read-only".
@@ -868,7 +902,7 @@ phases:
       - App/Screens/RulesView.swift
       - AppUITests/RulesUITests.swift
     brief: |
-      Implement Design D6 and D7 of docs/drive-handoff-plan.md exactly. Do not edit CHANGELOG.md or README.md; the last phase writes them.
+      Implement Design D6 and D7 of docs/drive-handoff-plan.md exactly. Do not edit CHANGELOG.md or README.md; the last phase writes them. If an app (...) or ui (...) job of tests.yml fails on something this phase did not change, or is still queued or running 60 minutes after dispatch, re-run it once; if it is red or stuck again, stop with status=blocked and start the reason with `CI-IOS:` (see "Orchestrator: stuck or flaky iOS CI" in the plan).
       1. TemplateGeometry.swift: add the four constants from D6 with `///` comments.
       2. AgendaLayout.swift: `meetingPage(title:key:)` gains the meeting's skill (pass `content.meetingSummarySkills[index]` when that index exists, else ""). Emit label runs, title runs, then the summary operations: the "Summary:" label run with the `meeting.label` slot's role, font pack and weight at `meetingSummaryPoints`; then either the skill run (in D6's box starting at the label run's x + width + meetingSummaryGap) or `.line` from label end + meetingSummaryGap to meetingTitleRight at meetingSummaryRuleY with todoLineColor and width 0.5. Do not change `continuedOperations(of:in:)`.
       3. AgendaContentFixtures.swift: give the long-text fixture's meetings a 64-character valid skill name for the first meeting and "" for the rest, so LayoutAudit checks both forms.
@@ -990,7 +1024,7 @@ phases:
       - AppTests/PlatformTests.swift
       - AppUITests/SettingsUITests.swift
     brief: |
-      Implement the Lifecycle, Live wiring, Fixture wiring and Settings parts of Design D12 in docs/drive-handoff-plan.md exactly. Do not edit CHANGELOG.md or README.md; the last phase writes them.
+      Implement the Lifecycle, Live wiring, Fixture wiring and Settings parts of Design D12 in docs/drive-handoff-plan.md exactly. Do not edit CHANGELOG.md or README.md; the last phase writes them. If an app (...) or ui (...) job of tests.yml fails on something this phase did not change, or is still queued or running 60 minutes after dispatch, re-run it once; if it is red or stuck again, stop with status=blocked and start the reason with `CI-IOS:` (see "Orchestrator: stuck or flaky iOS CI" in the plan).
       1. App/Platform/KeychainRoutineCredentialsStore.swift: copy KeychainClientCredentialsStore.swift with service "name.tkcs.magenda.routine", account "trigger", type RoutineCredentials.
       2. AppEnvironment.swift: AppServices gains `handoff: HandoffController`. Build it live and for fixtures exactly as D12 says. Fixtures use InMemoryHandoffStore and the fixture binder store already chosen. `-MagendaNoRoutine` gives an empty routine store.
       3. MagendaApp.swift: inject `.environment(services.handoff)`. In the existing `.task`, call `services.handoff.start()` after `controller.start()`. Add `@Environment(\.scenePhase)` and `.onChange(of: scenePhase)`: when it becomes `.active`, `await services.handoff.refresh(excluding: services.controller.day)`.
@@ -1017,7 +1051,7 @@ phases:
       - docs/testing-policy.md
       - .claude/skills/steward/SKILL.md
     brief: |
-      Implement the Finish Day and Review parts of Design D12 in docs/drive-handoff-plan.md exactly. Do not edit CHANGELOG.md or README.md; the last phase writes them.
+      Implement the Finish Day and Review parts of Design D12 in docs/drive-handoff-plan.md exactly. Do not edit CHANGELOG.md or README.md; the last phase writes them. If an app (...) or ui (...) job of tests.yml fails on something this phase did not change, or is still queued or running 60 minutes after dispatch, re-run it once; if it is red or stuck again, stop with status=blocked and start the reason with `CI-IOS:` (see "Orchestrator: stuck or flaky iOS CI" in the plan).
       1. BinderView.swift: read `@Environment(HandoffController.self)`. Add the Finish Day toolbar item next to Share PDF with D12's title, image, identifier, label and enabled rule. Show `handoff.message` in the message bar after `binder.message`, identifier `handoffMessage`.
       2. New App/Screens/ReviewView.swift: per D12, with an `ID` enum (reviewDone, reviewEmpty, reviewRow(i), reviewStatus(i), reviewError(i), reviewOpenDoc(i), reviewAction(i)), accessibility labels on every button, `@Environment(\.openURL)`, `.task` and `.refreshable` refresh, and a `#Preview` using AppEnvironment.previewServices().
       3. AgendaView.swift: the Review toolbar button (D12) and its sheet.
@@ -1071,7 +1105,8 @@ phases:
       6. docs/end-of-day-handoff.md: replace bare ADR mentions with links to the new ADR files. docs/README.md: link docs/end-of-day-handoff.md.
       7. CHANGELOG.md under [Unreleased] (Added / Changed lines): Finish Day uploads the day to Google Drive and starts the end-of-day Claude routine; the Review list with Open Doc and approve buttons; summary skills in the rules and the Summary line on meeting pages; a closed day's handwriting is deleted five days after closure; Magenda now asks for access to the files it creates in Google Drive, so sign in again after updating.
       8. scripts/check_coverage_floor.py: add 100.0 floors with a one-line comment each for AppCore/Sources/Google/GoogleDriveClient.swift, Handoff/RoutineTrigger.swift, Handoff/DayHandoff.swift, Handoff/DocStatus.swift, Handoff/HandoffStore.swift, Handoff/HandoffController.swift, Handoff/HandoffFixtures.swift and Settings/SummarySkill.swift.
-      9. Delete docs/drive-handoff-plan.md and docs/drive-handoff-plan-manual-steps.html; grep the repo for "drive-handoff-plan" and remove every remaining reference.
+      9. Dispatch tests.yml on the branch. If an app (...) or ui (...) job of tests.yml fails on something this phase did not change, or is still queued or running 60 minutes after dispatch, re-run it once; if it is red or stuck again, stop with status=blocked and start the reason with `CI-IOS:` (see "Orchestrator: stuck or flaky iOS CI" in the plan).
+      10. Delete docs/drive-handoff-plan.md and docs/drive-handoff-plan-manual-steps.html; grep the repo for "drive-handoff-plan" and remove every remaining reference.
     acceptance:
       - ls docs/adr/0027-* docs/adr/0028-* docs/adr/0029-* docs/adr/0030-* docs/adr/0031-* lists five files
       - grep -c "| \[003[01]\]\|| \[002[789]\]" docs/adr/README.md prints 5
