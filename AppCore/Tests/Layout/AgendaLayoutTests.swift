@@ -93,13 +93,65 @@ struct AgendaLayoutTests {
         #expect(heading.container.x1 == 574.1)
     }
 
-    @Test("A blank meeting page draws only its label besides the header")
+    @Test("A blank meeting page draws only its labels besides the header")
     func blankMeetingPage() throws {
         let plan = try layout().plan(for: content())
         let texts = runs(plan.pages[1]).map(\.text)
         #expect(texts.contains("Meeting title:"))
+        #expect(texts.contains("Summary:"))
         #expect(!texts.contains(""))
-        #expect(texts.count == 21)
+        #expect(texts.count == 22)
+        #expect(lines(plan.pages[1]).count == 1)
+    }
+
+    private func lines(_ page: PagePlan) -> [(from: PlanPoint, to: PlanPoint, width: Double)] {
+        page.operations.compactMap { operation in
+            if case .line(let from, let to, _, let width) = operation {
+                return (from, to, width)
+            }
+            return nil
+        }
+    }
+
+    private func summaryContent(skill: String) throws -> AgendaContent {
+        AgendaContent(
+            date: try day(), todoItems: [], schedule: [], meetings: ["Team sync"],
+            delegated: [], meetingSummarySkills: [skill])
+    }
+
+    @Test("A meeting with a skill prints Summary: and the skill after it")
+    func meetingWithSkill() throws {
+        let plan = try layout().plan(for: summaryContent(skill: "board-summary"))
+        let page = runs(plan.pages[1])
+        let label = try #require(page.first { $0.text == "Summary:" })
+        let skill = try #require(page.first { $0.text == "board-summary" })
+        #expect(label.font.size == 12)
+        #expect(skill.font == label.font)
+        #expect(skill.x == label.x + label.width + TemplateGeometry.meetingSummaryGap)
+        #expect(skill.container.x1 == TemplateGeometry.meetingTitleRight)
+        #expect(lines(plan.pages[1]).isEmpty)
+    }
+
+    @Test("A meeting without a skill prints Summary: and a line at y 136")
+    func meetingWithoutSkill() throws {
+        let plan = try layout().plan(for: summaryContent(skill: ""))
+        let label = try #require(runs(plan.pages[1]).first { $0.text == "Summary:" })
+        let line = try #require(lines(plan.pages[1]).first)
+        #expect(lines(plan.pages[1]).count == 1)
+        #expect(line.from.y == 136)
+        #expect(line.to.y == 136)
+        #expect(line.from.x == label.x + label.width + TemplateGeometry.meetingSummaryGap)
+        #expect(line.to.x == TemplateGeometry.meetingTitleRight)
+        #expect(line.width == 0.5)
+    }
+
+    @Test("The Summary: label comes after the title runs")
+    func summaryAfterTitle() throws {
+        let plan = try layout().plan(for: summaryContent(skill: "x"))
+        let words = runs(plan.pages[1]).map(\.text)
+        let title = try #require(words.firstIndex(of: "Team sync"))
+        let summary = try #require(words.firstIndex(of: "Summary:"))
+        #expect(title < summary)
     }
 
     @Test("A meeting title longer than its box ends with an ellipsis and fits")

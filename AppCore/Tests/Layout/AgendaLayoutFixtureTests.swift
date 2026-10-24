@@ -75,6 +75,11 @@ struct AgendaLayoutFixtureTests {
         #expect(AgendaContentFixtures.overflow.meetings.count == 25)
         #expect(AgendaContentFixtures.overflow.delegated.count == 40)
         #expect(AgendaContentFixtures.empty.meetings.isEmpty)
+        let skills = AgendaContentFixtures.longText.meetingSummarySkills
+        #expect(skills.count == 6)
+        #expect(skills[0].count == 64)
+        #expect(SummarySkill.isValidName(skills[0]))
+        #expect(skills.dropFirst().allSatisfy { $0.isEmpty })
         #expect(AgendaContentFixtures.typical.date.isoString == "2026-09-30")
         #expect(AgendaContentFixtures.typical.date.weekdayIndex == 2)
     }
