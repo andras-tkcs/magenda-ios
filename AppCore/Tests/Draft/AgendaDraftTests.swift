@@ -187,12 +187,15 @@ struct AgendaDraftTests {
         var value = draft(tasks: [task("t1", "Call"), task("t2", "Book", included: false)])
         value.setIncluded(false, forDelegated: "d2")
         let content = value.content()
-        #expect(content.todoItems == [TodoItem(text: "Call", notes: "Some notes", due: "09/30")])
+        #expect(
+            content.todoItems == [
+                TodoItem(text: "Call", notes: "Some notes", due: "09/30", taskID: "t1")
+            ])
         #expect(
             content.delegated == [
                 DelegatedItem(
                     text: "Hire", owner: "Anna", cadence: .weekly, marked: true,
-                    status: ["One", "Two"])
+                    status: ["One", "Two"], taskID: "d1")
             ])
     }
 
