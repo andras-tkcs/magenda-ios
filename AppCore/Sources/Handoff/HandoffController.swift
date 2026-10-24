@@ -264,7 +264,9 @@ public final class HandoffController {
         do {
             let status = DocStatus.parse(try await drive.exportText(ofDoc: docID))
             handoff.docStatus = status
-            handoff.lastError = nil
+            // A day that is not yet sent keeps the error that stopped it; reading its Doc
+            // does not undo that.
+            if handoff.stage != .queued && handoff.stage != .uploaded { handoff.lastError = nil }
             if status == .closed { handoff.closedOn = today() }
             try save(handoff)
         } catch {
