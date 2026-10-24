@@ -3,6 +3,7 @@
 ## Status
 
 Accepted — 2026-10-15. Implemented.
+Amended by [ADR 0027](0027-finished-days-are-uploaded-to-google-drive-with-drive-file.md): finished days are uploaded to Google Drive.
 
 ## Context
 

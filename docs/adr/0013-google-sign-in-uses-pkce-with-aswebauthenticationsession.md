@@ -3,6 +3,7 @@
 ## Status
 
 Accepted — 2026-10-15. Implemented.
+Amended by [ADR 0027](0027-finished-days-are-uploaded-to-google-drive-with-drive-file.md): the app also asks for drive.file and writes finished days to Drive.
 
 ## Context
 
