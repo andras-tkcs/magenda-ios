@@ -155,6 +155,7 @@ struct HandoffControllerTests {
     private let clock: TestClock
     private let reads = Reads()
     private let removals = Removals()
+    private let layout: BinderLayout
     private let binder: BinderSession
     private let controller: HandoffController
 
@@ -164,16 +165,11 @@ struct HandoffControllerTests {
         binderStore: any BinderStore = InMemoryBinderStore(),
         credentials: (any RoutineCredentialsStore)? = nil
     ) throws {
-        let layout = BinderLayout(
+        layout = BinderLayout(
             manifest: try TemplateManifest.bundled(), measurer: FakeTextMeasurer())
         date = try #require(CalendarDay(year: 2026, month: 9, day: 30))
         otherDay = try #require(CalendarDay(year: 2026, month: 9, day: 1))
-        let day = BinderDay(
-            content: AgendaContent(
-                date: date, todoItems: [],
-                schedule: [ScheduleEntry(slot: 2, text: "A", meetingIndex: 0)],
-                meetings: ["A"], meetingIDs: ["cal|a"], delegated: []),
-            theme: Theme())
+        let day = Self.binderDay(on: date)
         self.drive = drive
         self.store = store
         self.binderStore = binderStore
@@ -194,6 +190,15 @@ struct HandoffControllerTests {
             ]),
             today: { clock.today }, readFile: { _ in try reads.read() },
             removeFile: { removals.remove($0) })
+    }
+
+    private static func binderDay(on date: CalendarDay) -> BinderDay {
+        BinderDay(
+            content: AgendaContent(
+                date: date, todoItems: [],
+                schedule: [ScheduleEntry(slot: 2, text: "A", meetingIndex: 0)],
+                meetings: ["A"], meetingIDs: ["cal|a"], delegated: []),
+            theme: Theme())
     }
 
     private func fired(_ index: Int) throws -> [String: Any] {
@@ -250,6 +255,19 @@ struct HandoffControllerTests {
             controller.docURL(for: date)?.absoluteString
                 == "https://docs.google.com/document/d/doc-1/edit")
         #expect(controller.docURL(for: otherDay) == nil)
+    }
+
+    @Test("finished days are listed newest first")
+    func daysNewestFirst() async throws {
+        let older = Self.binderDay(on: otherDay)
+        let olderBinder = BinderSession(
+            day: older, plan: layout.plan(for: older), ink: [:], store: binderStore,
+            layout: layout, makeID: CountingIDs().next)
+        await controller.finish(olderBinder)
+        await controller.finish(binder)
+        #expect(controller.days.map(\.date) == [date, otherDay])
+        await controller.finish(olderBinder)
+        #expect(controller.days.map(\.date) == [date, otherDay])
     }
 
     @Test("finishing offline queues the day, and a later refresh completes it")

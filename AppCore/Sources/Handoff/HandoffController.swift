@@ -106,7 +106,7 @@ public final class HandoffController {
             return
         }
         remember(handoff)
-        await runPipeline(on: date)
+        await runPipeline(handoff)
         let result = stored(on: date)
         message =
             result?.stage == .notesRequested
@@ -119,11 +119,11 @@ public final class HandoffController {
         guard !isBusy else { return }
         isBusy = true
         defer { isBusy = false }
-        for date in days.filter({ $0.stage == .queued }).map(\.date) {
-            await runPipeline(on: date)
+        for handoff in days where handoff.stage == .queued {
+            await runPipeline(handoff)
         }
-        for handoff in days where handoff.docID != nil && handoff.closedOn == nil {
-            await readStatus(of: handoff.date)
+        for handoff in days where handoff.closedOn == nil {
+            if let docID = handoff.docID { await readStatus(handoff, docID: docID) }
         }
         let now = today()
         for handoff in days where !handoff.purged && handoff.date != openDay {
@@ -144,7 +144,7 @@ public final class HandoffController {
         defer { isBusy = false }
         switch action {
         case .retry:
-            await runPipeline(on: date)
+            await runPipeline(handoff)
         case .approve(let step):
             await approve(step, on: handoff)
         }
@@ -208,8 +208,9 @@ public final class HandoffController {
     }
 
     /// Uploads a queued day and sends it to the routine; stops at the first error and records it.
-    private func runPipeline(on date: CalendarDay) async {
-        guard var handoff = stored(on: date) else { return }
+    private func runPipeline(_ start: DayHandoff) async {
+        var handoff = start
+        let date = start.date
         do {
             if handoff.stage == .queued {
                 guard let pdf = try store.pdf(for: date) else {
@@ -254,12 +255,12 @@ public final class HandoffController {
             fail(&handoff, with: error)
             return
         }
-        await readStatus(of: handoff.date)
+        if let docID = handoff.docID { await readStatus(handoff, docID: docID) }
     }
 
     /// Reads the status line of the day's Doc; the first time it is closed, notes today.
-    private func readStatus(of date: CalendarDay) async {
-        guard var handoff = stored(on: date), let docID = handoff.docID else { return }
+    private func readStatus(_ start: DayHandoff, docID: String) async {
+        var handoff = start
         do {
             let status = DocStatus.parse(try await drive.exportText(ofDoc: docID))
             handoff.docStatus = status
