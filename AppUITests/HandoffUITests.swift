@@ -73,7 +73,9 @@ final class HandoffUITests: XCTestCase {
         finishDay(app)
 
         let status = openReview(app)
-        XCTAssertEqual(status.label, "Notes ready for review")
+        XCTAssertTrue(
+            waitForLabel(status, beginningWith: "Notes ready for review"),
+            "Notes never became ready for review")
         XCTAssertTrue(
             element(app, "reviewOpenDoc.0").waitForExistence(timeout: 30),
             "Open Doc never appeared")
@@ -86,7 +88,9 @@ final class HandoffUITests: XCTestCase {
         finishDay(app)
 
         let status = openReview(app)
-        XCTAssertEqual(status.label, "Notes ready for review")
+        XCTAssertTrue(
+            waitForLabel(status, beginningWith: "Notes ready for review"),
+            "Notes never became ready for review")
         tapButton(app, "reviewAction.0")
         XCTAssertTrue(
             waitForLabel(status, beginningWith: "Closed. Handwriting is deleted on"),

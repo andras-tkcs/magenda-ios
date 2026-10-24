@@ -22,9 +22,10 @@ struct RootView: View {
 }
 
 #Preview {
-    if let controller = AppEnvironment.previewController() {
+    if let services = AppEnvironment.previewServices() {
         RootView(appInfo: AppInfo(name: "Preview", version: "1.0.0", build: "1"))
-            .environment(controller)
-            .task { await controller.start() }
+            .environment(services.controller)
+            .environment(services.handoff)
+            .task { await services.controller.start() }
     }
 }

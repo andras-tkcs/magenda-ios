@@ -27,6 +27,11 @@ struct MagendaApp: App {
                     .task {
                         await services.controller.start()
                         services.handoff.start()
+                        // The scene is already active on a cold launch, before the agenda is
+                        // ready, so the scenePhase refresh below has not run yet.
+                        if services.controller.status == .ready {
+                            await services.handoff.refresh(excluding: services.controller.day)
+                        }
                     }
                     .onChange(of: scenePhase) { _, phase in
                         // Only once the agenda is ready, so its own load meets a scope problem
