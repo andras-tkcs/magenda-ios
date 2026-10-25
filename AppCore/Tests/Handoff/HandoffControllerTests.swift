@@ -1106,7 +1106,7 @@ struct HandoffControllerTests {
     }
 
     @Test("approving a part's notes fires for the part only")
-    func approvePart() async throws {
+    func approveSentMeeting() async throws {
         let meeting = meetingBinder()
         await controller.sendMeeting(containing: Self.meetingA, of: meeting)
         await drive.setExportedText(DocStatus.initialDocText)
