@@ -140,7 +140,8 @@ public struct BinderLayout: Sendable {
 
     /// `day` moved onto new content and theme. Pages that left the content but carry handwriting
     /// (their own, or on an added copy) are retained with the content they were laid out from;
-    /// added pages whose source is no longer shown are dropped.
+    /// added pages whose source is no longer shown are dropped. Locked pages are kept like inked
+    /// ones.
     public func rebased(
         _ day: BinderDay, onto content: AgendaContent, theme: Theme, inkedKeys: Set<PageKey>
     ) -> BinderDay {
@@ -149,7 +150,7 @@ public struct BinderLayout: Sendable {
             return true
         }
         let kept = oldKeys.filter { key in
-            inkedKeys.contains(key)
+            inkedKeys.contains(key) || day.locked.contains(key)
                 || day.extras.contains { $0.source == key && inkedKeys.contains(.extra($0.id)) }
         }
         let newKeys = Set(layout(theme).plan(for: content).pages.map(\.key))
@@ -161,6 +162,6 @@ public struct BinderLayout: Sendable {
         let shown = newKeys.union(retained.map(\.key))
         return BinderDay(
             content: content, theme: theme, extras: day.extras.filter { shown.contains($0.source) },
-            retained: retained)
+            retained: retained, locked: day.locked)
     }
 }
