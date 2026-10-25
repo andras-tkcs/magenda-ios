@@ -1094,7 +1094,15 @@ struct HandoffControllerTests {
         await controller.finish(meeting)
         let payload = try fired(1)
         #expect(payload["scope"] as? String == "day")
-        #expect(payload["driveFileID"] as? String == "day-file")
+        // The day replaces its own file and keeps its own Doc; the part's IDs are never used.
+        let uploaded = await uploads()
+        #expect(uploaded.count == 2)
+        guard case .uploadPDF(_, "Magenda 2026-09-30.pdf", _, let replacing)? = uploaded.last
+        else {
+            Issue.record("the day's PDF was not uploaded")
+            return
+        }
+        #expect(replacing == "day-file")
         #expect(payload["docID"] as? String == "day-doc")
         let pages = try #require(payload["pages"] as? [[String: Any]])
         let marked = pages.compactMap { page in
