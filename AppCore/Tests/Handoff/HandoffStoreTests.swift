@@ -133,10 +133,11 @@ struct HandoffStoreTests {
             try store.save(try Self.handoff(27))
             try store.save(try Self.part(1, 24))
             let listed = try store.handoffs()
-            #expect(listed.map(\.id) == [
-                try Self.dayID(27), try Self.dayID(26), try Self.partID(1), try Self.partID(2),
-                try Self.partID(1, 24),
-            ])
+            #expect(
+                listed.map(\.id) == [
+                    try Self.dayID(27), try Self.dayID(26), try Self.partID(1), try Self.partID(2),
+                    try Self.partID(1, 24),
+                ])
             #expect(try store.handoff(try Self.partID(2)) == (try Self.part(2)))
             #expect(try store.handoff(try Self.dayID()) == (try Self.handoff()))
             #expect(try store.handoff(try Self.partID(3)) == nil)
@@ -210,6 +211,7 @@ struct HandoffStoreTests {
             try FileManager.default.createDirectory(
                 at: directory.appending(path: "2026-10-24"), withIntermediateDirectories: true)
             try write("x", to: directory.appending(path: "stray.txt"))
+            try write("x", to: directory.appending(path: "2026-10-23"))
             #expect(try store.handoffs().map(\.date.day) == [26])
             #expect(throws: HandoffStoreError.unreadable) { try store.handoff(try Self.dayID(25)) }
             #expect(try store.handoff(try Self.dayID(24)) == nil)
