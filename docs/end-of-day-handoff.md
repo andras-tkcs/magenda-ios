@@ -114,6 +114,13 @@ already run for the same `date`, `step` and `checksum` must do nothing: no secon
 second set of drafts, no change to the Doc's status. A new checksum for a date (the person finished
 the day again before it was sent) is a new run.
 
+## Sending a day again
+
+Reset Hand-off in the binder deletes Magenda's record of a day, so Finish Day works again
+([ADR 0032](adr/0032-a-sent-days-hand-off-can-be-reset-after-asking.md)). The next finish uploads a
+new PDF and creates a new Doc; the earlier ones stay in Drive. Its payload has the new `driveFileID`
+and `docID`, and a new `checksum` when the PDF changed.
+
 ## Deleting the handwriting
 
 Magenda records the day it first reads `Status: Closed`. Five days later, the next time the app

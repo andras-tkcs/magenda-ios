@@ -306,6 +306,28 @@ struct AgendaControllerBinderTests {
         #expect(context.controller.message == nil)
     }
 
+    @Test("starting over is refused while a page is locked")
+    func startOverRefusedWhenLocked() async throws {
+        let context = try await started(.standard)
+        #expect(context.controller.canStartOver)
+        await context.controller.render()
+        #expect(context.controller.canStartOver)
+        let binder = try #require(context.controller.binder)
+        binder.setInk(Data([1]), on: .overview)
+        binder.lock([.overview])
+        let day = binder.day
+        #expect(!context.controller.canStartOver)
+        await context.controller.startOver()
+        #expect(context.controller.binder === binder)
+        #expect(binder.ink == [.overview: Data([1])])
+        #expect(try context.binderStore.ink(on: wednesday) == [.overview: Data([1])])
+        #expect(try context.binderStore.day(wednesday) == day)
+        #expect(
+            context.controller.message
+                == "A meeting on this day was already sent to Claude, so it can't be started over. Reset its hand-off first."
+        )
+    }
+
     @Test("a start over overtaken by a load still leaves a fresh day")
     func startOverOvertaken() async throws {
         let store = InMemoryBinderStore()

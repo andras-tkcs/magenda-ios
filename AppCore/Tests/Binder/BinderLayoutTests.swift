@@ -257,6 +257,15 @@ struct BinderLayoutTests {
         #expect(rebased.extras.isEmpty)
     }
 
+    @Test("Rebasing keeps a locked meeting without ink as a retained page and carries the lock")
+    func rebasedKeepsLocked() {
+        var day = binder()
+        day.locked = [.meeting("a")]
+        let rebased = layout.rebased(day, onto: content(["b"]), theme: Theme(), inkedKeys: [])
+        #expect(rebased.retained == [RetainedPage(key: .meeting("a"), content: content())])
+        #expect(rebased.locked == [.meeting("a")])
+    }
+
     @Test("Rebasing drops a dropped meeting without ink")
     func rebasedDropsBlank() {
         let rebased = layout.rebased(binder(), onto: content(["b"]), theme: Theme(), inkedKeys: [])

@@ -59,7 +59,7 @@ public final class BinderSession {
 
     /// Keeps `data` as the handwriting of `key` and saves it; empty `data` removes it.
     public func setInk(_ data: Data, on key: PageKey) {
-        guard (ink[key] ?? Data()) != data else {
+        guard !isLocked(key), (ink[key] ?? Data()) != data else {
             return
         }
         undoStack.append(InkChange(key: key, before: ink[key] ?? Data(), after: data))
@@ -121,7 +121,7 @@ public final class BinderSession {
 
     /// Whether `key` is a page the person added, which they can delete.
     public func canDelete(_ key: PageKey) -> Bool {
-        guard case .extra(let id) = key else {
+        guard !isLocked(key), case .extra(let id) = key else {
             return false
         }
         return day.extras.contains { $0.id == id }
@@ -147,6 +147,46 @@ public final class BinderSession {
             message = "Couldn't delete the page. Free some space on this device."
         }
         return plan.pages[max(0, min(index - 1, plan.pages.count - 1))].key
+    }
+
+    /// Whether `key` was sent to Claude and can no longer be written on.
+    public func isLocked(_ key: PageKey) -> Bool {
+        day.locked.contains(key)
+    }
+
+    /// Makes `keys` read-only, drops their undo and redo history, and saves the day.
+    public func lock(_ keys: [PageKey]) {
+        for key in keys where !day.locked.contains(key) {
+            day.locked.append(key)
+        }
+        undoStack.removeAll { keys.contains($0.key) }
+        redoStack.removeAll { keys.contains($0.key) }
+        saveLocks()
+    }
+
+    /// Makes `keys` writable again and saves the day.
+    public func unlock(_ keys: [PageKey]) {
+        day.locked.removeAll { keys.contains($0) }
+        saveLocks()
+    }
+
+    /// Makes every page writable again and saves the day.
+    public func unlockAll() {
+        day.locked = []
+        saveLocks()
+    }
+
+    /// Whether a page can be added after `key`: not after a locked page.
+    public func canAddPage(after key: PageKey) -> Bool {
+        !isLocked(key)
+    }
+
+    private func saveLocks() {
+        do {
+            try store.saveDay(day)
+        } catch {
+            message = "Couldn't save the binder. Free some space on this device."
+        }
     }
 
     // Used by a render, which updates the open binder instead of replacing it, so screens keep

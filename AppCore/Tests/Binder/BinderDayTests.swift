@@ -119,4 +119,25 @@ struct BinderDayTests {
         #expect(decoded.content.todoItems.first?.text == "a")
         #expect(decoded.version == BinderDay.formatVersion)
     }
+
+    @Test("Locked pages survive encoding and decoding")
+    func lockedRoundTrip() throws {
+        var day = try day()
+        day.locked = [.meeting("a"), .extra("x")]
+        let decoded = try JSONDecoder().decode(BinderDay.self, from: JSONEncoder().encode(day))
+        #expect(decoded.locked == [.meeting("a"), .extra("x")])
+        #expect(decoded == day)
+    }
+
+    @Test("A day written without locked pages decodes with none")
+    func decodesWithoutLocked() throws {
+        var day = try day()
+        day.locked = [.meeting("a")]
+        var object = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(day)) as? [String: Any])
+        object["locked"] = nil
+        let decoded = try JSONDecoder().decode(
+            BinderDay.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(decoded.locked.isEmpty)
+    }
 }
