@@ -90,6 +90,23 @@ struct HandoffStoreTests {
         }
     }
 
+    @Test(
+        "Deleting a hand-off removes it and its PDF, leaves other days, and is fine without one",
+        arguments: Kind.allCases)
+    func deleteHandoff(kind: Kind) throws {
+        try withStore(kind) { store in
+            let date = try Self.date()
+            try store.deleteHandoff(for: date)
+            try store.save(try Self.handoff(26))
+            try store.save(try Self.handoff(27))
+            try store.savePDF(Data([1]), for: date)
+            try store.deleteHandoff(for: date)
+            #expect(try store.handoff(date) == nil)
+            #expect(try store.pdf(for: date) == nil)
+            #expect(try store.handoffs().map(\.date.day) == [27])
+        }
+    }
+
     @Test("handoffs() is empty when the directory does not exist")
     func missingDirectory() throws {
         try withDirectory { directory in

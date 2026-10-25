@@ -139,3 +139,4 @@ until a later ADR supersedes it.
 | [0029](0029-the-days-google-doc-is-the-review-record.md) | The day's Google Doc is the review record, and approve buttons start the routine's next step | Accepted |
 | [0030](0030-a-closed-days-handwriting-is-deleted-five-days-later.md) | A closed day's handwriting is deleted from the device five days after Magenda first reads Closed | Accepted |
 | [0031](0031-meeting-summaries-are-requested-by-skill.md) | A meeting's summary is requested with a title-to-skill map in the rules, or by writing a skill on its page | Accepted |
+| [0032](0032-a-sent-days-hand-off-can-be-reset-after-asking.md) | A day's hand-off can be reset after asking, so a day can be finished and sent again | Accepted |

@@ -77,7 +77,7 @@ text kept as text and your handwriting on top, and uploads it as `Magenda <date>
 `Magenda` folder in your Drive. Next to it, it creates a Google Doc named `Magenda <date> notes`
 whose first line is the day's status. Magenda sees only the files it created. A day finished
 without a connection waits and is sent the next time the app becomes active; finishing a day again
-before it was sent replaces its PDF.
+before it was sent replaces its PDF. **Reset Hand-off**, after a confirmation, forgets that a day was sent so you can finish it again (ADR 0032); the earlier PDF and Doc stay in Drive.
 
 To send days to Claude, open Settings → End-of-day routine and enter the fire URL and token of the
 routine's API trigger (from claude.ai/code/routines). The token stays in the device's Keychain and

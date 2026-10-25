@@ -126,4 +126,29 @@ final class HandoffUITests: XCTestCase {
             XCTWaiter().wait(for: [disabled], timeout: 30), .completed,
             "Finish Day stayed enabled after the day was sent")
     }
+
+    @MainActor
+    func testResetHandoffAsksAndThenLetsTheDayBeFinishedAgain() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch()
+        render(app)
+        XCTAssertFalse(element(app, "resetHandoffButton").exists)
+        tapButton(app, "finishDayButton")
+        let finish = element(app, "finishDayButton")
+        let disabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isEnabled == false"), object: finish)
+        XCTAssertEqual(XCTWaiter().wait(for: [disabled], timeout: 30), .completed)
+
+        tapButton(app, "resetHandoffButton")
+        tapButton(app, "cancelResetHandoffButton")
+        XCTAssertFalse(finish.isEnabled, "cancelling the reset enabled Finish Day")
+
+        tapButton(app, "resetHandoffButton")
+        tapButton(app, "confirmResetHandoffButton")
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isEnabled == true"), object: finish)
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [enabled], timeout: 30), .completed,
+            "Finish Day stayed disabled after the hand-off was reset")
+    }
 }
