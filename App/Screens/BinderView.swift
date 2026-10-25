@@ -247,10 +247,7 @@ struct BinderView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityIdentifier(ID.binderPage(index))
                     .accessibilityLabel(Self.label(for: page.key))
-                    .accessibilityValue(
-                        binder.isLocked(page.key)
-                            ? "Sent to Claude" : binder.ink[page.key] == nil ? "Blank" : "Handwritten"
-                    )
+                    .accessibilityValue(value(of: page.key))
                     .overlay(alignment: .top) {
                         if binder.isLocked(page.key) {
                             Label("Sent to Claude", systemImage: "lock.fill")
@@ -278,6 +275,14 @@ struct BinderView: View {
             }
         }
         .accessibilityIdentifier(ID.binderView)
+    }
+
+    /// What VoiceOver reads as the value of the page with `key`.
+    private func value(of key: PageKey) -> String {
+        if binder.isLocked(key) {
+            return "Sent to Claude"
+        }
+        return binder.ink[key] == nil ? "Blank" : "Handwritten"
     }
 
     /// What VoiceOver calls the page with `key`.
