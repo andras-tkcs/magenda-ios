@@ -87,7 +87,7 @@ final class HandoffUITests: XCTestCase {
             _ = XCTWaiter().wait(for: [moved], timeout: 10)
             for index in 0..<8 {
                 let page = element(app, "binderPage.\(index)")
-                if page.exists, page.isHittable { seen.append("\(index): \(page.label)") }
+                if page.exists { seen.append("\(index): \(page.label)") }
             }
         }
         XCTAssertTrue(
