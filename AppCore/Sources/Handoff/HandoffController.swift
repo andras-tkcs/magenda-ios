@@ -163,7 +163,7 @@ public final class HandoffController {
             message = "This meeting was already sent to Claude."
             return
         }
-        let number = (days.compactMap { $0.date == date ? $0.part?.number : nil }.max() ?? 0) + 1
+        let number = (days.filter { $0.date == date }.compactMap { $0.part?.number }.max() ?? 0) + 1
         // Locked at once, so nothing written during the awaits below is left out of the PDF.
         binder.lock(found.keys)
         let subset = binder.plan.subset(Set(found.keys))
@@ -243,7 +243,7 @@ public final class HandoffController {
     /// stays, and finishing again creates a new Doc. When `binder` is for `date`, its pages are
     /// unlocked too; a date with no record but locked pages only gets that.
     public func resetHandoff(for date: CalendarDay, unlocking binder: BinderSession? = nil) {
-        let pagesToUnlock = binder?.date == date && !(binder?.day.locked.isEmpty ?? true)
+        let pagesToUnlock = binder.map { $0.date == date && !$0.day.locked.isEmpty } ?? false
         guard !isBusy, hasHandoff(on: date) || pagesToUnlock else { return }
         if hasHandoff(on: date) {
             do {
