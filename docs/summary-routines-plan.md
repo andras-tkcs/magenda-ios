@@ -3,7 +3,9 @@
 > **Orchestrator: this plan's PR is stacked.** It builds on `plan/settings-improvements`, which
 > itself carries `plan/send-meeting-early` (PR #14 → send-meeting-early → settings-improvements).
 > This plan branch already contains `feature/settings-improvements` as of `4909938`, which holds
-> send-meeting-early's hand-off phases p1–p3 and settings-improvements' p1 and p3. The pull request
+> send-meeting-early's hand-off phases p1–p3 and settings-improvements' p3 (the Drive folder name).
+> Settings-improvements' p1 (Edit button and long-press Delete on the rules lists), p2 and p4 are
+> **not** in it; `p7-stack` brings them in. The pull request
 > opens with **base `feature/settings-improvements`, not `main`** (see "Stacked on
 > settings-improvements" below; it overrides `/implement` sections 5 and 6 where they say `main`).
 
@@ -154,7 +156,7 @@ public enum SummaryRoutines {
   `RoutineTriggerClient.send(text: String, to routine: RoutineCredentials, http: any HTTPClient) async throws -> URL`
   holding today's request/response code, and `RoutineTriggerClient.fire` calls it. The new error
   case `RoutineTriggerError.summaryNotConfigured` has the user message
-  `"A summary routine's trigger is missing. Remove the routine in Settings and add it again."`.
+  `"A summary routine's trigger is missing. Save it again under the same name in Settings → Summary routines."`.
   The in-memory store, `InMemorySummaryRoutineCredentialsStore`, follows
   `InMemoryRoutineCredentialsStore`'s `NSLock` pattern.
 - App: `App/Platform/KeychainSummaryRoutineCredentialsStore.swift` keeps one Keychain item per routine
@@ -185,7 +187,7 @@ would put a third party's identifier into the PDF-adjacent records).
   for each meeting-page event.
 - `AgendaBuilder.init(timeZone:rules:summaryRoutines:)` gains `summaryRoutines: [SummaryRoutine] = []`
   and passes `summaryRules: rules.summaryRoutines, summaryRoutines: summaryRoutines` to the draft.
-  `AgendaController` passes `settings.summaryRoutines` (phase p4).
+  `AgendaController` passes `settings.summaryRoutines` (phase p4-controller-routines).
 - `AgendaContent.meetingSummarySkills` is replaced by `public var meetingSummaryRoutines: [[SummaryRoutine]]`
   (one array per meeting, parallel to `meetings`; init parameter `meetingSummaryRoutines: [[SummaryRoutine]] = []`;
   `decodeIfPresent ?? []`, so a day stored with the old key reads as no routines). It holds the
@@ -211,11 +213,14 @@ would put a third party's identifier into the PDF-adjacent records).
 - **Settings → Summary routines** (`SettingsView`, after the end-of-day routine section): a row per
   routine (its name; `Forget` button), then `Name`, `Fire URL`, `Token` fields and `Save`.
   Footer: `"Each summary is written by its own Claude routine with its own API trigger. Create it at claude.ai/code/routines, give it only the access that summary needs, and add its trigger here."`
-  Save order: `HandoffController.saveSummaryRoutine` (validates and stores the secret, returns the
-  routine), then `controller.updateSettings { $0.summaryRoutines.append(routine) }`. Forget:
-  `HandoffController.forgetSummaryRoutine(id:)`, then
-  `updateSettings { $0.removeSummaryRoutine(id:) }`. A name already in use (fold) →
-  `"There is already a summary routine with that name."`; a bad name → `SummaryRoutine.invalidNameMessage`.
+  Save: `HandoffController.saveSummaryRoutine` (validates and stores the secret, returns the
+  routine) and, for a new name, `controller.updateSettings { $0.summaryRoutines.append(routine) }`.
+  **Saving a name that already exists (fold) replaces that routine's URL and token under its
+  existing ID** (`saveSummaryRoutine(..., id: existing.id)`, nothing appended), so a regenerated
+  token or a lost Keychain item is fixed without losing the routine's rules and sent records. The
+  footer adds: `"Saving a name that already exists replaces that routine's URL and token."`
+  Forget: `HandoffController.forgetSummaryRoutine(id:)`, then
+  `updateSettings { $0.removeSummaryRoutine(id: id) }`. A bad name → `SummaryRoutine.invalidNameMessage`.
 - `AgendaController.updateSettings` also reloads when `after.summaryRoutines != before.summaryRoutines`
   (the draft carries the list), and passes `settings.summaryRoutines` to `AgendaBuilder`.
 
@@ -230,17 +235,21 @@ Edit sheet (the Rules screen is where the title rule lives).
 (nil when none; init parameter `summaryRoutines: [SummaryRoutine]? = nil` replacing `summarySkill`),
 read from `content.meetingSummaryRoutines` by `DayHandoff.meeting(_:for:in:)`. `bare` drops it.
 
-`HandoffStage` becomes `queued, uploaded, notesRequested, notesApproved, summariesRequested, closing`.
-`notesApproved` now means "Approve notes was tapped and some summary routine is not yet started".
-Decoding maps the raw value `summaryApproved` to `.closing` (a custom `init(from:)`). `DayHandoff` gains
+`HandoffStage` becomes `queued, uploaded, notesRequested, summariesPending, summariesRequested, closing`
+(raw values the same as the case names). `summariesPending` means "Approve notes was tapped and some
+summary routine has not been started". A custom `init(from:)` decodes the raw values `notesApproved`
+and `summaryApproved`, which an earlier build wrote after it had already fired `approve-notes` or
+`approve-summary` under schema 2, as `.closing`: the old routine is already closing the day, the row
+offers no button, and it closes when the Doc's first line says `Closed`. `DayHandoff` gains
 
 - `public var firedSummaries: [String]`, the routine IDs already started for this record (`decodeIfPresent ?? []`);
 - `public var summaryMarkers: [String]`, the markers read from the Doc, each `"<routine ID> <page>"` (`decodeIfPresent ?? []`);
 - `public var summaryRoutineIDs: [String]`: the distinct IDs in `pages` order over pages whose
   `earlierPart` is nil (a page already sent in a part is summarized in that part's record);
-- `public var unsentSummaryRoutines: [SummaryRoutine]`: the distinct routines (id and name from the
-  first page that has them), in `pages` order, whose ID is not in `firedSummaries`;
-- `public var summariesWritten: Bool`: every `"<id> <page.page>"` for every such page and ID is in `summaryMarkers`.
+- `public var unsentSummaryRoutines: [SummaryRoutine]`: the routines among `summaryRoutineIDs` (id
+  and name from the first such page that has them), in that order, whose ID is not in `firedSummaries`;
+- `public var summariesWritten: Bool`: for every page without `earlierPart` and every routine ID in
+  its `summaryRoutines`, `"<id> <page.page>"` is in `summaryMarkers` (true when there are none).
 
 `formatVersion` stays 1.
 
@@ -260,7 +269,7 @@ public enum HandoffAction: Equatable, Sendable { case retry, approveNotes, appro
 |---|---|
 | `queued` / `uploaded` | `waitingToUpload` / `waitingToSend` (unchanged) |
 | `notesRequested` | `docStatus == .notesReady` → `notesReady`, else `writingNotes` |
-| `notesApproved` | `unsentSummaryRoutines` not empty → `summariesWaitingToSend`; else as `summariesRequested` |
+| `summariesPending` | `unsentSummaryRoutines` not empty → `summariesWaitingToSend`; else as `summariesRequested` |
 | `summariesRequested` | `summariesWritten` → `summaryReady`, else `writingSummaries` |
 | `closing` | `closing` |
 
@@ -278,30 +287,34 @@ texts `saveRoutine` uses; Keychain failure → `"Couldn't save the routine in th
 
 `perform(_:on:)` checks `handoff.phase.action == action` as today, then:
 
-- `.retry`: stage `notesApproved` → `sendSummaries(handoff)`; otherwise `runPipeline` as today.
+- `.retry`: stage `summariesPending` → `sendSummaries(handoff)`; otherwise `runPipeline` as today.
 - `.approveNotes`: if `summaryRoutineIDs` is empty → fire end-of-day `close` (D4), stage `closing`.
-  Otherwise save stage `notesApproved` first, then `sendSummaries`.
+  Otherwise save stage `summariesPending` first, then `sendSummaries`.
 - `.approveSummaries`: fire end-of-day `close`, stage `closing`.
 
 `sendSummaries(_ handoff:)` walks `unsentSummaryRoutines` in order; for each it fires
 `summaryTrigger.fire(text: handoff.summaryPayload(for: routine), routineID: routine.id)`, appends
 the ID to `firedSummaries`, sets `sessionURL`, saves. The first failure is recorded with `fail`
-and stops (`notesApproved` stays, so Try again starts only the routines not yet started). After the
+and stops (`summariesPending` stays, so Try again starts only the routines not yet started). After the
 loop: stage `summariesRequested`, `lastError = nil`, save, then `readStatus`. Magenda never fires a
 routine twice by itself (ADR 0028 decision 5): a retry fires only routines whose fire did not
-succeed. `readStatus` also stores `DocStatus.summaryMarkers(in:)` in `summaryMarkers`.
+succeed. `readStatus` also stores `DocStatus.summaryMarkers(in:)` in `summaryMarkers`, and no longer clears
+`lastError` for a record in stage `summariesPending` either (it keeps the error that stopped the
+fire, as it does for `queued` and `uploaded`).
 
 **Doc.** `DocStatus` loses `summaryReady`; its `init(from:)` decodes the raw string and maps an
 unknown one to `.unknown` (so a record saved with `summaryReady` still loads). The first-line
 statuses are `Waiting for notes`, `Notes ready for review`, `Closed`. New
 
 ```swift
-/// The summary markers in `text`: lines `Summary ready: <routine ID> <page>` (ASCII case-insensitive
-/// label, ID lowercase-folded and valid per `SummaryRoutine.isValidID`, page 1…9999), each as
-/// `"<routine ID> <page>"`, without duplicates, in order.
+/// The summary markers in `text`: every line, other than the first non-empty one, that after
+/// trimming whitespace is exactly `Summary ready:`, one ASCII space, a routine ID, one ASCII space
+/// and a page of ASCII digits `[1-9][0-9]{0,3}` (the label and the ID compared ASCII
+/// case-insensitively, the ID valid per `SummaryRoutine.isValidID` once lowercased). Each is
+/// returned as `"<lowercased ID> <page>"`, without duplicates, in order.
 public static func summaryMarkers(in text: String) -> [String]
 ```
-Lines are trimmed of whitespace; a leading U+FEFF is ignored. The first line of the Doc is never a
+A leading U+FEFF is ignored. The Doc's first non-empty line is the status line and is never a
 marker.
 
 ### D4. Wire contract
@@ -322,7 +335,7 @@ including `scope`, `part`, `earlierPart` and `folderID`. The bump is deliberate:
 
 ```json
 {"checksum":"sha256:…","date":"2026-10-26","docID":"1AbC…","driveFileID":"1ZyX…","folderID":"1Fold…",
- "meetings":[{"calendarID":"work@example.com","eventID":"ev1","key":"meeting:work@example.com|ev1","page":2,"title":"Weekly sync"}],
+ "meetings":[{"calendarID":"work@example.com","eventID":"ev1","extraPages":[3],"key":"meeting:work@example.com|ev1","page":2,"title":"Weekly sync"}],
  "pageCount":4,"part":1,"routineID":"11111111-1111-4111-8111-111111111111","routineName":"Client memo",
  "schema":"magenda.summary/1","scope":"meeting"}
 ```
@@ -330,7 +343,9 @@ including `scope`, `part`, `earlierPart` and `folderID`. The bump is deliberate:
 Keys sorted, no pretty printing; `part` only for a meeting sent early; `folderID`, `driveFileID`,
 `docID` left out when nil; `meetings` are the record's pages with the routine and no `earlierPart`,
 in page order, each `title` cut to 200 characters; `calendarID`/`eventID`/`title` left out when
-nil. No `tasks`, no `delegated`. Built by `DayHandoff.summaryPayload(for: SummaryRoutine) -> String`.
+nil. A meeting entry also carries `extraPages`, the numbers of the pages added as copies of that
+meeting page (their `source` is the meeting's key), in page order, left out when there are none:
+the copies hold that meeting's handwriting too. The marker names the meeting's own `page`. No `tasks`, no `delegated`. Built by `DayHandoff.summaryPayload(for: SummaryRoutine) -> String`.
 It cannot exceed 65,536 characters in practice (a day has a few dozen pages); no truncation rules.
 
 A summary routine, for each meeting in `meetings`: download the PDF (`driveFileID`) and check the
@@ -377,8 +392,9 @@ numbers, in this order, and say so in the commit message.
 
 - **ADR 0038**: Summaries are written by dedicated summary routines, one Claude routine and API
   trigger per kind of summary, chosen with checkboxes (a title rule in the binder rules, or the
-  meeting's Edit sheet) and started by Magenda when the person approves the notes. Supersedes
-  [ADR 0031](adr/0031-meeting-summaries-are-requested-by-skill.md) (skills by name). Amends
+  meeting's Edit sheet) and started by Magenda when the person approves the notes. Amends
+  [ADR 0031](adr/0031-meeting-summaries-are-requested-by-skill.md) (decisions 1 to 4: skills by
+  name become routines; decision 5, the task IDs, stays) and
   [ADR 0028](adr/0028-the-end-of-day-routine-is-started-through-its-api-trigger.md): Magenda now
   holds several narrowly scoped tokens, one per routine. Rejected: one routine doing everything
   (the permission scheme the person refused), ticking boxes on the page, a typed skill name kept
@@ -386,10 +402,12 @@ numbers, in this order, and say so in the commit message.
 - **ADR 0039**: A summary announces itself in the record's Doc with a marker line
   `Summary ready: <routine ID> <page>`, and Magenda offers Approve summaries when every asked-for
   marker is there; the Doc's first line stays the end-of-day routine's alone. Amends
-  [ADR 0029](adr/0029-the-days-google-doc-is-the-review-record.md) (the first-line statuses lose
-  `Summary ready for review`). Rejected: several routines setting one status line (a race, and a
-  routine that writes a status it does not own), a Doc per summary (Magenda cannot create
-  or share more files than the day's), a callback to the app (it has no server).
+  [ADR 0029](adr/0029-the-days-google-doc-is-the-review-record.md) decisions 1 to 4: the first-line
+  statuses lose `Summary ready for review`, Magenda also reads marker lines from the rest of the
+  Doc, the Review buttons change (Try again can follow Approve notes), and Approve notes saves its
+  state before the summary routines have been started. Rejected: several routines setting one
+  status line (a race, and a routine writing a status it does not own), a Doc per summary (Magenda
+  would create and track more files), a callback to the app (it has no server).
 - **ADR 0040**: The end-of-day payload moves to `magenda.end-of-day/3` with steps `notes` and
   `close`, and summary routines receive `magenda.summary/1`. Amends ADR 0028 and
   [ADR 0034](adr/0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md). Rejected:
@@ -413,13 +431,11 @@ No `manual_before`. Three `manual_after` items, with step-by-step instructions o
 ## Risks and open questions
 
 - **The baseline is moving.** This plan is written against `feature/settings-improvements` at
-  `4909938`. send-meeting-early's p4 (binder UI, `HandoffUITests`) and p5 (docs), and
-  settings-improvements' p2, p4 and p6, are not in this tree. p7 merges them. If a phase finds a
-  symbol this plan names (`HandoffID`, `DayHandoff.part`, `DayHandoff.folderID`, `HandoffController.sameDateFolderID`,
-  `RulesView.deleteSummaries`) missing or different, it stops with `status=blocked`.
-- **The app target is red between p3 and p4.** p3 changes `HandoffController`'s initializer and
-  `HandoffAction`, which `AppEnvironment` and `ReviewView` use. The app jobs of `tests.yml` are only
-  expected green from p4; p1–p3 are judged on the `core` and `lint` jobs.
+  `4909938`, which has settings-improvements' p3 but not its p1 (the Edit button and long-press
+  Delete on the rules lists), p2 or p4, and not send-meeting-early's p4 and p5. `p7-stack` merges
+  them and ports p1's delete menu to this plan's rows. If a phase finds a symbol this plan names
+  (`HandoffID`, `DayHandoff.part`, `DayHandoff.folderID`, `HandoffController.sameDateFolderID`)
+  missing or different, it stops with `status=blocked`.
 - **Several routines append to one Doc.** Two routines finishing together could interleave. Each
   appends whole sections whose first line is its own marker, and Magenda matches marker lines
   only, so an interleaving costs readability, not state. The routine contract tells each routine
@@ -427,12 +443,19 @@ No `manual_before`. Three `manual_after` items, with step-by-step instructions o
 - **A removed routine.** Forgetting a routine drops its checkboxes and its rule entries
   (`removeSummaryRoutine`), but a record already sent keeps the routine's name and ID in its pages:
   a fire that needs the deleted credentials fails with `summaryNotConfigured` and the row offers
-  Try again. The person re-adds the routine under a new ID, so that row cannot finish. Accepted;
-  Reset Hand-off (ADR 0032) is the way out.
+  Try again. Saving the same name again in Settings makes a new routine with a new ID, so that row
+  cannot finish; Reset Hand-off (ADR 0032) is the way out. A lost Keychain item or a regenerated
+  token is fixed without forgetting: save the same name again and the ID is kept.
 - **Marker edited away.** If the person deletes a marker line while editing the Doc, the row stays
   at `Claude is writing the summaries`. Accepted and written into the reference doc.
-- **Old layouts.** A day laid out before this change prints no `Summary:` line at all after
-  Render (the old ruled line is gone); a stored day keeps its stored layout.
+- **Old layouts.** A binder day re-lays out from its stored content snapshot whenever it is opened
+  (`AgendaController.openStoredBinder`, `BinderSession`), so an iPad day that was open during the
+  update loses its `Summary:` line and the ruled line, and handwriting written on that line stays
+  where it was on the page. Accepted: the line selected nothing the routines could use. ADR 0038's
+  consequences say so.
+- **A stuck summary row.** If a routine's fire succeeded but it never writes its marker, or the
+  marker is deleted from the Doc, the row has no button and only Reset Hand-off resends the day.
+  Accepted for now; an "Approve without summaries" button is the obvious follow-up if it happens.
 - **No Swift toolchain in a cloud container.** Each phase pushes its branch and reads `tests.yml`'s
   `core` and `lint` jobs, per `.claude/skills/steward/SKILL.md`.
 
@@ -502,10 +525,10 @@ verify_after_merge:
   - python3 -m unittest discover -s scripts/tests
 final_checks:
   - docs/summary-routines-plan.md and docs/summary-routines-plan-manual-steps.html are deleted and nothing links to them
-  - ADRs 0038, 0039 and 0040 (or the next free numbers) exist, are Accepted, and are in docs/adr/README.md; ADR 0031's Status says Superseded
+  - ADRs 0038, 0039 and 0040 (or the next free numbers) exist, are Accepted, and are in docs/adr/README.md; ADR 0031's Status says Amended
   - CHANGELOG.md has [Unreleased] entries and no version heading
-  - grep -rn "summarySkill" AppCore App AppUITests AppTests finds nothing
-  - grep -rn "approve-notes\|approve-summary" AppCore App docs/end-of-day-handoff.md README.md finds nothing
+  - grep -rn "summarySkill" AppCore/Sources App AppUITests AppTests finds nothing
+  - grep -rn "approve-notes\|approve-summary" AppCore/Sources App docs/end-of-day-handoff.md README.md finds nothing
 phases:
   - id: p1-routine-types
     title: SummaryRoutine, the rules and settings fields, the credentials store and the summary trigger client
@@ -542,7 +565,7 @@ phases:
       4. `RoutineTrigger.swift`: add the case `summaryNotConfigured` to `RoutineTriggerError` with the
          D1 message; move the body of `RoutineTriggerClient.fire(text:)` after the `guard let routine`
          into `static func send(text: String, to routine: RoutineCredentials, http: any HTTPClient) async throws -> URL`
-         (internal) and call it from `fire`. Behaviour of the existing client must not change.
+         (internal; `sessionURL(in:)` becomes `private static` so `send` can call it) and call it from `fire`. Behaviour of the existing client must not change.
       5. Create `AppCore/Sources/Handoff/SummaryRoutineTrigger.swift` with the protocols, the
          in-memory store (copy `InMemoryRoutineCredentialsStore`'s lock pattern) and
          `SummaryRoutineTriggerClient` from D1. `fire` loads with `try? credentials.load(id: routineID)`;
@@ -580,7 +603,6 @@ phases:
       - AppCore/Sources/Draft/EventSelection.swift
       - AppCore/Sources/Draft/AgendaBuilder.swift
       - AppCore/Sources/Layout/AgendaLayout.swift
-      - AppCore/Sources/Layout/TemplateGeometry.swift
       - AppCore/Sources/Handoff/DayHandoff.swift
       - AppCore/Tests/Agenda/AgendaContentTests.swift
       - AppCore/Tests/Binder/BinderDayTests.swift
@@ -593,7 +615,7 @@ phases:
       - AppCore/Tests/Handoff/DayHandoffTests.swift
     brief: |
       Design D2 (the data, draft, page and `HandoffPage` parts) and the first paragraph of D3's
-      Data. Nine small source diffs, mostly renames; do them in this order and run the tests last.
+      Data. Eight small source diffs, mostly renames; do them in this order and run the tests last.
       1. `AgendaContent.swift`: replace `meetingSummarySkills: [String]` (line ~95, its init
          parameter, `CodingKeys` entry and decode at ~124) with `meetingSummaryRoutines: [[SummaryRoutine]]`,
          default `[]`, `decodeIfPresent ?? []`. Update the doc comments.
@@ -610,11 +632,10 @@ phases:
       7. `AgendaLayout.swift`: `plan(for:)` passes `routines: content.meetingSummaryRoutines.indices.contains(index) ? content.meetingSummaryRoutines[index] : []`
          to `meetingPage(title:key:routines:)`; `meetingSummaryOperations(routines:)` prints the label
          and the names joined with ", " as D2 says and returns `[]` when `routines` is empty or the
-         `meeting.label` slot is missing; delete the ruled-line branch. `TemplateGeometry.swift`:
-         delete `meetingSummaryRuleY` (and nothing else).
+         `meeting.label` slot is missing; delete the ruled-line branch. (`TemplateGeometry.meetingSummaryRuleY` becomes unused; p5 deletes it.)
       8. `DayHandoff.swift`: `HandoffPage.summarySkill` → `summaryRoutines: [SummaryRoutine]?` (property,
          init parameter in the same position, the `bare` copy leaves it out as it left `summarySkill`
-         out); `meeting(_:for:in:)` returns `(title: String, routines: [SummaryRoutine]?)` from
+         out, and `sent(inPart:)` forwards it); `meeting(_:for:in:)` returns `(title: String, routines: [SummaryRoutine]?)` from
          `content.meetingSummaryRoutines` (nil when the array is empty); `handoffPage` passes it.
          Update the `payload(step:)` doc comment (`summaryRoutines` instead of `summarySkill`). Do not
          touch stages, phases or the payload schema in this phase.
@@ -629,124 +650,164 @@ phases:
          `AgendaLayoutFixtureTests` (~78-81), `DayHandoffTests` (the page entry's `summaryRoutines`
          round-trips; a legacy-less meeting has nil).
       Stop with status=blocked if `HandoffFixtures.swift`'s tests (`HandoffFixturesTests`) fail: that
-      file reads `summarySkill` from raw JSON and is rewritten in p3; do not edit it here, and say so.
+      file reads `summarySkill` from raw JSON and is rewritten in p3b; do not edit it here, and say so.
     acceptance:
       - "swift test --package-path AppCore passes"
       - "grep -rn 'meetingSummarySkills' AppCore/Sources finds nothing"
       - "grep -rn 'summarySkill' AppCore/Sources/Draft AppCore/Sources/Agenda AppCore/Sources/Layout finds nothing"
       - "swift test --package-path AppCore --filter AgendaLayoutTests passes and includes a test named for 'no routine prints nothing'"
-  - id: p3-handoff-flow
-    title: Stages, phases and actions, the summary payload and markers, the controller flow and the fixture routines
+  - id: p3a-handoff-additive
+    title: Summary markers, the summary payload, the new record fields and the fixture summary routine (nothing existing changes)
     depends_on: [p2-content-draft-layout]
+    complexity: M
+    touches:
+      - AppCore/Sources/Handoff/DayHandoff.swift
+      - AppCore/Sources/Handoff/DocStatus.swift
+      - AppCore/Sources/Handoff/HandoffFixtures.swift
+      - AppCore/Tests/Handoff/DayHandoffTests.swift
+      - AppCore/Tests/Handoff/DocStatusTests.swift
+      - AppCore/Tests/Handoff/HandoffFixturesTests.swift
+      - AppCore/Tests/Support/FakeSummaryTrigger.swift
+    brief: |
+      Design D3 (the record fields, markers) and D4 (summary payload), D5 (fixture summary routine).
+      Everything here is added next to the existing code; no stage, phase, action, step or schema
+      changes yet (p3b does those).
+      0. Check `HandoffID`, `DayHandoff.part` and `DayHandoff.folderID` exist; if not, stop with status=blocked.
+      1. `DocStatus.swift`: add `RoutineStep.close = "close"` (keep the three existing cases); give
+         `DocStatus` an `init(from:)` that decodes the raw string and maps an unknown value to `.unknown`
+         (keep `summaryReady` for now); add `summaryMarkers(in:)` exactly as D3 specifies (reuse the BOM
+         and trimming approach of `parse`; implement the grammar byte by byte, no regular expressions).
+      2. `DayHandoff.swift`: add `firedSummaries` and `summaryMarkers` (stored, `CodingKeys`,
+         `decodeIfPresent ?? []`, `[]` in the inits), the computed `summaryRoutineIDs`,
+         `unsentSummaryRoutines`, `summariesWritten` (D3), and
+         `public func summaryPayload(for routine: SummaryRoutine) -> String` with a private
+         `SummaryPayload: Encodable` (keys per D4 including `extraPages`, sorted keys, the same `encode`
+         helper style; titles cut with `String(title.prefix(200))`; `extraPages` are the `page` numbers of
+         the pages whose `source` equals the meeting page's `key`, in page order).
+      3. `HandoffFixtures.swift`: make `FixtureEndOfDay.record(payload:)` also decode the schema
+         `magenda.summary/1` (new private `SummaryPayloadShape` with `schema`, `routineID`, `date`, `part`,
+         `meetings[].page`) and keep its per-key list of `(routineID, page)`; `docText(forKey:)` appends,
+         for each recorded pair, the two lines `Summary ready: <routineID> <page>` and `Fixture summary.`
+         after the existing first line (the first-line logic is unchanged in this phase). Add
+         `FixtureSummaryTrigger: SummaryRoutineFiring` (init `state:` and `credentials: any SummaryRoutineCredentialsStore`;
+         throws `RoutineTriggerError.summaryNotConfigured` without stored credentials for the ID, else
+         records the payload and returns `GoogleAPI.url(host: "claude.ai", path: "/code/session_fixture")`).
+      4. Tests: new `AppCore/Tests/Support/FakeSummaryTrigger.swift` modelled on `FakeRoutineTrigger.swift`
+         (records `(text, routineID)`, can be told to fail for chosen routine IDs). Extend `DocStatusTests`
+         (every grammar case: case-insensitive label and ID, tabs and spaces around, two spaces rejected,
+         page `0`, `01`, `10000` rejected, `9999` accepted, a bad ID, duplicates, the first non-empty line
+         never a marker, BOM; unknown raw status decodes to `.unknown`), `DayHandoffTests` (the computed
+         properties incl. `earlierPart` pages skipped and an empty set; legacy decode of a record without
+         the new keys; `summaryPayload` exact JSON for a meeting record with `part` and `extraPages`, for a
+         day record, and a 300-character title cut to 200), `HandoffFixturesTests` (a summary payload adds
+         its marker lines; an end-of-day payload still behaves as before; `FixtureSummaryTrigger` without
+         credentials). Keep the three source files at 100 % (their floors).
+      Stop with status=blocked if `FixtureEndOfDay` cannot tell the two schemas apart by `schema`.
+    acceptance:
+      - "swift test --package-path AppCore passes"
+      - "python3 scripts/check_coverage_floor.py \"$(swift test --package-path AppCore --show-codecov-path)\" exits 0"
+      - "swift test --package-path AppCore --filter DocStatusTests passes and includes tests whose names contain 'marker'"
+  - id: p3b-handoff-switch
+    title: Stages, phases, actions and schema 3, the controller flow, and the app's callers of them
+    depends_on: [p3a-handoff-additive]
     complexity: M
     touches:
       - AppCore/Sources/Handoff/DayHandoff.swift
       - AppCore/Sources/Handoff/DocStatus.swift
       - AppCore/Sources/Handoff/HandoffController.swift
       - AppCore/Sources/Handoff/HandoffFixtures.swift
+      - App/Platform/KeychainSummaryRoutineCredentialsStore.swift
+      - App/AppEnvironment.swift
+      - App/Screens/ReviewView.swift
       - AppCore/Tests/Handoff/DayHandoffTests.swift
       - AppCore/Tests/Handoff/DocStatusTests.swift
       - AppCore/Tests/Handoff/HandoffControllerTests.swift
       - AppCore/Tests/Handoff/HandoffFixturesTests.swift
-      - AppCore/Tests/Support/FakeSummaryTrigger.swift
+      - AppTests/PlatformTests.swift
     brief: |
-      Design D3 (everything but the first paragraph, done in p2), D4 and D5's fixtures (not
-      `AppEnvironment`, which is p4). The app target will not compile after this phase until p4: that
-      is expected; judge this phase by `core` and `lint` only.
-      0. Check `HandoffID`, `DayHandoff.part`, `DayHandoff.folderID` and `HandoffController.sameDateFolderID`
-         exist (send-meeting-early / settings-improvements); if not, stop with status=blocked.
-      1. `DocStatus.swift`: `RoutineStep` becomes `notes` and `close` (raw "notes", "close"); remove
-         `DocStatus.summaryReady` and its parse line; add `init(from:)` mapping an unknown raw value to
-         `.unknown`; add `summaryMarkers(in:)` as in D3 (reuse the BOM and trimming approach of `parse`).
-      2. `DayHandoff.swift`: stages (custom `init(from:)` mapping "summaryApproved" to `.closing`),
-         `firedSummaries`, `summaryMarkers` (CodingKeys, `decodeIfPresent ?? []`, `init` defaults `[]`),
-         the four computed properties, `HandoffAction`, `HandoffPhase` titles/actions and the `phase`
-         table, all as in D3. Payload schema string becomes `"magenda.end-of-day/3"`. Add
-         `summaryPayload(for:)` with a private `SummaryPayload: Encodable` (keys per D4, sorted, same
-         `encode` helper style; titles cut with `String(title.prefix(200))`).
-      3. `HandoffController.swift`: the two new init parameters; `saveSummaryRoutine`,
-         `forgetSummaryRoutine`; `perform` and the new private `approveNotes(on:)`, `sendSummaries(_:)` and
-         `closeDay(_:)` replacing `approve(_:on:)`; `readStatus` stores the markers. Messages exactly
-         as in D3. A `.retry` on a record in stage `notesApproved` calls `sendSummaries`.
-      4. `HandoffFixtures.swift`: D5 (`FixtureEndOfDay` both schemas, `docText(forKey:)`,
-         `FixtureSummaryTrigger`). Keep `FixtureDrive` and `FixtureRoutineTrigger` as they are.
-      5. Tests: new `AppCore/Tests/Support/FakeSummaryTrigger.swift` modelled on `FakeRoutineTrigger.swift`
-         (records `(text, routineID)`, can be told to fail per routine ID). Extend `DocStatusTests`
-         (markers: case, BOM, duplicates, bad ID, page 0 and 10000, not on line one; unknown raw status
-         decodes), `DayHandoffTests` (stage legacy decode; every phase row of the D3 table; `summaryRoutineIDs`
-         skips `earlierPart` pages; `unsentSummaryRoutines`; `summariesWritten`; `summaryPayload` exact JSON
-         for a meeting and for a day; schema `/3` in `payload(step:)`), `HandoffControllerTests` (approve
-         notes with no routine fires `close` once; with two routines fires each once with its own
-         payload and ends in `summariesRequested`; the second routine failing leaves `notesApproved`,
-         the failure message, and a retry fires only the second; markers read by refresh flip the row to
-         `summaryReady`; approve summaries fires `close` and ends in `closing`; `saveSummaryRoutine`
-         validation and Keychain failure messages; a meeting-sent-early part works the same) and
-         `HandoffFixturesTests` (both schemas, the marker lines, `FixtureSummaryTrigger` without
-         credentials). Update the tests that used `approve-notes`/`approve-summary`.
-      6. Keep `DayHandoff.swift`, `DocStatus.swift`, `HandoffController.swift` and `HandoffFixtures.swift` at
-         100 % (their floors).
-      Stop with status=blocked if a refresh test needs the Doc to be read for a record whose stage is
-      `summariesRequested` and `refresh` skips it (the existing loop reads every record with
-      `closedOn == nil` and a `docID`; confirm and do not change that loop).
+      Design D3 (stages, phases, controller), D4 (end-of-day schema 3) and D5 (`AppEnvironment`). The
+      app target must compile after this phase, which is why its callers are here.
+      1. `DocStatus.swift`: `RoutineStep` becomes `notes` and `close` only; remove `DocStatus.summaryReady`
+         and its parse line (the `init(from:)` of p3a already maps a stored `summaryReady` to `.unknown`).
+      2. `DayHandoff.swift`: `HandoffStage` with the six D3 cases and the custom `init(from:)` mapping
+         `notesApproved` and `summaryApproved` to `.closing`; `HandoffAction` (`retry`, `approveNotes`,
+         `approveSummaries`); `HandoffPhase` (remove `working`, add `summariesWaitingToSend` and
+         `writingSummaries`, retitle `summaryReady`, actions per D3) and the `phase` table; the payload
+         schema string `"magenda.end-of-day/3"`; update the `payload(step:)` doc comment.
+      3. `HandoffController.swift`: the two new init parameters (`summaryTrigger`, `summaryCredentials`,
+         right after `routineCredentials`); `saveSummaryRoutine` and `forgetSummaryRoutine`; `perform`
+         and the new private `approveNotes(on:)`, `sendSummaries(_:)` and `closeDay(_:)` replacing
+         `approve(_:on:)`; `readStatus` stores the markers and keeps `lastError` for stage
+         `summariesPending`. Messages exactly as in D3.
+      4. `HandoffFixtures.swift`: the first line comes from the last end-of-day step (`notes` → `Status: Notes ready for review`,
+         `close` → `Status: Closed`, none or other → `Status: Waiting for notes`); delete `hadSummarySkill`
+         and the `approve-notes`/`approve-summary` branches; the `Payload.Page` no longer decodes `summarySkill`.
+      5. `App/Platform/KeychainSummaryRoutineCredentialsStore.swift`: conforms to `SummaryRoutineCredentialsStore`,
+         modelled line by line on `KeychainRoutineCredentialsStore.swift` (`init(service: String = "name.tkcs.magenda.summary-routine")`;
+         `KeychainItem(service: service, account: id)` built per call). `AppTests/PlatformTests.swift`: a
+         Keychain round-trip test next to the routine store's (`service: "name.tkcs.magenda.tests-summary-routine"`;
+         save two IDs, load each, delete one, load nil, clean up in `defer`).
+      6. `App/AppEnvironment.swift`: fixture branch: in-memory summary credentials for the two D5 routines,
+         `FixtureSummaryTrigger(state: endOfDay, credentials: summaryCredentials)`, and
+         `InMemorySettingsStore(AgendaSettings(summaryRoutines: ...))` with the D5 routines unless
+         `arguments.contains("-MagendaNoSummaryRoutines")` (then `[]`); pass `summaryTrigger:` and
+         `summaryCredentials:` to `HandoffController`. Live branch: `KeychainSummaryRoutineCredentialsStore()` and
+         `SummaryRoutineTriggerClient(http: URLSessionHTTPClient(), credentials: summaryCredentials)`.
+      7. `App/Screens/ReviewView.swift`: `title(of:)` returns `"Try again"` for `.retry`, `"Approve notes"` for
+         `.approveNotes`, `"Approve summaries"` for `.approveSummaries`; `spokenTitle(of:on:)` returns
+         `"Try again for \(day)"`, `"Approve the notes for \(day)"`, `"Approve the summaries for \(day)"`, where
+         `day` is whatever the function already uses today. Identifiers unchanged.
+      8. Tests: update every test that used `approve-notes`/`approve-summary`/`.approve(...)`. Extend
+         `DayHandoffTests` (stage legacy decode of `notesApproved` and `summaryApproved` to `.closing`; every
+         row of the D3 phase table; schema `/3`), `DocStatusTests` (`RoutineStep` raw values),
+         `HandoffControllerTests` (approve notes with no routine fires `close` once and ends in `closing`; with
+         two routines fires each once with its own payload and ends in `summariesRequested`; the second
+         routine failing leaves `summariesPending` with the failure message, a refresh keeps that message,
+         and Try again fires only the second; markers read by refresh flip the row to `summaryReady`; approve
+         summaries fires `close`; `saveSummaryRoutine` validation, same-ID replacement and Keychain failure;
+         the same flow for a meeting sent early) and `HandoffFixturesTests`. Keep the four AppCore files at 100 %.
+      9. Push and read `tests.yml`: `core`, `lint` and the three `app (...)` jobs must be green. UI shards
+         that exercise the Review buttons may still fail on titles only; they are fixed in p6, so report
+         which UI tests fail and why, and continue.
+      Stop with status=blocked if `AppEnvironment` builds `HandoffController` anywhere but the two places
+      described, or if `refresh` does not read the Doc of a record in stage `summariesRequested`
+      (it reads every record with `closedOn == nil` and a `docID`; do not change that loop).
     acceptance:
       - "swift test --package-path AppCore passes"
       - "python3 scripts/check_coverage_floor.py \"$(swift test --package-path AppCore --show-codecov-path)\" exits 0"
-      - "grep -rn 'approveNotes\\b.*rawValue\\|approve-notes\\|approve-summary' AppCore/Sources finds nothing"
-      - "swift test --package-path AppCore --filter HandoffControllerTests passes and includes tests whose names contain 'summar'"
-  - id: p4-app-wiring
-    title: Keychain store, app wiring with fixture routines, Review row buttons and the controller passing routines to the builder
-    depends_on: [p3-handoff-flow]
+      - "grep -rn 'approve-notes\\|approve-summary\\|hadSummarySkill' AppCore/Sources App finds nothing"
+      - "tests.yml: core, lint and the three app (...) jobs are green on the phase branch"
+  - id: p4-controller-routines
+    title: The agenda controller passes the routines to the builder and reloads when they change
+    depends_on: [p3b-handoff-switch]
     complexity: S
     touches:
-      - App/Platform/KeychainSummaryRoutineCredentialsStore.swift
-      - App/AppEnvironment.swift
-      - App/Screens/ReviewView.swift
       - AppCore/Sources/Controller/AgendaController.swift
       - AppCore/Tests/Controller/AgendaControllerTests.swift
-      - AppTests/PlatformTests.swift
     brief: |
-      D1 (App store), D2 last bullet, D5 `AppEnvironment`.
-      1. Create `App/Platform/KeychainSummaryRoutineCredentialsStore.swift` conforming to
-         `SummaryRoutineCredentialsStore`, modelled line by line on
-         `KeychainRoutineCredentialsStore.swift` (`init(service: String = "name.tkcs.magenda.summary-routine")`;
-         `KeychainItem(service: service, account: id)` built per call; `load`/`save`/`delete` as there).
-      2. `AppEnvironment.swift`: in the fixture branch build the in-memory summary credentials and
-         `FixtureSummaryTrigger(state: endOfDay, credentials: summaryCredentials)`, give
-         `InMemorySettingsStore(AgendaSettings(summaryRoutines: ...))` the two routines of D5 unless
-         `arguments.contains("-MagendaNoSummaryRoutines")` (then `[]`), and pass `summaryTrigger:` and
-         `summaryCredentials:` to `HandoffController`. In the live branch use
-         `KeychainSummaryRoutineCredentialsStore()` and `SummaryRoutineTriggerClient(http: URLSessionHTTPClient(), credentials: summaryCredentials)`.
-      3. `ReviewView.swift`: `title(of:)` returns `"Try again"` for `.retry`, `"Approve notes"` for
-         `.approveNotes`, `"Approve summaries"` for `.approveSummaries`; `spokenTitle(of:on:)` returns
-         `"Try again for \(day)"`, `"Approve the notes for \(day)"`, `"Approve the summaries for \(day)"`
-         (keep whatever the in-tree version uses for `day`, e.g. `displayTitle`). Identifiers unchanged.
-      4. `AgendaController.swift`: where `AgendaBuilder(timeZone:rules:)` is built (~line 508) pass
-         `summaryRoutines: settings.summaryRoutines`; in `updateSettings` add
-         `|| after.summaryRoutines != before.summaryRoutines` to `readsDifferently`.
-         Extend `AgendaControllerTests`: a settings change that only adds a routine reloads and the draft
-         lists it; the builder's events carry the routine IDs of a matching title rule.
-      5. `PlatformTests.swift`: add a Keychain round-trip test for the new store next to the routine
-         store's test (`service: "name.tkcs.magenda.tests-summary-routine"`; save two IDs, load each,
-         delete one, load nil, clean up in `defer`).
-      6. Push and read `tests.yml`: the `core` and `lint` jobs and the three `app (...)` jobs must be green
-         (this is the first phase after p3 where the app must compile). The `ui` jobs that touch the
-         Review button titles or the Settings routine fields are updated in p5 and p6; if only those fail,
-         report which and continue.
-      Stop with status=blocked if `AppEnvironment` builds `HandoffController` anywhere else than the
-      two places described.
+      Design D2, last bullet.
+      1. `AgendaController.swift`: where `AgendaBuilder(timeZone: timeZone, rules: settings.rules)` is built
+         (`fetch`, ~line 520) pass `summaryRoutines: settings.summaryRoutines`; in `updateSettings`
+         (~line 258) add `|| after.summaryRoutines != before.summaryRoutines` to `readsDifferently`.
+      2. `AgendaControllerTests.swift`: a settings change that only adds a routine reloads and the draft's
+         `summaryRoutines` lists it; with a rule `["Team sync": [id]]` and that routine configured, the draft's
+         "Team sync" event has `summaryRoutineIDs == [id]`; removing the routine through
+         `removeSummaryRoutine` removes it from the draft. Follow the file's existing rig for settings tests.
+      Stop with status=blocked if `fetch` builds the draft anywhere but through `AgendaBuilder`.
     acceptance:
       - "swift test --package-path AppCore --filter AgendaControllerTests passes"
-      - "tests.yml: core, lint and the app (iphone, newest) job are green on the phase branch"
-      - "grep -n 'approve(' App/Screens/ReviewView.swift finds nothing"
+      - "python3 scripts/check_coverage_floor.py \"$(swift test --package-path AppCore --show-codecov-path)\" exits 0"
+      - "grep -n 'summaryRoutines: settings.summaryRoutines' AppCore/Sources/Controller/AgendaController.swift prints a match"
   - id: p5-settings-rules-ui
     title: Summary routines in Settings, checkboxes in the Meeting summaries rules, and the old skill code removed
-    depends_on: [p4-app-wiring]
+    depends_on: [p4-controller-routines]
     complexity: M
     touches:
       - App/Screens/SettingsView.swift
       - App/Screens/RulesView.swift
       - AppCore/Sources/Settings/BinderRules.swift
       - AppCore/Sources/Settings/SummarySkill.swift
+      - AppCore/Sources/Layout/TemplateGeometry.swift
       - AppCore/Tests/Settings/SummarySkillTests.swift
       - AppCore/Tests/Settings/AgendaSettingsTests.swift
       - AppUITests/SettingsUITests.swift
@@ -754,7 +815,8 @@ phases:
       - scripts/check_coverage_floor.py
     brief: |
       D2 (Settings → Summary routines, Binder rules → Meeting summaries) and the removal of the old
-      skill code.
+      skill code. `RulesView` in this tree still has the plain swipe `.onDelete` on each list (no Edit
+      button, no context menu): keep it as it is; `p7-stack` ports the other plan's delete menu.
       1. `SettingsView.swift`: add `ID` entries `summaryRoutineNameField`, `summaryRoutineURLField`,
          `summaryRoutineTokenField`, `saveSummaryRoutineButton`, `summaryRoutineError`, and functions
          `summaryRoutineRow(_ n: Int)` → `"summaryRoutineRow.\(n)"` and `forgetSummaryRoutineButton(_ n: Int)` →
@@ -764,45 +826,48 @@ phases:
          `Task { await controller.updateSettings { $0.removeSummaryRoutine(id: id) } }`), then three
          fields (`TextField("Name")`, `TextField("Fire URL")` with the URL keyboard, `SecureField("Token")`;
          copy the modifiers of the routine fields), an error `Text` (red footnote) and `Button("Save")`.
-         Save: if `SummaryRoutine.validatedName` is nil → error `SummaryRoutine.invalidNameMessage`; if
-         `controller.settings.summaryRoutine(named: name)` is not nil → `"There is already a summary routine with that name."`;
-         else `handoff.saveSummaryRoutine(name:fireURL:token:)`; nil → error is `handoff.message`; non-nil →
-         `Task { await controller.updateSettings { $0.summaryRoutines.append(routine) } }` and clear the three fields.
-         Header "Summary routines", footer as in D2.
-      2. `RulesView.swift`: rewrite `summariesSection`, `summaryEntries`, `addSummary` and the delete
-         handler for D2: entries are `(title: String, ids: [String])` from `rules.summaryRoutines`; the
+         Save: `SummaryRoutine.validatedName` nil → error `SummaryRoutine.invalidNameMessage`; otherwise
+         `existing = controller.settings.summaryRoutine(named: name)`;
+         `handoff.saveSummaryRoutine(name: existing?.name ?? name, fireURL:, token:, id: existing?.id ?? SummaryRoutine.makeID())`;
+         nil → the error is `handoff.message`; non-nil and `existing == nil` →
+         `Task { await controller.updateSettings { $0.summaryRoutines.append(routine) } }`; on success clear the
+         three fields. Header "Summary routines", footer as in D2 (with its added sentence).
+      2. `RulesView.swift`: rewrite `summariesSection`, `summaryEntries`, `addSummary` and the swipe-delete
+         closure for D2: entries are `(title: String, ids: [String])` from `rules.summaryRoutines`; the
          row text is `"\(title) → \(names)"`; state `summaryChoices: Set<String>` replaces `summarySkill`;
          `ID.summaryChoice(_ n: Int)` → `"summaryChoice.\(n)"` and `ID.summaryNoRoutines` →
-         `"summaryNoRoutines"` replace `summarySkillField`; keep `summaryTitleField`, `summaryAdd` and the
-         error identifier `summaryError` (rename `summarySkillError` to `summaryError`). Add stores
-         `settings.rules.summaryRoutines[title] = Array(ids)` where `ids` are the ticked routines' IDs in
-         the settings list's order. The reset-rules closure keeps `restored.summaryRoutines = settings.rules.summaryRoutines`.
-         Keep the Edit button / long-press Delete structure that settings-improvements p1 added to this
-         section (`deleteSummaries(_:in:)` and its `contextMenu`); adapt only the entry type.
+         `"summaryNoRoutines"` replace `summarySkillField`; keep `summaryTitleField` and `summaryAdd`, and
+         rename `summarySkillError` to `summaryError`. Add stores
+         `settings.rules.summaryRoutines[title] = ids` where `ids` are the ticked routines' IDs in the settings
+         list's order. The reset-rules closure keeps `restored.summaryRoutines = settings.rules.summaryRoutines`.
       3. Remove the old code: `BinderRules.summarySkills` (property, init parameter, `.default`, CodingKeys,
          decode line); delete `AppCore/Sources/Settings/SummarySkill.swift` and
-         `AppCore/Tests/Settings/SummarySkillTests.swift`; in `AgendaSettingsTests` replace the
+         `AppCore/Tests/Settings/SummarySkillTests.swift`; delete `meetingSummaryRuleY` from
+         `AppCore/Sources/Layout/TemplateGeometry.swift`; in `AgendaSettingsTests` replace the
          `summarySkills` decode test (~lines 96-99) with one that proves an old `rules.summarySkills`
          key is ignored and `summaryRoutines` decodes; in `scripts/check_coverage_floor.py` delete the
          `SummarySkill.swift` floor and its comment.
       4. UI tests (copy the helpers already in each file): in `SettingsUITests` add one test that adds a
-         summary routine (name, a valid fire URL `https://api.anthropic.com/v1/claude_code/routines/trig_uisummary/fire`
-         and token `sk-ant-oat01-test`), sees its row, then forgets it; and one that shows each
-         validation error (empty name, bad URL, duplicate name). In `RulesUITests` replace the
-         skill-field tests (~lines 205-255) with: adding a rule with a ticked routine shows its row with
-         the routine's name; adding without a tick shows the error; with `-MagendaNoSummaryRoutines`
-         `summaryNoRoutines` exists.
+         summary routine (name, the fire URL `https://api.anthropic.com/v1/claude_code/routines/trig_uisummary/fire`
+         and token `sk-ant-oat01-test`), sees its row, then forgets it; one that shows the validation errors
+         (empty name, bad URL); and one that saving an existing fixture routine's name ("Client memo") with
+         a valid URL and token keeps one row for it (no duplicate). In `RulesUITests` replace the skill-field
+         tests (~lines 205-255) with: adding a rule with a ticked routine shows its row with the routine's
+         name; adding without a tick shows `summaryError`; with `-MagendaNoSummaryRoutines` `summaryNoRoutines`
+         exists. The new section lengthens the Settings form, and its rows are created lazily: if an existing
+         `SettingsUITests` test no longer finds a row below it, scroll to that row with the helper the file
+         already uses for lower rows, and change nothing else in the test.
       5. Dispatch `tests.yml` on the branch; the `settings` and `rest` UI shards must pass.
-      Stop with status=blocked if `RulesView` has no `deleteSummaries` or Edit-button code (the
-      settings-improvements p1 changes): then that plan's p1 is not in this tree; report what you see.
+      Stop with status=blocked if `RulesView.summariesSection` is not the plain list-with-fields section
+      described in the Current state.
     acceptance:
-      - "grep -rn 'summarySkill' AppCore App AppUITests AppTests finds nothing"
-      - "grep -rn 'SummarySkill' scripts AppCore App finds nothing"
+      - "grep -rn 'summarySkill' AppCore/Sources App AppUITests AppTests finds nothing"
+      - "grep -rn 'SummarySkill' AppCore/Sources App scripts finds nothing"
       - "swift test --package-path AppCore passes and python3 scripts/check_coverage_floor.py \"$(swift test --package-path AppCore --show-codecov-path)\" exits 0"
       - "tests.yml: the ui (...) settings and rest shards are green on the phase branch"
   - id: p6-edit-sheet-ui
     title: Summary checkboxes on a meeting's Edit sheet and the end-to-end Review UI test
-    depends_on: [p4-app-wiring]
+    depends_on: [p4-controller-routines]
     complexity: S
     touches:
       - App/Screens/EditTextSheet.swift
@@ -818,25 +883,26 @@ phases:
          "Summaries" with a `Toggle(routine.name, isOn: ...)` per routine (identifier `editSummary.<n>`) and the
          D2 footer. In `save()` for `.event`, after the existing title branches, call
          `controller.updateDraft { $0.setSummaryRoutineIDs(ids, forEvent: id) }` with `ids` being the
-         chosen IDs in `summaryRoutines` order — only when `summaryRoutines` is not empty.
+         chosen IDs in `summaryRoutines` order, only when `summaryRoutines` is not empty.
       2. `AgendaView.editSheet(for:)` (`.event` case): pass
          `summaryRoutines: controller.settings.summaryRoutines` and
          `selectedRoutineIDs: event.summaryRoutineIDs`.
-      3. `AgendaEditUITests`: a test that opens an event's Edit sheet, sees `editSummary.0` and `editSummary.1`
-         (the fixture routines), ticks the first, taps Done and sees the row's meeting page title unchanged;
-         reopening the sheet shows `editSummary.0` selected (`value == "1"`). A second test launched with
-         `-MagendaNoSummaryRoutines` shows no `editSummary.0`. Follow the open-the-sheet helper already in the file.
-      4. `HandoffUITests` (iPad binder shard): add `testSummariesAreRequestedAfterTheNotesAreApproved`:
-         tick `editSummary.0` on a meeting with other attendees (the file's existing flow renders a meeting
-         page), render, finish the day (`finishDay`), open Review, wait for `Notes ready for review`, tap
-         `reviewAction.0` ("Approve notes"), wait for the row status `Summaries ready for review`, tap
-         `reviewAction.0` ("Approve summaries"), wait for a status that begins with `Closed`. Also
-         `testWithoutSummariesApproveNotesClosesTheDay`: no ticks → after Approve notes the status begins
-         with `Closed` (the existing `testApprovingTheNotesClosesTheDay` is that test: keep it passing and
-         update only what the new button titles change).
+      3. `AgendaEditUITests`: a test that opens the Edit sheet of the "Team sync" row with `openEditor`
+         (the file's private helper), sees `editSummary.0` and `editSummary.1` (the D5 fixture routines),
+         ticks the first, taps Done, reopens the sheet and sees `editSummary.0` selected (`value == "1"`). A
+         second test launched with `-MagendaNoSummaryRoutines` shows no `editSummary.0`. Find the row
+         identifier of "Team sync" the way the file's other tests find event rows.
+      4. `HandoffUITests` (iPad binder shard) has no open-the-sheet helper: copy `openEditor` and the
+         helpers it needs from `AgendaEditUITests.swift` (lines ~44-63) as private methods. Add one test,
+         `testSummariesAreRequestedAfterTheNotesAreApproved`: tick `editSummary.0` on the "Team sync" row
+         (attendee anna, so it has a meeting page), render, finish the day (`finishDay`), open Review
+         (`openReview`), wait for the status `Notes ready for review`, tap `reviewAction.0` (Approve notes),
+         wait for the status `Summaries ready for review`, tap `reviewAction.0` (Approve summaries), and wait
+         for a status that begins with `Closed`. Keep the existing `testApprovingTheNotesClosesTheDay`
+         (a day with no ticks closes after Approve notes) passing; change only what the new button titles need.
       5. Dispatch `tests.yml` on the branch; the `edit-screen` shard and the iPad `binder` shard must pass.
-      Stop with status=blocked if no event in the standard fixture has other attendees (so no meeting
-      page can be reached); report the fixture's events and do not change the fixture.
+      Stop with status=blocked if "Team sync" is not an event with another attendee in the standard fixture
+      (`AppCore/Sources/Controller/GoogleFixtures.swift`); report the fixture's events and do not change it.
     acceptance:
       - "grep -n 'setSummaryRoutineIDs' App/Screens/EditTextSheet.swift prints a match"
       - "tests.yml: ui (ipad, newest, binder) and ui (*, edit-screen) shards are green on the phase branch"
@@ -844,36 +910,48 @@ phases:
     title: Merge settings-improvements' later commits so the PR stacks on its final state
     depends_on: [p5-settings-rules-ui, p6-edit-sheet-ui]
     complexity: M
+    worker_model: opus
+    worker_model_reason: The merge meets rewrites of the same screens by two other plans (the Meeting summaries rows, the Settings and AppEnvironment wiring, the binder UI tests) and has to port behaviour by judgement, not by picking a side.
     touches:
-      - App/Screens/RulesView.swift
-      - App/Screens/SettingsView.swift
-      - App/AppEnvironment.swift
-      - AppUITests/HandoffUITests.swift
-      - AppCore/Sources/Handoff/HandoffController.swift
-      - AppCore/Sources/Handoff/DayHandoff.swift
-      - docs/end-of-day-handoff.md
+      - App/**
+      - AppUITests/**
+      - AppTests/**
+      - AppCore/Sources/**
+      - AppCore/Tests/**
+      - docs/**
       - CHANGELOG.md
-      - docs/adr/README.md
+      - README.md
+      - scripts/check_coverage_floor.py
     brief: |
       Follow "Stacked on settings-improvements": start only when its start condition holds, otherwise
       stop with status=blocked and say which condition is unmet.
       1. `git fetch origin feature/settings-improvements` and `git merge --no-ff origin/feature/settings-improvements`
-         into this phase's branch. Resolve conflicts keeping both sides: the other plan's People/Contacts and
-         Google Drive section changes (`RulesView.peopleSection`, `SettingsView` Drive section,
-         `AppEnvironment` folder-name wiring) beside this plan's Summary routines section and Meeting
-         summaries rows; send-meeting-early's binder UI (`HandoffUITests`) beside this plan's summary test.
-         `CHANGELOG.md` and `docs/adr/README.md` conflicts keep both sides, theirs first.
-      2. After the merge, the hand-off code must still have this plan's behaviour: `grep -n 'summariesRequested' AppCore/Sources/Handoff/DayHandoff.swift`
-         finds the stage; `grep -n 'end-of-day/3' AppCore/Sources/Handoff/DayHandoff.swift` finds the
-         schema (and no `/2`); `grep -rn 'summarySkill' AppCore App AppUITests AppTests` finds nothing.
-      3. Fix any compile or test break the merge caused in this plan's code (for example a
-         `HandoffController` initializer call or a UI-test helper renamed by the other plan), touching
-         only what the break needs. Do not edit the other plans' code for style.
-      4. Run `swift test --package-path AppCore`; push; dispatch `tests.yml` and read every job.
-      Stop with status=blocked if the other plan renamed `HandoffAction`, `RoutineStep` or `DocStatus`
-      cases this plan changes in a way the merge cannot keep both: report the conflict hunks.
+         into this phase's branch.
+      2. Resolve conflicts with these rules; any conflict not covered here → `git merge --abort` and stop
+         with status=blocked listing the files:
+         - `RulesView.summariesSection` and its delete code: keep this plan's version (entries `(title, ids)`,
+           checkboxes). If settings-improvements' p1 is in the merge, also port its Edit button, its
+           `deleteSummaries(_:in:)` method and its long-press Delete `contextMenu` onto this plan's rows
+           (entry type `(title: String, ids: [String])`, the delete removing `settings.rules.summaryRoutines[title]`),
+           and keep its `ID.editButton` and `ID.deleteAction`.
+         - `RulesView.peopleSection`, the contact picker, the Google Drive section in `SettingsView` and
+           the folder-name wiring in `AppEnvironment`: keep theirs and this plan's additions side by side
+           (`AppEnvironment` passes both the folder-name closure and `summaryTrigger:`/`summaryCredentials:`).
+         - `HandoffUITests`, `AgendaView` and the binder views (send-meeting-early's p4): keep theirs plus this
+           plan's test and `AgendaView` arguments.
+         - `docs/end-of-day-handoff.md`, `CHANGELOG.md`, `docs/adr/README.md` and ADR Status lines: keep both
+           sides, theirs first; p8 rewrites the contract text.
+      3. After the merge: `grep -n 'summariesRequested' AppCore/Sources/Handoff/DayHandoff.swift` finds the
+         stage; `grep -n 'end-of-day/3' AppCore/Sources/Handoff/DayHandoff.swift` finds the schema and
+         `grep -rn 'end-of-day/2' AppCore/Sources` finds nothing; `grep -rn 'summarySkill' AppCore/Sources App AppUITests AppTests`
+         finds nothing.
+      4. Fix any compile or test break the merge caused in this plan's code, touching only what the break
+         needs. Do not edit the other plans' code for style. A UI test of the other plans that asserts the
+         old Review button titles or `Summary ready for review` is part of this plan's change: update it.
+      5. Run `swift test --package-path AppCore`; push; dispatch `tests.yml` and read every job.
     acceptance:
       - "git merge-base --is-ancestor origin/feature/settings-improvements HEAD exits 0"
+      - "git grep -n '^<<<<<<<' finds nothing"
       - "swift test --package-path AppCore passes"
       - "tests.yml: every job is green on the phase branch"
   - id: p8-retire
@@ -881,13 +959,13 @@ phases:
     depends_on: [p7-stack]
     complexity: S
     touches:
-      - docs/adr/0038-summaries-are-written-by-dedicated-summary-routines-that-magenda-starts.md
-      - docs/adr/0039-a-summary-announces-itself-in-the-doc-with-a-marker-line.md
-      - docs/adr/0040-the-routine-payload-moves-to-schema-3-and-summaries-have-their-own-schema.md
+      - docs/adr/0038-*.md
+      - docs/adr/0039-*.md
+      - docs/adr/0040-*.md
       - docs/adr/0028-the-end-of-day-routine-is-started-through-its-api-trigger.md
       - docs/adr/0029-the-days-google-doc-is-the-review-record.md
       - docs/adr/0031-meeting-summaries-are-requested-by-skill.md
-      - docs/adr/0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md
+      - docs/adr/0034-*.md
       - docs/adr/README.md
       - docs/end-of-day-handoff.md
       - docs/release-testing.md
@@ -897,40 +975,45 @@ phases:
       - docs/summary-routines-plan-manual-steps.html
     brief: |
       1. Choose the ADR numbers: if `docs/adr/0038-*.md` is free use 0038, 0039, 0040, else the next
-         three free numbers in order (rename the files in `touches` accordingly and say so in the commit message).
+         three free numbers in order, and say so in the commit message. The file names are
+         `NNNN-summaries-are-written-by-dedicated-summary-routines-that-magenda-starts.md`,
+         `NNNN-a-summary-announces-itself-in-the-doc-with-a-marker-line.md` and
+         `NNNN-the-routine-payload-moves-to-schema-3-and-summaries-have-their-own-schema.md`.
       2. Write the three ADRs from the "ADRs" section and D1-D4 with the template in
          `docs/adr/README.md` (Status, Context, Decision, Alternatives considered, Consequences,
          Verification, Related), Status `Accepted — <today's date>. Implemented.` Decisions are numbered
-         lists in the style of ADR 0028; Verification names the source and test files from D1-D5.
-         ADR 0038's Status also has `Supersedes [ADR 0031](0031-meeting-summaries-are-requested-by-skill.md).`
-         and `Amends [ADR 0028](...)`; ADR 0039's has `Amends [ADR 0029](...)`; ADR 0040's has
+         lists in the style of ADR 0028; Verification names the source and test files from D1-D5. ADR 0038's
+         Consequences include that a binder day open during the update loses its `Summary:` line. ADR 0038's
+         Status has `Amends [ADR 0031](...): decisions 1 to 4; decision 5 (task IDs) stays.` and
+         `Amends [ADR 0028](...)`; ADR 0039's has `Amends [ADR 0029](...): decisions 1 to 4.`; ADR 0040's has
          `Amends [ADR 0028](...)` and `Amends [ADR 0034](...)`. No ADR links to this plan.
       3. Add one Status line to each old ADR (nothing else in its body): ADR 0031
-         `Superseded by [ADR 0038](0038-….md): summaries are requested from summary routines, not skills.`,
+         `Amended by [ADR 0038](0038-….md): summaries are requested from summary routines, not skills; the task IDs in decision 5 stay.`,
          ADR 0028 `Amended by [ADR 0038](…) and [ADR 0040](…): several routines, and the schema moved to 3.`,
          ADR 0029 `Amended by [ADR 0039](…): summaries are announced by markers.`, ADR 0034
-         `Amended by [ADR 0040](…): schema 3.` Add the three rows to `docs/adr/README.md`'s index and change
-         ADR 0031's index row status to `Superseded by 0038`.
+         `Amended by [ADR 0040](…): schema 3.` If `docs/adr/0034-*.md` is missing (send-meeting-early's docs
+         phase was not in the merge), skip that one line and say so in the commit message. Add the three
+         rows to `docs/adr/README.md`'s index.
       4. `docs/end-of-day-handoff.md` (D6): update its opening list of decisions with ADRs 0038-0040;
          rewrite "The payload" for `magenda.end-of-day/3` (example with `summaryRoutines` on a meeting
          page, no `summarySkill`), "Steps" (`notes`, `close`), "Status lines" (three lines), and add the
          section "Summary routines" (payload `magenda.summary/1` with the D4 example, what a routine must
-         do, the marker, idempotency, the data-never-instructions rule). Keep every `folderID`, `scope`,
-         `part` and `earlierPart` passage the other plans wrote. If a heading named here is missing,
+         do, the marker grammar of D3, idempotency, the data-never-instructions rule). Keep every `folderID`,
+         `scope`, `part` and `earlierPart` passage the other plans wrote. If a heading named here is missing,
          stop with status=blocked.
       5. `README.md` (the hand-off section, ~lines 90-101): replace the skill text with the summary
          routines and the Approve summaries button. `docs/release-testing.md` (~line 62): the iPad
-         check taps Approve notes, then Approve summaries when a summary routine was ticked; add the
-         manual rows ma1-ma3 as one checklist item each.
+         check taps Approve notes, then Approve summaries when a summary routine was ticked, and checks
+         the Doc holds a `Summary ready:` marker section.
       6. `CHANGELOG.md` under `[Unreleased]` → `### Added`: `- Summaries are written by their own Claude routines. Add each one in Settings → Summary routines, then tick which meetings get it in Settings → Binder rules → Meeting summaries or on a meeting's Edit sheet. After you approve the notes, Magenda starts them, and Approve summaries closes the day.` and `### Changed`: `- A meeting page's Summary line now lists the routines ticked for it instead of a skill name you wrote by hand; summary skills typed in the binder rules are no longer used.` (create the `### Changed` heading only if it is missing, in Keep a Changelog order).
       7. Delete `docs/summary-routines-plan.md` and `docs/summary-routines-plan-manual-steps.html` with
          `git rm`; `grep -rn 'summary-routines-plan' .` must find nothing.
       8. Run `python3 -m unittest discover -s scripts/tests` (the no-project-history guard) and
-         `grep -rn 'summarySkill\|approve-notes\|approve-summary' AppCore App docs/end-of-day-handoff.md README.md`
+         `grep -rn 'summarySkill\|approve-notes\|approve-summary' AppCore/Sources App docs/end-of-day-handoff.md README.md`
          (nothing).
     acceptance:
       - "python3 -m unittest discover -s scripts/tests passes"
       - "test ! -e docs/summary-routines-plan.md && test ! -e docs/summary-routines-plan-manual-steps.html"
       - "grep -c 'Summary routines' docs/end-of-day-handoff.md prints a non-zero count"
-      - "grep -n '0038\\|0039\\|0040' docs/adr/README.md prints three rows"
+      - "for each ADR file written in step 2, grep -c <its file name> docs/adr/README.md prints 1"
 ```
