@@ -310,11 +310,11 @@ public final class HandoffController {
 
     /// Deletes the binder day and the PDFs of the day and of its meetings, and keeps the records
     /// marked purged, the meetings' before the day's, so a failure partway leaves the day unpurged
-    /// and the next refresh repeats it. A meeting still waiting to upload keeps its PDF.
+    /// and the next refresh repeats it. A record still waiting to upload keeps its PDF.
     private func purge(_ day: DayHandoff) throws {
         try binderStore.deleteDay(day.date)
         let parts = days.filter { $0.date == day.date && $0.part != nil }
-        for record in parts.filter({ $0.stage != .queued && $0.stage != .uploaded }) + [day] {
+        for record in parts + [day] where record.stage != .queued && record.stage != .uploaded {
             try store.deletePDF(for: record.id)
             var purged = record
             purged.purged = true

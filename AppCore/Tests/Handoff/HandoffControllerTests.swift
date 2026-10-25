@@ -820,6 +820,20 @@ struct HandoffControllerTests {
         #expect(try store.pdf(for: partID(2)) == Data("pdf-2".utf8))
     }
 
+    @Test("a closed day still waiting to upload keeps its PDF and is not marked purged")
+    func purgeKeepsWaitingDay() async throws {
+        let closed = try #require(CalendarDay(year: 2026, month: 10, day: 1))
+        var day = closedDayRecord(on: closed)
+        day.stage = .queued
+        try seed([day])
+        await drive.setError(GoogleAPIError.network, for: .folderID)
+        clock.set(try #require(CalendarDay(year: 2026, month: 10, day: 6)))
+        await controller.refresh(excluding: otherDay)
+        #expect(try saved().stage == .queued)
+        #expect(try saved().purged == false)
+        #expect(try store.pdf(for: dayID) != nil)
+    }
+
     @Test("a date with only parts is never purged, however long ago they closed")
     func partsAloneAreNotPurged() async throws {
         let closed = try #require(CalendarDay(year: 2026, month: 10, day: 1))
