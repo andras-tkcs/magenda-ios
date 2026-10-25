@@ -1,5 +1,12 @@
 # Settings improvements: visible delete, People from Contacts, a named Drive folder
 
+> **Orchestrator: this plan's PR is stacked.** It runs at the same time as the
+> `plan/send-meeting-early` plan (feature branch `feature/send-meeting-early`). Its last phase,
+> `p6-stack`, merges that branch into this one, and the pull request opens with **base
+> `feature/send-meeting-early`, not `main`**. Read "Stacked on send-meeting-early" below before
+> section 5 (final review) and section 6 (finishing) of `/implement`; it overrides them where they
+> say `main`.
+
 ## Goal
 
 Three changes to Settings, asked for together:
@@ -436,6 +443,54 @@ Nothing before implementation. After the last phase merges, the user (see the
 - **Folder lookup by name across renames.** Renaming back to an earlier name finds that earlier
   folder again (it is still Magenda's). That is intended and covered by the footer's wording.
 
+- **The stacking merge.** `p6-stack` merges another plan's hand-off work into this one; it is the
+  one phase on Opus. If send-meeting-early is still being built, the PR is stacked on its current
+  head and the orchestrator merges later commits in as they land ("Stacked on send-meeting-early",
+  Finishing step 5).
+
+## Stacked on send-meeting-early
+
+The user runs this plan and `plan/send-meeting-early` in parallel overnight and wants two stacked
+pull requests in the morning: send-meeting-early's PR to `main`, and this one on top of it.
+
+**Phases p1–p5 are built on `main`** exactly as written; their stop conditions about "other
+hand-off work landed first" refer to `main`. Only `p6-stack` brings the other branch in.
+
+**When `p6-stack` can start** (it depends on `p5-retire`, and on the other branch existing):
+
+1. `git ls-remote origin feature/send-meeting-early`. If it prints nothing, the other plan has
+   not cut its feature branch yet: do not start `p6-stack`; arm a check-in in 30 minutes and look
+   again. Keep doing this for up to 8 hours.
+2. Start `p6-stack` as soon as the branch exists, even if send-meeting-early's PR is not open or
+   its phases are not all merged: stack on what is there.
+3. After 8 hours without the branch, skip `p6-stack`, open this PR to `main` as `/implement`
+   normally does, and say in the PR's first line and in your final message that it could not be
+   stacked because `feature/send-meeting-early` never appeared.
+
+**Final review** (`/implement` section 5): in the review prompt, replace
+`git diff origin/main...HEAD` with `git diff origin/feature/send-meeting-early...HEAD`, and add:
+"The branch is stacked on feature/send-meeting-early; review only this plan's changes and the
+conflict resolutions of the `Plan-Phase: settings-improvements/p6-stack` merge."
+
+**Finishing** (`/implement` section 6), in this order:
+
+1. Look for the other PR: GitHub MCP `list_pull_requests` with `head:
+   andras-tkcs:feature/send-meeting-early`, state open.
+2. `git fetch origin feature/send-meeting-early`. If it has commits the feature branch lacks
+   (`git rev-list --count HEAD..origin/feature/send-meeting-early` is not 0), merge it again into
+   the feature branch with a merge commit (never a rebase), resolving conflicts by the rules in
+   `p6-stack`'s brief, re-run the fast checks, and push.
+3. Open this PR with `base: feature/send-meeting-early`. The body's first lines are:
+   `Stacked on <other PR URL> — merge that first; GitHub then retargets this PR to main.` (or,
+   without an open PR, `Stacked on the feature/send-meeting-early branch; its PR is not open yet.`).
+   The rest of the body is as `/implement` says.
+4. If the other PR exists, add one comment on it: `<this PR URL> is stacked on this one.` ending
+   with the attribution footer.
+5. Drive this PR to green as usual. Whenever `feature/send-meeting-early` gets new commits (a
+   check-in, or a notice on the PR), merge it in again as in step 2 and push. When the other PR
+   merges, GitHub retargets this PR to `main`; then merge `origin/main` in and push.
+6. The final message names both PR URLs, in merge order.
+
 ## Implementation manifest
 
 ```yaml
@@ -465,6 +520,8 @@ final_checks:
   - ADR 0027 has exactly one added Status line pointing to the folder ADR, and no other change
   - CHANGELOG.md has [Unreleased] entries for all three changes and no version heading
   - tests.yml is green on the feature branch head, all core, lint, scripts, app and ui jobs
+  - origin/feature/send-meeting-early is an ancestor of the feature branch head (`git merge-base --is-ancestor origin/feature/send-meeting-early HEAD`), unless the plan's 8-hour fallback applied
+  - the PR opens with base feature/send-meeting-early and its body starts with the "Stacked on" line from the plan's "Stacked on send-meeting-early" section
 phases:
   - id: p1-rules-delete
     title: Edit button and long-press Delete on every Binder rules list
@@ -720,4 +777,63 @@ phases:
       - "`grep -rn 'settings-improvements-plan' .` finds nothing"
       - "`grep -n 'folderID' docs/end-of-day-handoff.md` finds the example, the field description and the notes step"
       - python3 -m unittest discover -s scripts/tests passes
+
+  - id: p6-stack
+    title: Stack on feature/send-meeting-early by merging it in and resolving the overlap
+    depends_on: [p5-retire]
+    complexity: M
+    worker_model: opus
+    worker_model_reason: Merging another plan's hand-off changes (payload schema, meeting uploads, ADRs) into this one is conflict resolution across HandoffController, DayHandoff and the routine contract that cannot be written down line by line in advance.
+    touches:
+      - AppCore/**
+      - App/**
+      - AppUITests/**
+      - docs/**
+      - README.md
+      - CHANGELOG.md
+    brief: |
+      The orchestrator starts this only once origin/feature/send-meeting-early exists (see the
+      plan's "Stacked on send-meeting-early" section). It merges that branch into this one so the
+      PR can be stacked on it. Do not change what the other branch does; only make this plan's
+      three changes sit correctly on top of it. p5 deleted the plan from this branch: read D3 with
+      `git fetch origin plan/settings-improvements && git show FETCH_HEAD:docs/settings-improvements-plan.md`.
+      1. `git fetch origin feature/send-meeting-early` and
+         `git merge --no-ff origin/feature/send-meeting-early` (a merge commit; never rebase).
+      2. Resolve conflicts by these rules:
+         a. HandoffController.swift: keep every change from the other branch. Every
+            `Self.folderName` or literal `"Magenda"` folder lookup it adds becomes `folderName()`.
+            Where a day's upload runs, keep D3's `handoff.folderID` reuse. If the other branch
+            uploads a meeting into the folder and stores a record with `driveFileID`, give that
+            record `folderID: String?` the same way D3 gives it to DayHandoff (optional, decoded
+            with decodeIfPresent) and reuse it the same way.
+         b. DayHandoff.swift (and any meeting payload type the other branch adds): keep the other
+            branch's schema string and keys; add `folderID` next to `driveFileID` in every payload
+            that has `driveFileID`.
+         c. docs/end-of-day-handoff.md: keep the other branch's text, then apply D3's routine
+            contract edits on top of it (folder row, `folderID` in each payload example and field
+            list, the folder check in each step that checks the folder).
+         d. CHANGELOG.md, docs/adr/README.md, README.md: keep both sides' lines, theirs first.
+         e. ADR 0027's Status: keep both added lines. If the other branch also uses ADR numbers
+            0036 or 0037, renumber this plan's two ADRs to the next free numbers and fix every
+            link (`grep -rn '0036\|0037' docs README.md`).
+         f. App/AppEnvironment.swift, App/MagendaApp.swift and any other App file: keep both
+            sides' additions.
+      3. Run `swift build`/`swift test --package-path AppCore` with coverage and the coverage
+         floor, `swift format lint --strict` and `python3 -m unittest discover -s scripts/tests`
+         (or dispatch tests.yml on the phase branch for core and lint). Fix failures only in this
+         plan's code or in the merge resolution. Never weaken, skip or delete a test from either
+         branch. Add tests only where rule 2a or 2b added `folderID` to a type of the other
+         branch (round-trip, decode without the key, payload with and without it).
+      4. Dispatch tests.yml on the phase branch and read every app and ui job.
+      5. Commit the merge with a message saying this branch is stacked on
+         feature/send-meeting-early and how the overlap was resolved.
+      Stop conditions: the other branch removed or replaced `DriveFiling.folderID(named:)`, the
+      Settings screen, or the People rules in a way that rules 2a–2f do not cover → stop with
+      status=blocked and describe the conflict. A test of the other branch fails after the merge
+      and its fix would change that branch's behavior → stop with status=blocked.
+    acceptance:
+      - "`git merge-base --is-ancestor origin/feature/send-meeting-early HEAD` exits 0"
+      - "`grep -rn 'Self.folderName' AppCore/Sources` finds nothing"
+      - "`git diff --name-only --diff-filter=U` prints nothing and `grep -rln '^<<<<<<<' AppCore App AppUITests docs README.md CHANGELOG.md` finds nothing"
+      - tests.yml dispatched on the phase branch is green on every core, lint, scripts, app and ui job
 ```
