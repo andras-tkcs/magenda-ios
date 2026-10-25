@@ -46,24 +46,27 @@ public struct BinderDay: Equatable, Codable, Sendable {
     public var extras: [ExtraPage]
     /// The pages kept for their handwriting after they left the content.
     public var retained: [RetainedPage]
+    /// The pages sent to Claude, which can no longer be written on.
+    public var locked: [PageKey]
 
     /// The day the binder is for.
     public var date: CalendarDay { content.date }
 
     private enum CodingKeys: String, CodingKey {
-        case version, content, theme, extras, retained
+        case version, content, theme, extras, retained, locked
     }
 
     /// Creates a binder day of the current format.
     public init(
         content: AgendaContent, theme: Theme, extras: [ExtraPage] = [],
-        retained: [RetainedPage] = []
+        retained: [RetainedPage] = [], locked: [PageKey] = []
     ) {
         self.version = Self.formatVersion
         self.content = content
         self.theme = theme
         self.extras = extras
         self.retained = retained
+        self.locked = locked
     }
 
     /// Decodes a day; throws when it was saved with another format version.
@@ -80,6 +83,7 @@ public struct BinderDay: Equatable, Codable, Sendable {
         self.theme = try container.decode(Theme.self, forKey: .theme)
         self.extras = try container.decode([ExtraPage].self, forKey: .extras)
         self.retained = try container.decode([RetainedPage].self, forKey: .retained)
+        self.locked = try container.decodeIfPresent([PageKey].self, forKey: .locked) ?? []
     }
 
     /// Adds a blank copy of `page` right after it, identified by `id`. The copy's source is the
