@@ -16,7 +16,8 @@ struct DriveFolderNameTests {
         #expect(DriveFolderName.validated(String(repeating: "a", count: 101)) == nil)
     }
 
-    @Test("validated refuses an empty name, a slash, a backslash and a control character",
+    @Test(
+        "validated refuses an empty name, a slash, a backslash and a control character",
         arguments: ["", "   ", "a/b", "a\\b", "a\u{0007}b"])
     func refuses(text: String) {
         #expect(DriveFolderName.validated(text) == nil)
