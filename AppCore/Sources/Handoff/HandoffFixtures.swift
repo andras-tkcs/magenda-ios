@@ -1,6 +1,7 @@
 import Foundation
 
-/// What the fixture routine has been asked to do, per date. It stands in for the end-of-day
+/// What the fixture routine has been asked to do, per date for a day and per date and part for a
+/// meeting. It stands in for the end-of-day
 /// routine so UI tests and previews can walk a day through every Doc status.
 public actor FixtureEndOfDay {
     private struct Fired {
@@ -13,19 +14,24 @@ public actor FixtureEndOfDay {
     /// Creates a routine that has been asked for nothing.
     public init() {}
 
-    /// Records the step in `payload` for its date. A payload that does not decode is recorded as
-    /// nothing.
+    /// Records the step in `payload` for its date, or its date and part. A payload that does not
+    /// decode is recorded as nothing.
     public func record(payload: String) {
         guard let decoded = try? JSONDecoder().decode(Payload.self, from: Data(payload.utf8)) else {
             return
         }
-        fired[decoded.date] = Fired(
-            step: decoded.step, hadSummarySkill: decoded.pages.contains { $0.summarySkill != nil })
+        let key = decoded.part.map { "\(decoded.date)-part-\($0)" } ?? decoded.date
+        fired[key] = Fired(
+            step: decoded.step,
+            hadSummarySkill: decoded.pages.contains {
+                $0.summarySkill != nil && $0.earlierPart == nil
+            })
     }
 
-    /// The text of the day's Doc as the routine would have left it.
-    public func docText(forDate date: String) -> String {
-        guard let last = fired[date] else { return "Status: Waiting for notes\n" }
+    /// The text of a Doc as the routine would have left it; `key` is the date, or the date,
+    /// "-part-" and the part's number.
+    public func docText(forKey key: String) -> String {
+        guard let last = fired[key] else { return "Status: Waiting for notes\n" }
         switch last.step {
         case "notes": return "Status: Notes ready for review\n"
         case "approve-notes":
@@ -39,10 +45,12 @@ public actor FixtureEndOfDay {
     private struct Payload: Decodable {
         struct Page: Decodable {
             let summarySkill: String?
+            let earlierPart: Int?
         }
 
         let date: String
         let step: String
+        let part: Int?
         let pages: [Page]
     }
 }
@@ -61,25 +69,33 @@ public struct FixtureDrive: DriveFiling {
         "folder-1"
     }
 
-    /// `file-<date>`, where the date is the one in `name` after `Magenda `.
+    /// `file-<key>`, where the key is the date in `name` after `Magenda `, followed by `-part-<n>`
+    /// for a meeting.
     public func uploadPDF(_ data: Data, name: String, folderID: String, replacing fileID: String?)
         async throws -> String
     {
-        "file-" + Self.date(in: name)
+        "file-" + Self.key(in: name)
     }
 
-    /// `doc-<date>`, where the date is the one in `name` after `Magenda `.
+    /// `doc-<key>`, where the key is the date in `name` after `Magenda `, followed by `-part-<n>`
+    /// for a meeting.
     public func createDoc(name: String, folderID: String, text: String) async throws -> String {
-        "doc-" + Self.date(in: name)
+        "doc-" + Self.key(in: name)
     }
 
-    /// The Doc's text from what the fixture routine has been asked to do for the date.
+    /// The Doc's text from what the fixture routine has been asked to do for the Doc's key.
     public func exportText(ofDoc docID: String) async throws -> String {
-        await state.docText(forDate: String(docID.dropFirst("doc-".count)))
+        await state.docText(forKey: String(docID.dropFirst("doc-".count)))
     }
 
-    private static func date(in name: String) -> String {
-        String(name.dropFirst("Magenda ".count).prefix(10))
+    /// `2026-10-26` for `Magenda 2026-10-26.pdf`, `2026-10-26-part-1` for
+    /// `Magenda 2026-10-26 part 1 notes`.
+    private static func key(in name: String) -> String {
+        var key = String(name.dropFirst("Magenda ".count))
+        for suffix in [".pdf", " notes"] where key.hasSuffix(suffix) {
+            key.removeLast(suffix.count)
+        }
+        return key.replacingOccurrences(of: " part ", with: "-part-")
     }
 }
 
