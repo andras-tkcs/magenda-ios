@@ -32,7 +32,7 @@ struct ReviewView: View {
                     .accessibilityIdentifier(ID.reviewEmpty)
                 } else {
                     List {
-                        ForEach(Array(handoff.days.enumerated()), id: \.element.date) {
+                        ForEach(Array(handoff.days.enumerated()), id: \.element.id) {
                             index, day in
                             row(day, index: index)
                         }
@@ -56,7 +56,7 @@ struct ReviewView: View {
     private func row(_ day: DayHandoff, index: Int) -> some View {
         let phase = day.phase
         return VStack(alignment: .leading, spacing: 6) {
-            Text(day.date.isoString)
+            Text(day.displayTitle)
                 .font(.headline)
             Text(phase.title)
                 .accessibilityIdentifier(ID.reviewStatus(index))
@@ -67,17 +67,17 @@ struct ReviewView: View {
                     .accessibilityIdentifier(ID.reviewError(index))
             }
             HStack {
-                if let url = handoff.docURL(for: day.date) {
+                if let url = handoff.docURL(for: day.id) {
                     Button("Open Doc") { openURL(url) }
-                        .accessibilityLabel("Open the Google Doc for \(day.date.isoString)")
+                        .accessibilityLabel("Open the Google Doc for \(day.displayTitle)")
                         .accessibilityIdentifier(ID.reviewOpenDoc(index))
                 }
                 if let action = phase.action {
                     Button(Self.title(of: action)) {
-                        Task { await handoff.perform(action, on: day.date) }
+                        Task { await handoff.perform(action, on: day.id) }
                     }
                     .disabled(handoff.isBusy)
-                    .accessibilityLabel(Self.spokenTitle(of: action, on: day.date))
+                    .accessibilityLabel(Self.spokenTitle(of: action, on: day.displayTitle))
                     .accessibilityIdentifier(ID.reviewAction(index))
                 }
             }
@@ -95,8 +95,7 @@ struct ReviewView: View {
         }
     }
 
-    private static func spokenTitle(of action: HandoffAction, on date: CalendarDay) -> String {
-        let day = date.isoString
+    private static func spokenTitle(of action: HandoffAction, on day: String) -> String {
         switch action {
         case .retry: return "Try again for \(day)"
         case .approve(.approveNotes): return "Approve the notes for \(day)"

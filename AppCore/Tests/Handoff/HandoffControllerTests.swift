@@ -89,8 +89,8 @@ private final class FailingHandoffStore: HandoffStore, @unchecked Sendable {
         return try base.handoffs()
     }
 
-    func handoff(_ date: CalendarDay) throws -> DayHandoff? {
-        try base.handoff(date)
+    func handoff(_ id: HandoffID) throws -> DayHandoff? {
+        try base.handoff(id)
     }
 
     func save(_ handoff: DayHandoff) throws {
@@ -108,17 +108,17 @@ private final class FailingHandoffStore: HandoffStore, @unchecked Sendable {
         try base.save(handoff)
     }
 
-    func pdf(for date: CalendarDay) throws -> Data? {
-        try base.pdf(for: date)
+    func pdf(for id: HandoffID) throws -> Data? {
+        try base.pdf(for: id)
     }
 
-    func savePDF(_ data: Data, for date: CalendarDay) throws {
+    func savePDF(_ data: Data, for id: HandoffID) throws {
         try check(.savePDF)
-        try base.savePDF(data, for: date)
+        try base.savePDF(data, for: id)
     }
 
-    func deletePDF(for date: CalendarDay) throws {
-        try base.deletePDF(for: date)
+    func deletePDF(for id: HandoffID) throws {
+        try base.deletePDF(for: id)
     }
 
     func deleteHandoff(for date: CalendarDay) throws {
@@ -212,8 +212,12 @@ struct HandoffControllerTests {
         return try #require(object as? [String: Any])
     }
 
+    private var dayID: HandoffID {
+        HandoffID(date: date, part: nil)
+    }
+
     private func saved() throws -> DayHandoff {
-        try #require(try store.handoff(date))
+        try #require(try store.handoff(dayID))
     }
 
     private func uploads() async -> [FakeDrive.Call] {
@@ -221,6 +225,44 @@ struct HandoffControllerTests {
             if case .uploadPDF = $0 { return true }
             return false
         }
+    }
+
+    private func partID(_ number: Int) -> HandoffID {
+        HandoffID(date: date, part: number)
+    }
+
+    /// A record of the meeting sent as part `number`, as the store would hold it.
+    private func partRecord(
+        _ number: Int, stage: HandoffStage = .summaryApproved, closedOn: CalendarDay? = nil,
+        docID: String? = nil
+    ) -> DayHandoff {
+        var record = DayHandoff(
+            date: date, checksum: "sha256:" + String(repeating: "ef", count: 32),
+            pages: [HandoffPage(page: 1, key: "meeting:cal|a")], tasks: [], delegated: [],
+            part: HandoffPart(number: number, meetingKey: "meeting:cal|a", title: "A"))
+        record.stage = stage
+        record.closedOn = closedOn
+        record.docID = docID
+        return record
+    }
+
+    /// A day record that was sent and closed on `closedOn`.
+    private func closedDayRecord(on closedOn: CalendarDay) -> DayHandoff {
+        var record = DayHandoff(
+            date: date, checksum: "sha256:" + String(repeating: "ab", count: 32),
+            pages: [HandoffPage(page: 1, key: "meeting:cal|a")], tasks: [], delegated: [])
+        record.stage = .summaryApproved
+        record.closedOn = closedOn
+        return record
+    }
+
+    /// Saves `records` with a PDF each straight into the store and loads them.
+    private func seed(_ records: [DayHandoff]) throws {
+        for record in records {
+            try store.save(record)
+            try store.savePDF(Data("pdf-\(record.id.part ?? 0)".utf8), for: record.id)
+        }
+        controller.start()
     }
 
     // MARK: - Finish
@@ -251,15 +293,15 @@ struct HandoffControllerTests {
         #expect(handoff.stage == .notesRequested)
         #expect(handoff.sessionURL == trigger.sessionURL)
         #expect(handoff.lastError == nil)
-        #expect(try store.pdf(for: date) == Data("pdf".utf8))
+        #expect(try store.pdf(for: dayID) == Data("pdf".utf8))
         #expect(controller.days == [handoff])
         #expect(controller.message == "Sent to Claude. The notes appear in the day's Google Doc.")
         #expect(!controller.isBusy)
         #expect(!controller.canFinish(date))
         #expect(
-            controller.docURL(for: date)?.absoluteString
+            controller.docURL(for: dayID)?.absoluteString
                 == "https://docs.google.com/document/d/doc-1/edit")
-        #expect(controller.docURL(for: otherDay) == nil)
+        #expect(controller.docURL(for: HandoffID(date: otherDay, part: nil)) == nil)
     }
 
     @Test("resetting a sent day forgets it, so it can be finished and sent again")
@@ -269,8 +311,8 @@ struct HandoffControllerTests {
         controller.resetHandoff(for: date)
         #expect(!controller.hasHandoff(on: date))
         #expect(controller.days.isEmpty)
-        #expect(try store.handoff(date) == nil)
-        #expect(try store.pdf(for: date) == nil)
+        #expect(try store.handoff(dayID) == nil)
+        #expect(try store.pdf(for: dayID) == nil)
         #expect(controller.canFinish(date))
         #expect(controller.message == "This day can be finished again.")
         await controller.finish(binder)
@@ -293,7 +335,7 @@ struct HandoffControllerTests {
         await rig.controller.finish(rig.binder)
         rig.controller.resetHandoff(for: rig.date)
         #expect(rig.controller.hasHandoff(on: rig.date))
-        #expect(try failing.handoff(rig.date) != nil)
+        #expect(try failing.handoff(rig.dayID) != nil)
         #expect(rig.controller.message == "Couldn't reset this day. Try again.")
     }
 
@@ -340,7 +382,7 @@ struct HandoffControllerTests {
         #expect(try saved().stage == .uploaded)
         #expect(try saved().lastError == RoutineTriggerError.rejectedToken.userMessage)
         #expect(trigger.texts.count == 1)
-        await controller.perform(.retry, on: date)
+        await controller.perform(.retry, on: dayID)
         #expect(try saved().stage == .notesRequested)
         #expect(try saved().lastError == nil)
         #expect(trigger.texts.count == 2)
@@ -356,7 +398,7 @@ struct HandoffControllerTests {
         #expect(rig.controller.isBusy)
         await rig.controller.finish(rig.binder)
         await rig.controller.refresh(excluding: rig.otherDay)
-        await rig.controller.perform(.retry, on: rig.date)
+        await rig.controller.perform(.retry, on: rig.dayID)
         #expect(rig.renderer.fileNames.count == 1)
         #expect(await held.calls.count == 2)
         await held.release()
@@ -387,7 +429,7 @@ struct HandoffControllerTests {
         #expect(handoff.docID == "doc-1")
         #expect(handoff.stage == .notesRequested)
         #expect(handoff.checksum == "sha256:" + String(repeating: "cd", count: 32))
-        #expect(try store.pdf(for: date) == Data("pdf2".utf8))
+        #expect(try store.pdf(for: dayID) == Data("pdf2".utf8))
         #expect(try fired(1)["docID"] as? String == "doc-1")
     }
 
@@ -404,7 +446,7 @@ struct HandoffControllerTests {
     func missingPDF() async throws {
         await drive.setError(GoogleAPIError.network, for: .folderID)
         await controller.finish(binder)
-        try store.deletePDF(for: date)
+        try store.deletePDF(for: dayID)
         await controller.refresh(excluding: otherDay)
         #expect(try saved().lastError == "This day's PDF is missing. Finish the day again.")
         #expect(try saved().stage == .queued)
@@ -519,12 +561,12 @@ struct HandoffControllerTests {
         await drive.setExportedText("Status: Notes ready for review\n")
         await controller.refresh(excluding: otherDay)
         await drive.setExportedText("Status: Summary ready for review\n")
-        await controller.perform(.approve(.approveNotes), on: date)
+        await controller.perform(.approve(.approveNotes), on: dayID)
         #expect(try fired(1)["step"] as? String == "approve-notes")
         #expect(try saved().stage == .notesApproved)
         #expect(try saved().docStatus == .summaryReady)
         #expect(controller.days.first?.phase == .summaryReady)
-        await controller.perform(.approve(.approveSummary), on: date)
+        await controller.perform(.approve(.approveSummary), on: dayID)
         #expect(try fired(2)["step"] as? String == "approve-summary")
         #expect(try saved().stage == .summaryApproved)
         #expect(controller.days.first?.phase == .closing)
@@ -536,7 +578,7 @@ struct HandoffControllerTests {
         await drive.setExportedText("Status: Notes ready for review\n")
         await controller.refresh(excluding: otherDay)
         await drive.setExportedText("Status: Closed\n")
-        await controller.perform(.approve(.approveNotes), on: date)
+        await controller.perform(.approve(.approveNotes), on: dayID)
         let closeOn = try #require(CalendarDay(year: 2026, month: 10, day: 6))
         #expect(try saved().closedOn == clock.today)
         #expect(controller.days.first?.phase == .closed(deleteOn: closeOn, purged: false))
@@ -545,10 +587,10 @@ struct HandoffControllerTests {
     @Test("an approve the phase does not offer does nothing")
     func approveNotOffered() async throws {
         await controller.finish(binder)
-        await controller.perform(.approve(.approveNotes), on: date)
-        await controller.perform(.approve(.approveSummary), on: date)
-        await controller.perform(.retry, on: date)
-        await controller.perform(.retry, on: otherDay)
+        await controller.perform(.approve(.approveNotes), on: dayID)
+        await controller.perform(.approve(.approveSummary), on: dayID)
+        await controller.perform(.retry, on: dayID)
+        await controller.perform(.retry, on: HandoffID(date: otherDay, part: nil))
         #expect(trigger.texts.count == 1)
         #expect(try saved().stage == .notesRequested)
     }
@@ -559,7 +601,7 @@ struct HandoffControllerTests {
         await drive.setExportedText("Status: Notes ready for review\n")
         await controller.refresh(excluding: otherDay)
         trigger.setError(RoutineTriggerError.unavailable)
-        await controller.perform(.approve(.approveNotes), on: date)
+        await controller.perform(.approve(.approveNotes), on: dayID)
         #expect(try saved().stage == .notesRequested)
         #expect(try saved().lastError == RoutineTriggerError.unavailable.userMessage)
         #expect(controller.days.first?.phase == .notesReady)
@@ -586,12 +628,12 @@ struct HandoffControllerTests {
         await controller.refresh(excluding: date)
         #expect(try saved().purged == false)
         #expect(try binderStore.day(date) != nil)
-        #expect(try store.pdf(for: date) != nil)
+        #expect(try store.pdf(for: dayID) != nil)
         await controller.refresh(excluding: otherDay)
         #expect(try saved().purged)
         #expect(controller.days.first?.purged == true)
         #expect(try binderStore.day(date) == nil)
-        #expect(try store.pdf(for: date) == nil)
+        #expect(try store.pdf(for: dayID) == nil)
         let deleteOn = try #require(CalendarDay(year: 2026, month: 10, day: 6))
         #expect(controller.days.first?.phase == .closed(deleteOn: deleteOn, purged: true))
         #expect(!controller.canFinish(date))
@@ -610,10 +652,184 @@ struct HandoffControllerTests {
         rig.clock.set(try #require(CalendarDay(year: 2026, month: 10, day: 6)))
         await rig.controller.refresh(excluding: rig.otherDay)
         #expect(try rig.saved().purged == false)
-        #expect(try rig.store.pdf(for: rig.date) != nil)
+        #expect(try rig.store.pdf(for: rig.dayID) != nil)
         failing.setFailing([])
         await rig.controller.refresh(excluding: rig.otherDay)
         #expect(try rig.saved().purged)
+    }
+
+    // MARK: - Meetings sent early
+
+    @Test("a part is listed after its day, parts by number, and remembering one keeps the day")
+    func partsListAfterTheirDay() async throws {
+        let closed = try #require(CalendarDay(year: 2026, month: 10, day: 1))
+        try seed([
+            partRecord(2, stage: .queued), partRecord(1), closedDayRecord(on: closed),
+        ])
+        #expect(controller.days.map(\.id) == [dayID, partID(1), partID(2)])
+        await controller.refresh(excluding: otherDay)
+        #expect(controller.days.map(\.id) == [dayID, partID(1), partID(2)])
+        #expect(try saved().closedOn == closed)
+        #expect(controller.hasHandoff(on: date))
+        #expect(controller.canFinish(date) == false)
+        let part = try #require(try store.handoff(partID(2)))
+        #expect(part.stage == .notesRequested)
+        #expect(part.driveFileID == "file-1")
+        #expect(part.docID == "doc-1")
+        #expect(
+            await drive.calls == [
+                .folderID(named: "Magenda"),
+                .uploadPDF(
+                    data: Data("pdf-2".utf8), name: "Magenda 2026-09-30 part 2.pdf",
+                    folderID: "folder-1", replacing: nil),
+                .createDoc(
+                    name: "Magenda 2026-09-30 part 2 notes", folderID: "folder-1",
+                    text: DocStatus.initialDocText),
+                .exportText(docID: "doc-1"),
+            ])
+        let payload = try fired(0)
+        #expect(payload["part"] as? Int == 2)
+        #expect(payload["scope"] as? String == "meeting")
+        #expect(controller.docURL(for: partID(2))?.absoluteString.contains("doc-1") == true)
+        #expect(controller.docURL(for: partID(1)) == nil)
+    }
+
+    @Test("a part does not make the day finished, and a day can still be finished with parts")
+    func partsDoNotBlockFinishing() async throws {
+        try seed([partRecord(1, stage: .notesRequested, docID: "doc-p")])
+        #expect(controller.hasHandoff(on: date))
+        #expect(controller.canFinish(date))
+        #expect(controller.docURL(for: dayID) == nil)
+        await controller.finish(binder)
+        #expect(controller.days.map(\.id) == [dayID, partID(1)])
+        #expect(try saved().stage == .notesRequested)
+        #expect(try #require(try store.handoff(partID(1))).docID == "doc-p")
+        #expect(try store.pdf(for: partID(1)) == Data("pdf-1".utf8))
+        #expect(!controller.canFinish(date))
+    }
+
+    @Test("approving a part's notes fires for the part only")
+    func approvePart() async throws {
+        var part = partRecord(1, stage: .notesRequested, docID: "doc-p")
+        part.docStatus = .notesReady
+        let closed = try #require(CalendarDay(year: 2026, month: 10, day: 1))
+        try seed([closedDayRecord(on: closed), part])
+        #expect(controller.days.last?.phase == .notesReady)
+        await controller.perform(.approve(.approveNotes), on: dayID)
+        #expect(trigger.texts.isEmpty)
+        await drive.setExportedText("Status: Summary ready for review\n")
+        await controller.perform(.approve(.approveNotes), on: partID(1))
+        #expect(try fired(0)["step"] as? String == "approve-notes")
+        #expect(try fired(0)["part"] as? Int == 1)
+        let after = try #require(try store.handoff(partID(1)))
+        #expect(after.stage == .notesApproved)
+        #expect(after.docStatus == .summaryReady)
+        #expect(try saved().stage == .summaryApproved)
+        #expect(await drive.calls.last == .exportText(docID: "doc-p"))
+    }
+
+    @Test("a refresh reads a part's Doc and closes it")
+    func refreshClosesPart() async throws {
+        try seed([partRecord(1, stage: .summaryApproved, docID: "doc-p")])
+        await drive.setExportedText("Status: Closed\n")
+        await controller.refresh(excluding: otherDay)
+        #expect(try store.handoff(partID(1))?.closedOn == clock.today)
+        #expect(controller.days.first?.phase == .meetingClosed)
+    }
+
+    @Test("a queued part whose PDF is missing says so")
+    func missingPartPDF() async throws {
+        try seed([partRecord(1, stage: .queued)])
+        try store.deletePDF(for: partID(1))
+        await controller.refresh(excluding: otherDay)
+        let part = try #require(try store.handoff(partID(1)))
+        #expect(
+            part.lastError
+                == "This meeting's PDF is missing. Reset the hand-off and send it again.")
+        #expect(part.stage == .queued)
+        #expect(await drive.calls.isEmpty)
+    }
+
+    @Test("resetting removes the day's parts from the list and the store")
+    func resetRemovesParts() async throws {
+        await controller.finish(binder)
+        try store.save(partRecord(1))
+        try store.savePDF(Data("p".utf8), for: partID(1))
+        controller.start()
+        #expect(controller.days.map(\.id) == [dayID, partID(1)])
+        controller.resetHandoff(for: date)
+        #expect(controller.days.isEmpty)
+        #expect(try store.handoffs().isEmpty)
+        #expect(try store.pdf(for: partID(1)) == nil)
+        #expect(!controller.hasHandoff(on: date))
+        #expect(controller.canFinish(date))
+    }
+
+    @Test("a date with only parts can be reset")
+    func resetOnlyParts() async throws {
+        try seed([partRecord(1)])
+        controller.resetHandoff(for: date)
+        #expect(controller.days.isEmpty)
+        #expect(try store.handoffs().isEmpty)
+        #expect(controller.message == "This day can be finished again.")
+    }
+
+    // MARK: - Purge of parts
+
+    @Test("the purge deletes a finished part's PDF and marks it purged before the day")
+    func purgeFinishedPart() async throws {
+        let closed = try #require(CalendarDay(year: 2026, month: 10, day: 1))
+        let failing = FailingHandoffStore()
+        let rig = try HandoffControllerTests(store: failing)
+        try rig.binderStore.saveDay(rig.binder.day)
+        for record in [rig.closedDayRecord(on: closed), rig.partRecord(1, closedOn: closed)] {
+            try failing.save(record)
+            try failing.savePDF(Data("x".utf8), for: record.id)
+        }
+        rig.controller.start()
+        rig.clock.set(try #require(CalendarDay(year: 2026, month: 10, day: 6)))
+        // The part is saved first; the day's save fails.
+        failing.failSave(after: 1)
+        await rig.controller.refresh(excluding: rig.otherDay)
+        #expect(try failing.handoff(rig.partID(1))?.purged == true)
+        #expect(try failing.pdf(for: rig.partID(1)) == nil)
+        #expect(try failing.handoff(rig.dayID)?.purged == false)
+        #expect(try rig.binderStore.day(rig.date) == nil)
+        // The next refresh repeats the purge and finishes it.
+        failing.failSave(after: 10)
+        await rig.controller.refresh(excluding: rig.otherDay)
+        #expect(try failing.handoff(rig.dayID)?.purged == true)
+        #expect(try failing.pdf(for: rig.dayID) == nil)
+        #expect(rig.controller.days.map(\.purged) == [true, true])
+    }
+
+    @Test("a part that is still uploaded keeps its PDF when the day is purged")
+    func purgeKeepsWaitingPart() async throws {
+        let closed = try #require(CalendarDay(year: 2026, month: 10, day: 1))
+        try seed([
+            closedDayRecord(on: closed), partRecord(1, closedOn: closed),
+            partRecord(2, stage: .uploaded),
+        ])
+        clock.set(try #require(CalendarDay(year: 2026, month: 10, day: 6)))
+        await controller.refresh(excluding: otherDay)
+        #expect(try saved().purged)
+        #expect(try store.pdf(for: dayID) == nil)
+        #expect(try store.handoff(partID(1))?.purged == true)
+        #expect(try store.pdf(for: partID(1)) == nil)
+        #expect(try store.handoff(partID(2))?.purged == false)
+        #expect(try store.pdf(for: partID(2)) == Data("pdf-2".utf8))
+    }
+
+    @Test("a date with only parts is never purged, however long ago they closed")
+    func partsAloneAreNotPurged() async throws {
+        let closed = try #require(CalendarDay(year: 2026, month: 10, day: 1))
+        try binderStore.saveDay(binder.day)
+        try seed([partRecord(1, closedOn: closed)])
+        clock.set(try #require(CalendarDay(year: 2026, month: 12, day: 1)))
+        await controller.refresh(excluding: otherDay)
+        #expect(try store.handoff(partID(1))?.purged == false)
+        #expect(try store.pdf(for: partID(1)) == Data("pdf-1".utf8))
+        #expect(try binderStore.day(date) != nil)
     }
 
     // MARK: - Start and routine
