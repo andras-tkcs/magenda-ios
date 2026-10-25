@@ -25,8 +25,6 @@ public final class HandoffController {
     @ObservationIgnored private let readFile: @Sendable (URL) throws -> Data
     @ObservationIgnored private let removeFile: @Sendable (URL) -> Void
 
-    /// How many days after Magenda first reads a closed Doc the day's files are deleted.
-    private static let purgeDelay = 5
     private static let folderName = "Magenda"
 
     /// Creates a controller. `readFile` and `removeFile` read and delete the rendered PDF.
@@ -70,7 +68,8 @@ public final class HandoffController {
     /// The link to the day's Google Doc, or nil when it has none.
     public func docURL(for date: CalendarDay) -> URL? {
         stored(on: date)?.docID.map {
-            GoogleAPI.url(host: "docs.google.com", path: "/document/d/\($0)/edit")
+            GoogleAPI.url(host: "docs.google.com", path: "/document/d").appending(path: $0)
+                .appending(path: "edit")
         }
     }
 
@@ -127,7 +126,9 @@ public final class HandoffController {
         }
         let now = today()
         for handoff in days where !handoff.purged && handoff.date != openDay {
-            if let closedOn = handoff.closedOn, closedOn.adding(days: Self.purgeDelay) <= now {
+            if let closedOn = handoff.closedOn,
+                closedOn.adding(days: DayHandoff.purgeDelayDays) <= now
+            {
                 // A failure leaves the day for the next refresh.
                 try? purge(handoff)
             }

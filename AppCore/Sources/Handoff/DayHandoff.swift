@@ -128,6 +128,9 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     /// The longest payload the routine accepts, in characters.
     static let maxPayloadLength = 65_536
 
+    /// How many days after Magenda first reads a closed Doc the day's files are deleted.
+    public static let purgeDelayDays = 5
+
     /// The format version; always `formatVersion` when created.
     public let version: Int
     /// The day.
@@ -226,7 +229,9 @@ public struct DayHandoff: Equatable, Codable, Sendable {
 
     /// What the Review list shows.
     public var phase: HandoffPhase {
-        if let closedOn { return .closed(deleteOn: closedOn.adding(days: 5), purged: purged) }
+        if let closedOn {
+            return .closed(deleteOn: closedOn.adding(days: Self.purgeDelayDays), purged: purged)
+        }
         switch (stage, docStatus) {
         case (.queued, _): return .waitingToUpload
         case (.uploaded, _): return .waitingToSend
