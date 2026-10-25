@@ -129,4 +129,55 @@ struct RenderPlanTests {
     func linkNone() {
         #expect(linkPlan().linkTarget(at: PlanPoint(x: 12, y: 25), onPage: 1) == nil)
     }
+
+    private func subsetPlan() -> RenderPlan {
+        func page(_ key: PageKey, links: [Int]) -> PagePlan {
+            PagePlan(
+                key: key, chrome: .meeting,
+                operations: [.fill(rect, .white)] + links.map { .link(rect, targetPage: $0) })
+        }
+        return RenderPlan(
+            pageWidth: 100, pageHeight: 200,
+            pages: [
+                page(.overview, links: [1, 2, 3]),
+                page(.meeting("a"), links: [0, 2]),
+                page(.meeting("b"), links: [0]),
+                page(.notes, links: [7, -1]),
+            ],
+            omittedTodoItems: [TodoItem(text: "t", notes: "", due: "")])
+    }
+
+    @Test("A subset keeps the plan's order, whatever order the keys come in")
+    func subsetOrder() {
+        let subset = subsetPlan().subset([.notes, .meeting("a"), .overview])
+        #expect(subset.pages.map(\.key) == [.overview, .meeting("a"), .notes])
+        #expect(subset.pageWidth == 100 && subset.pageHeight == 200)
+        #expect(subsetPlan().subset([]).pages.isEmpty)
+    }
+
+    @Test("A subset points each link at its target's new position")
+    func subsetRemapsLinks() {
+        let subset = subsetPlan().subset([.meeting("a"), .meeting("b")])
+        #expect(subset.pages[0].operations == [.fill(rect, .white), .link(rect, targetPage: 1)])
+        #expect(subset.pages[1].operations == [.fill(rect, .white)])
+        let other = subsetPlan().subset([.meeting("b"), .overview, .notes])
+        #expect(
+            other.pages[0].operations == [
+                .fill(rect, .white), .link(rect, targetPage: 1), .link(rect, targetPage: 2),
+            ])
+        #expect(other.pages[1].operations == [.fill(rect, .white), .link(rect, targetPage: 0)])
+    }
+
+    @Test("A subset drops links to pages left out and to targets out of range")
+    func subsetDropsLinks() {
+        let subset = subsetPlan().subset([.overview, .notes])
+        #expect(subset.pages[0].operations == [.fill(rect, .white)])
+        #expect(subset.pages[1].operations == [.fill(rect, .white)])
+    }
+
+    @Test("A subset has no omitted to-do items")
+    func subsetOmitted() {
+        #expect(subsetPlan().omittedTodoItems.count == 1)
+        #expect(subsetPlan().subset([.overview]).omittedTodoItems.isEmpty)
+    }
 }

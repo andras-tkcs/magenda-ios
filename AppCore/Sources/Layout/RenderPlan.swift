@@ -198,4 +198,22 @@ public struct RenderPlan: Equatable, Sendable {
         }
         return nil
     }
+    /// The pages whose keys are in `keys`, in this plan's order. Each link points at its target's
+    /// position in the result; a link to a page left out is dropped. `omittedTodoItems` is empty.
+    public func subset(_ keys: Set<PageKey>) -> RenderPlan {
+        var positions: [Int: Int] = [:]
+        var kept: [PagePlan] = []
+        for (index, page) in pages.enumerated() where keys.contains(page.key) {
+            positions[index] = kept.count
+            kept.append(page)
+        }
+        for index in kept.indices {
+            kept[index].operations = kept[index].operations.compactMap { operation in
+                guard case .link(let rect, let target) = operation else { return operation }
+                return positions[target].map { .link(rect, targetPage: $0) }
+            }
+        }
+        return RenderPlan(
+            pageWidth: pageWidth, pageHeight: pageHeight, pages: kept, omittedTodoItems: [])
+    }
 }
