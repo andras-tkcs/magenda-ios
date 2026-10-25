@@ -904,6 +904,277 @@ struct HandoffControllerTests {
         #expect(rig.controller.routineTriggerID == nil)
         rig.controller.forgetRoutine()
     }
+
+    // MARK: - Send a meeting
+
+    private static let meetingA = PageKey.meeting("cal|a")
+    private static let meetingB = PageKey.meeting("cal|b")
+
+    /// A binder of this rig's date with meetings `cal|a` and `cal|b`, and an added copy of the
+    /// first, which is `extra:id-1`.
+    private func meetingBinder() -> BinderSession {
+        let day = BinderDay(
+            content: AgendaContent(
+                date: date, todoItems: [],
+                schedule: [
+                    ScheduleEntry(slot: 2, text: "A", meetingIndex: 0),
+                    ScheduleEntry(slot: 4, text: "B", meetingIndex: 1),
+                ],
+                meetings: ["A", "B"], meetingIDs: ["cal|a", "cal|b"], delegated: []),
+            theme: Theme())
+        let session = BinderSession(
+            day: day, plan: layout.plan(for: day), ink: [:], store: binderStore, layout: layout,
+            makeID: CountingIDs().next)
+        _ = session.addPage(after: Self.meetingA)
+        return session
+    }
+
+    private let copyKey = PageKey.extra("id-1")
+
+    @Test("sending a meeting uploads its own PDF and Doc, fires a meeting run and locks its pages")
+    func sendMeeting() async throws {
+        let meeting = meetingBinder()
+        meeting.setInk(Data("ink-a".utf8), on: Self.meetingA)
+        meeting.setInk(Data("ink-b".utf8), on: Self.meetingB)
+        #expect(controller.canSendMeeting(containing: Self.meetingA, of: meeting))
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        #expect(renderer.fileNames == ["2026-09-30-part-1.pdf"])
+        #expect(renderer.plans.first?.pages.map(\.key) == [Self.meetingA, copyKey])
+        #expect(renderer.inks == [[Data("ink-a".utf8), nil]])
+        #expect(removals.urls == [renderer.url])
+        #expect(
+            await drive.calls == [
+                .folderID(named: "Magenda"),
+                .uploadPDF(
+                    data: Data("pdf".utf8), name: "Magenda 2026-09-30 part 1.pdf",
+                    folderID: "folder-1", replacing: nil),
+                .createDoc(
+                    name: "Magenda 2026-09-30 part 1 notes", folderID: "folder-1",
+                    text: DocStatus.initialDocText),
+            ])
+        let payload = try fired(0)
+        #expect(payload["schema"] as? String == "magenda.end-of-day/2")
+        #expect(payload["scope"] as? String == "meeting")
+        #expect(payload["part"] as? Int == 1)
+        #expect(payload["step"] as? String == "notes")
+        #expect(meeting.isLocked(Self.meetingA))
+        #expect(meeting.isLocked(copyKey))
+        #expect(!meeting.isLocked(Self.meetingB))
+        #expect(
+            controller.message == "Sent to Claude. The notes appear in the meeting's Google Doc.")
+        let part = try #require(try store.handoff(partID(1)))
+        #expect(part.stage == .notesRequested)
+        #expect(controller.days == [part])
+        #expect(!controller.isBusy)
+        #expect(controller.sentKeys(on: date) == [Self.meetingA, copyKey])
+        #expect(controller.sentKeys(on: otherDay).isEmpty)
+        #expect(
+            controller.docURL(for: partID(1))?.absoluteString
+                == "https://docs.google.com/document/d/doc-1/edit")
+    }
+
+    @Test("the day's record lists before its meetings after Finish Day")
+    func dayListsBeforeParts() async throws {
+        let meeting = meetingBinder()
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        await controller.finish(meeting)
+        #expect(controller.days.map(\.id) == [dayID, partID(1)])
+    }
+
+    @Test("a second meeting becomes part 2")
+    func secondMeeting() async throws {
+        let meeting = meetingBinder()
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        await controller.sendMeeting(containing: Self.meetingB, of: meeting)
+        #expect(controller.days.map(\.id) == [partID(1), partID(2)])
+        #expect(try fired(1)["part"] as? Int == 2)
+        #expect(controller.sentKeys(on: date) == [Self.meetingA, copyKey, Self.meetingB])
+    }
+
+    @Test("a meeting can be sent from its page or from a copy of it, not from other pages")
+    func canSendMeeting() async throws {
+        let meeting = meetingBinder()
+        #expect(!controller.canSendMeeting(containing: .overview, of: meeting))
+        #expect(controller.canSendMeeting(containing: Self.meetingA, of: meeting))
+        #expect(controller.canSendMeeting(containing: copyKey, of: meeting))
+        await controller.sendMeeting(containing: .overview, of: meeting)
+        #expect(controller.message == nil)
+        #expect(controller.days.isEmpty)
+        await controller.sendMeeting(containing: copyKey, of: meeting)
+        #expect(!controller.canSendMeeting(containing: Self.meetingA, of: meeting))
+        #expect(controller.canSendMeeting(containing: Self.meetingB, of: meeting))
+        await controller.finish(meeting)
+        #expect(!controller.canSendMeeting(containing: Self.meetingB, of: meeting))
+    }
+
+    @Test("a meeting is not sent after the day, or twice")
+    func refusals() async throws {
+        let meeting = meetingBinder()
+        await controller.finish(meeting)
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        #expect(controller.message == "This day was already finished, so its meetings go with it.")
+        #expect(trigger.texts.count == 1)
+        controller.resetHandoff(for: date)
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        #expect(controller.message == "This meeting was already sent to Claude.")
+        #expect(trigger.texts.count == 2)
+    }
+
+    @Test("sending is skipped while another hand-off is running")
+    func sendMeetingBusy() async throws {
+        let rig = try HandoffControllerTests(drive: FakeDrive(holdingUpload: true))
+        let meeting = rig.meetingBinder()
+        let first = Task {
+            await rig.controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        }
+        await rig.drive.waitUntilBlocked()
+        await rig.controller.sendMeeting(containing: Self.meetingB, of: meeting)
+        #expect(!meeting.isLocked(Self.meetingB))
+        await rig.drive.release()
+        await first.value
+        #expect(rig.controller.days.count == 1)
+    }
+
+    @Test("a render failure sets its message, stores nothing and unlocks the pages")
+    func sendMeetingRenderFails() async throws {
+        let rig = try HandoffControllerTests(renderer: FakeRenderer(fails: true))
+        let meeting = rig.meetingBinder()
+        await rig.controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        #expect(rig.controller.message == "Couldn't create the PDF. Try again.")
+        #expect(rig.controller.days.isEmpty)
+        #expect(try rig.store.handoffs().isEmpty)
+        #expect(!meeting.isLocked(Self.meetingA))
+        #expect(!meeting.isLocked(rig.copyKey))
+    }
+
+    @Test("a save failure sets its message, stores no record and unlocks the pages")
+    func sendMeetingSaveFails() async throws {
+        let rig = try HandoffControllerTests(store: FailingHandoffStore(failing: [.savePDF]))
+        let meeting = rig.meetingBinder()
+        await rig.controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        #expect(
+            rig.controller.message
+                == "Couldn't save the meeting. Free some space on this device and try again.")
+        #expect(rig.controller.days.isEmpty)
+        #expect(try rig.store.handoffs().isEmpty)
+        #expect(!meeting.isLocked(Self.meetingA))
+        #expect(trigger.texts.isEmpty)
+    }
+
+    @Test("a fire failure keeps the part and the lock, and Try again sends it")
+    func sendMeetingFireFails() async throws {
+        let meeting = meetingBinder()
+        trigger.setError(RoutineTriggerError.network)
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        let part = try #require(controller.days.first)
+        #expect(part.stage == .uploaded)
+        #expect(part.lastError != nil)
+        #expect(controller.message == part.lastError)
+        #expect(meeting.isLocked(Self.meetingA))
+        trigger.setError(nil)
+        await controller.perform(.retry, on: part.id)
+        #expect(try #require(try store.handoff(part.id)).stage == .notesRequested)
+        #expect(try fired(1)["part"] as? Int == 1)
+        #expect(await uploads().count == 1)
+    }
+
+    @Test("Finish Day marks the pages of a sent meeting and reuses only the day's Drive IDs")
+    func finishAfterMeeting() async throws {
+        let meeting = meetingBinder()
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        var queued = DayHandoff(
+            date: date, checksum: "sha256:" + String(repeating: "ab", count: 32),
+            pages: [], tasks: [], delegated: [])
+        queued.stage = .uploaded
+        queued.driveFileID = "day-file"
+        queued.docID = "day-doc"
+        try store.save(queued)
+        controller.start()
+        await controller.finish(meeting)
+        let payload = try fired(1)
+        #expect(payload["scope"] as? String == "day")
+        // The day replaces its own file and keeps its own Doc; the part's IDs are never used.
+        let uploaded = await uploads()
+        #expect(uploaded.count == 2)
+        guard case .uploadPDF(_, "Magenda 2026-09-30.pdf", _, let replacing)? = uploaded.last
+        else {
+            Issue.record("the day's PDF was not uploaded")
+            return
+        }
+        #expect(replacing == "day-file")
+        #expect(payload["docID"] as? String == "day-doc")
+        let pages = try #require(payload["pages"] as? [[String: Any]])
+        let marked = pages.compactMap { page in
+            (page["earlierPart"] as? Int).map { (page["key"] as? String ?? "", $0) }
+        }
+        #expect(marked.map(\.0) == ["meeting:cal|a", "extra:id-1"])
+        #expect(marked.map(\.1) == [1, 1])
+        #expect(pages.filter { $0["earlierPart"] == nil }.count == pages.count - 2)
+    }
+
+    @Test("approving a part's notes fires for the part only")
+    func approveSentMeeting() async throws {
+        let meeting = meetingBinder()
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        await drive.setExportedText(DocStatus.initialDocText)
+        var part = try #require(try store.handoff(partID(1)))
+        part.docStatus = .notesReady
+        try store.save(part)
+        controller.start()
+        await controller.perform(.approve(.approveNotes), on: partID(1))
+        let payload = try fired(1)
+        #expect(payload["step"] as? String == "approve-notes")
+        #expect(payload["part"] as? Int == 1)
+        #expect(try store.handoff(dayID) == nil)
+        #expect(controller.days.map(\.id) == [partID(1)])
+    }
+
+    @Test("resetting unlocks the binder and makes the meeting sendable again")
+    func resetUnlocks() async throws {
+        let meeting = meetingBinder()
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        await controller.finish(meeting)
+        controller.resetHandoff(for: date, unlocking: meeting)
+        #expect(controller.days.isEmpty)
+        #expect(try store.handoffs().isEmpty)
+        #expect(!meeting.isLocked(Self.meetingA))
+        #expect(controller.canSendMeeting(containing: Self.meetingA, of: meeting))
+        #expect(controller.message == "This day can be finished again.")
+    }
+
+    @Test("resetting without a binder, or for another date's binder, leaves the pages locked")
+    func resetWithoutBinder() async throws {
+        let meeting = meetingBinder()
+        await controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        controller.resetHandoff(for: date)
+        #expect(controller.days.isEmpty)
+        #expect(meeting.isLocked(Self.meetingA))
+        meeting.lock([Self.meetingB])
+        controller.resetHandoff(for: otherDay, unlocking: meeting)
+        #expect(meeting.isLocked(Self.meetingB))
+    }
+
+    @Test("with no record but locked pages, resetting only unlocks them")
+    func resetStuckLock() async throws {
+        let meeting = meetingBinder()
+        meeting.lock([Self.meetingA])
+        controller.resetHandoff(for: date, unlocking: meeting)
+        #expect(!meeting.isLocked(Self.meetingA))
+        #expect(controller.message == "This day can be finished again.")
+        controller.resetHandoff(for: date, unlocking: meeting)
+        #expect(controller.days.isEmpty)
+    }
+
+    @Test("a failing delete keeps the pages locked")
+    func resetDeleteFails() async throws {
+        let rig = try HandoffControllerTests(store: FailingHandoffStore(failing: [.deleteHandoff]))
+        let meeting = rig.meetingBinder()
+        await rig.controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        rig.controller.resetHandoff(for: rig.date, unlocking: meeting)
+        #expect(rig.controller.message == "Couldn't reset this day. Try again.")
+        #expect(meeting.isLocked(Self.meetingA))
+    }
 }
 
 extension Array {

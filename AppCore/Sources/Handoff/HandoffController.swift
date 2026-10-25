@@ -73,6 +73,23 @@ public final class HandoffController {
         days.contains { $0.date == date }
     }
 
+    /// The pages of `date` already sent in a meeting.
+    public func sentKeys(on date: CalendarDay) -> Set<PageKey> {
+        days.filter { $0.date == date && $0.part != nil }
+            .reduce(into: Set<PageKey>()) { $0.formUnion($1.pageKeys) }
+    }
+
+    /// Whether the meeting that page `key` of `binder` belongs to can be sent now: `key` has a
+    /// meeting, none of its pages is sent or locked, and the date has no day record.
+    public func canSendMeeting(containing key: PageKey, of binder: BinderSession) -> Bool {
+        guard stored(Self.dayID(binder.date)) == nil,
+            let found = DayHandoff.meetingPages(
+                containing: key, day: binder.day, plan: binder.plan)
+        else { return false }
+        let sent = sentKeys(on: binder.date)
+        return !found.keys.contains { sent.contains($0) || binder.isLocked($0) }
+    }
+
     /// The link to the Google Doc of `id`, or nil when it has none.
     public func docURL(for id: HandoffID) -> URL? {
         stored(id)?.docID.map {
@@ -99,8 +116,14 @@ public final class HandoffController {
             return
         }
         let digest = hasher.sha256(pdf).map { String(format: "%02x", $0) }.joined()
+        var earlierParts: [PageKey: Int] = [:]
+        for record in days where record.date == date {
+            guard let number = record.part?.number else { continue }
+            for key in record.pageKeys { earlierParts[key] = number }
+        }
         var handoff = DayHandoff(
-            date: date, checksum: "sha256:" + digest, day: binder.day, plan: binder.plan)
+            date: date, checksum: "sha256:" + digest, day: binder.day, plan: binder.plan,
+            earlierParts: earlierParts)
         let earlier = stored(Self.dayID(date))
         handoff.driveFileID = earlier?.driveFileID
         handoff.docID = earlier?.docID
@@ -118,6 +141,61 @@ public final class HandoffController {
         message =
             result?.stage == .notesRequested
             ? "Sent to Claude. The notes appear in the day's Google Doc." : result?.lastError
+    }
+
+    /// Renders the meeting's pages with their ink to a PDF, saves it as the next part, locks the
+    /// pages, uploads them and starts the routine's `notes` step for them.
+    public func sendMeeting(containing key: PageKey, of binder: BinderSession) async {
+        guard !isBusy else { return }
+        isBusy = true
+        defer { isBusy = false }
+        let date = binder.date
+        guard stored(Self.dayID(date)) == nil else {
+            message = "This day was already finished, so its meetings go with it."
+            return
+        }
+        guard
+            let found = DayHandoff.meetingPages(
+                containing: key, day: binder.day, plan: binder.plan)
+        else { return }
+        let sent = sentKeys(on: date)
+        guard !found.keys.contains(where: { sent.contains($0) || binder.isLocked($0) }) else {
+            message = "This meeting was already sent to Claude."
+            return
+        }
+        let number = (days.filter { $0.date == date }.compactMap { $0.part?.number }.max() ?? 0) + 1
+        // Locked at once, so nothing written during the awaits below is left out of the PDF.
+        binder.lock(found.keys)
+        let subset = binder.plan.subset(Set(found.keys))
+        let pdf: Data
+        do {
+            pdf = try await renderedPDF(
+                of: subset, ink: subset.pages.map { binder.ink[$0.key] },
+                fileName: "\(date.isoString)-part-\(number).pdf")
+        } catch {
+            binder.unlock(found.keys)
+            message = "Couldn't create the PDF. Try again."
+            return
+        }
+        let digest = hasher.sha256(pdf).map { String(format: "%02x", $0) }.joined()
+        let handoff = DayHandoff(
+            date: date, part: number, meeting: found.meeting, checksum: "sha256:" + digest,
+            day: binder.day, plan: subset)
+        do {
+            try store.savePDF(pdf, for: handoff.id)
+            try store.save(handoff)
+        } catch {
+            binder.unlock(found.keys)
+            message =
+                "Couldn't save the meeting. Free some space on this device and try again."
+            return
+        }
+        remember(handoff)
+        await runPipeline(handoff)
+        let result = stored(handoff.id)
+        message =
+            result?.stage == .notesRequested
+            ? "Sent to Claude. The notes appear in the meeting's Google Doc." : result?.lastError
     }
 
     /// Uploads and sends the days still waiting, reads each Doc's status, and deletes the files
@@ -162,16 +240,21 @@ public final class HandoffController {
 
     /// Forgets the hand-offs of `date`, the day's and its meetings', and deletes their stored PDFs,
     /// so the day can be finished again as if it had never been sent. What is already in Drive
-    /// stays, and finishing again creates a new Doc.
-    public func resetHandoff(for date: CalendarDay) {
-        guard !isBusy, hasHandoff(on: date) else { return }
-        do {
-            try store.deleteHandoff(for: date)
-        } catch {
-            message = "Couldn't reset this day. Try again."
-            return
+    /// stays, and finishing again creates a new Doc. When `binder` is for `date`, its pages are
+    /// unlocked too; a date with no record but locked pages only gets that.
+    public func resetHandoff(for date: CalendarDay, unlocking binder: BinderSession? = nil) {
+        let pagesToUnlock = binder.map { $0.date == date && !$0.day.locked.isEmpty } ?? false
+        guard !isBusy, hasHandoff(on: date) || pagesToUnlock else { return }
+        if hasHandoff(on: date) {
+            do {
+                try store.deleteHandoff(for: date)
+            } catch {
+                message = "Couldn't reset this day. Try again."
+                return
+            }
+            days.removeAll { $0.date == date }
         }
-        days.removeAll { $0.date == date }
+        if binder?.date == date { binder?.unlockAll() }
         message = "This day can be finished again."
     }
 
@@ -232,9 +315,16 @@ public final class HandoffController {
     /// Writes the binder's pages with their handwriting to a file named for the finished day (not
     /// the preview's), reads it and deletes it.
     private func renderedPDF(of binder: BinderSession) async throws -> Data {
-        let url = try await renderer.render(
-            binder.plan, ink: binder.plan.pages.map { binder.ink[$0.key] },
+        try await renderedPDF(
+            of: binder.plan, ink: binder.plan.pages.map { binder.ink[$0.key] },
             fileName: "\(binder.date.isoString)-finished.pdf")
+    }
+
+    /// Renders `plan` with `ink` to a file named `fileName`, reads it and deletes it.
+    private func renderedPDF(of plan: RenderPlan, ink: [Data?], fileName: String) async throws
+        -> Data
+    {
+        let url = try await renderer.render(plan, ink: ink, fileName: fileName)
         defer { removeFile(url) }
         return try readFile(url)
     }
