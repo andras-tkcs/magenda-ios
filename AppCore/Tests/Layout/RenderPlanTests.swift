@@ -171,7 +171,7 @@ struct RenderPlanTests {
     @Test("A subset drops links to pages left out and to targets out of range")
     func subsetDropsLinks() {
         let subset = subsetPlan().subset([.overview, .notes])
-        #expect(subset.pages[0].operations == [.fill(rect, .white)])
+        #expect(subset.pages[0].operations == [.fill(rect, .white), .link(rect, targetPage: 1)])
         #expect(subset.pages[1].operations == [.fill(rect, .white)])
     }
 
