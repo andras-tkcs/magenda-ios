@@ -207,6 +207,24 @@ struct DayHandoffTests {
         #expect(handoff.phase.action == row.action)
     }
 
+    @Test("The Drive folder round-trips, is optional on disk and is in the payload only when set")
+    func folderID() throws {
+        var handoff = try Self.handoff()
+        #expect(handoff.folderID == nil)
+        var object = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(handoff)) as? [String: Any])
+        #expect(object["folderID"] == nil)
+        object["pages"] = []
+        let old = try JSONSerialization.data(withJSONObject: object)
+        #expect(try JSONDecoder().decode(DayHandoff.self, from: old).folderID == nil)
+        #expect(!handoff.payload(step: .notes).contains("folderID"))
+
+        handoff.folderID = "folder-9"
+        let data = try JSONEncoder().encode(handoff)
+        #expect(try JSONDecoder().decode(DayHandoff.self, from: data).folderID == "folder-9")
+        #expect(handoff.payload(step: .notes).contains(#""folderID":"folder-9""#))
+    }
+
     @Test("The payload decodes back to the documented keys, with nil fields left out")
     func payloadKeys() throws {
         var handoff = try Self.handoff()

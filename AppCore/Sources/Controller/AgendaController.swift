@@ -261,7 +261,11 @@ public final class AgendaController {
         change(&after)
         settings = after
         settingsStore.save(after)
-        invalidateRendered()
+        var drawnBefore = before
+        drawnBefore.driveFolderName = after.driveFolderName
+        if after != drawnBefore {
+            invalidateRendered()
+        }
         let readsDifferently =
             after.calendarIDs != before.calendarIDs
             || after.todoListTitle != before.todoListTitle

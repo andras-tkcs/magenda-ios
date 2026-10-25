@@ -201,6 +201,8 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     public var driveFileID: String?
     /// The day's Google Doc.
     public var docID: String?
+    /// The Drive folder holding the PDF and the Doc; set by the first upload.
+    public var folderID: String?
     /// How far the hand-off has come.
     public var stage: HandoffStage
     /// The Doc's status as last read; `.waitingForNotes` until read.
@@ -217,7 +219,8 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     public let part: HandoffPart?
 
     private enum CodingKeys: String, CodingKey {
-        case version, date, checksum, pages, tasks, delegated, driveFileID, docID, stage, docStatus
+        case version, date, checksum, pages, tasks, delegated, driveFileID, docID, folderID, stage
+        case docStatus
         case closedOn, purged, lastError, sessionURL, part
     }
 
@@ -323,6 +326,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         delegated = try container.decode([HandoffDelegated].self, forKey: .delegated)
         driveFileID = try container.decodeIfPresent(String.self, forKey: .driveFileID)
         docID = try container.decodeIfPresent(String.self, forKey: .docID)
+        folderID = try container.decodeIfPresent(String.self, forKey: .folderID)
         stage = try container.decode(HandoffStage.self, forKey: .stage)
         docStatus = try container.decode(DocStatus.self, forKey: .docStatus)
         closedOn = try container.decodeIfPresent(CalendarDay.self, forKey: .closedOn)
@@ -386,6 +390,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         let date: CalendarDay
         let checksum: String
         let driveFileID: String?
+        let folderID: String?
         let docID: String?
         let pageCount: Int
         var pages: [HandoffPage]
@@ -398,6 +403,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
             date = handoff.date
             checksum = handoff.checksum
             driveFileID = handoff.driveFileID
+            folderID = handoff.folderID
             docID = handoff.docID
             pageCount = handoff.pages.count
             pages = handoff.pages

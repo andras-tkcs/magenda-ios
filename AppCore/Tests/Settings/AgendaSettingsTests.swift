@@ -19,6 +19,7 @@ struct AgendaSettingsTests {
         #expect(settings.todoListTitle == "Claude")
         #expect(settings.delegatedListTitle == "Claude Delegations")
         #expect(settings.rules == BinderRules.default)
+        #expect(settings.driveFolderName == "Magenda")
     }
 
     @Test("The default rules")
@@ -43,12 +44,20 @@ struct AgendaSettingsTests {
         settings.calendarIDs = ["a@example.com", "b@example.com"]
         settings.todoListTitle = "Mine"
         settings.delegatedListTitle = ""
+        settings.driveFolderName = "Work notes"
         settings.rules = BinderRules(
             personalBlocks: ["Gym"], titlePrefixes: ["RE:"], outOfOfficeWords: ["Leave"],
             shortNames: ["r:abc": "Weekly sync"], personAliases: ["peter": "peter@example.com"],
             lookAheadDays: 3)
         let data = try JSONEncoder().encode(settings)
         #expect(try JSONDecoder().decode(AgendaSettings.self, from: data) == settings)
+    }
+
+    @Test("A missing or invalid Drive folder name decodes as Magenda")
+    func driveFolderNameDecoding() throws {
+        #expect(try decode("{}").driveFolderName == "Magenda")
+        #expect(try decode(#"{"driveFolderName":"Work notes"}"#).driveFolderName == "Work notes")
+        #expect(try decode(#"{"driveFolderName":"a/b"}"#).driveFolderName == "Magenda")
     }
 
     @Test("An unknown font pack decodes as Outfit")
