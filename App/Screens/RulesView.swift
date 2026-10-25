@@ -47,6 +47,8 @@ struct RulesView: View {
         static let summarySkillError = "summarySkillError"
         static let lookAheadStepper = "lookAheadStepper"
         static let resetRulesButton = "resetRulesButton"
+        static let editButton = "rulesEditButton"
+        static let deleteAction = "rulesDeleteAction"
 
         static func row(_ section: String, _ n: Int) -> String { "rulesRow.\(section).\(n)" }
         static func add(_ section: ListSection) -> String { "rulesAdd.\(section.rawValue)" }
@@ -95,6 +97,11 @@ struct RulesView: View {
         }
         .navigationTitle("Binder rules")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                EditButton().accessibilityIdentifier(ID.editButton)
+            }
+        }
     }
 
     // MARK: String lists
@@ -104,15 +111,12 @@ struct RulesView: View {
             let items = rules[keyPath: section.keyPath]
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 Text(item)
+                    .contextMenu {
+                        deleteMenu { delete(IndexSet(integer: index), from: section) }
+                    }
                     .accessibilityIdentifier(ID.row(section.rawValue, index))
             }
-            .onDelete { offsets in
-                Task {
-                    await controller.updateSettings {
-                        $0.rules[keyPath: section.keyPath].remove(atOffsets: offsets)
-                    }
-                }
-            }
+            .onDelete { delete($0, from: section) }
             TextField("Add…", text: draft(section))
                 .submitLabel(.done)
                 .onSubmit { add(section) }
@@ -122,6 +126,20 @@ struct RulesView: View {
         } footer: {
             Text(section.footnote)
         }
+    }
+
+    private func delete(_ offsets: IndexSet, from section: ListSection) {
+        Task {
+            await controller.updateSettings {
+                $0.rules[keyPath: section.keyPath].remove(atOffsets: offsets)
+            }
+        }
+    }
+
+    /// A long-press menu with Delete, the same as swiping the row away.
+    private func deleteMenu(_ delete: @escaping () -> Void) -> some View {
+        Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+            .accessibilityIdentifier(ID.deleteAction)
     }
 
     private func draft(_ section: ListSection) -> Binding<String> {
@@ -165,20 +183,25 @@ struct RulesView: View {
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
+                .contextMenu {
+                    deleteMenu { deleteShortNames(IndexSet(integer: index), in: entries) }
+                }
                 .accessibilityIdentifier(ID.row("shortNames", index))
             }
-            .onDelete { offsets in
-                let keys = offsets.map { entries[$0].key }
-                Task {
-                    await controller.updateSettings { settings in
-                        for key in keys { settings.rules.shortNames[key] = nil }
-                    }
-                }
-            }
+            .onDelete { deleteShortNames($0, in: entries) }
         } header: {
             Text("Short meeting names")
         } footer: {
             Text("Set from a meeting's Edit sheet.")
+        }
+    }
+
+    private func deleteShortNames(_ offsets: IndexSet, in entries: [(key: String, name: String)]) {
+        let keys = offsets.map { entries[$0].key }
+        Task {
+            await controller.updateSettings { settings in
+                for key in keys { settings.rules.shortNames[key] = nil }
+            }
         }
     }
 
@@ -199,16 +222,12 @@ struct RulesView: View {
         return Section {
             ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                 Text("\(entry.title) → \(entry.skill)")
+                    .contextMenu {
+                        deleteMenu { deleteSummaries(IndexSet(integer: index), in: entries) }
+                    }
                     .accessibilityIdentifier(ID.row("summaries", index))
             }
-            .onDelete { offsets in
-                let titles = offsets.map { entries[$0].title }
-                Task {
-                    await controller.updateSettings { settings in
-                        for title in titles { settings.rules.summarySkills[title] = nil }
-                    }
-                }
-            }
+            .onDelete { deleteSummaries($0, in: entries) }
             TextField("Meeting title", text: $summaryTitle)
                 .accessibilityIdentifier(ID.summaryTitleField)
             TextField("Summary skill", text: $summarySkill)
@@ -229,6 +248,17 @@ struct RulesView: View {
             Text(
                 "A meeting whose title matches gets this summary skill printed on its page. For a one-off meeting, write the skill on the page's Summary line."
             )
+        }
+    }
+
+    private func deleteSummaries(
+        _ offsets: IndexSet, in entries: [(title: String, skill: String)]
+    ) {
+        let titles = offsets.map { entries[$0].title }
+        Task {
+            await controller.updateSettings { settings in
+                for title in titles { settings.rules.summarySkills[title] = nil }
+            }
         }
     }
 
@@ -263,16 +293,12 @@ struct RulesView: View {
         return Section {
             ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                 Text("\(entry.key) → \(entry.email)")
+                    .contextMenu {
+                        deleteMenu { deletePeople(IndexSet(integer: index), in: entries) }
+                    }
                     .accessibilityIdentifier(ID.row("people", index))
             }
-            .onDelete { offsets in
-                let keys = offsets.map { entries[$0].key }
-                Task {
-                    await controller.updateSettings { settings in
-                        for key in keys { settings.rules.personAliases[key] = nil }
-                    }
-                }
-            }
+            .onDelete { deletePeople($0, in: entries) }
             TextField("Name in tasks", text: $personName)
                 .accessibilityIdentifier(ID.peopleName)
             TextField("Email", text: $personEmail)
@@ -288,6 +314,15 @@ struct RulesView: View {
             Text(
                 "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs."
             )
+        }
+    }
+
+    private func deletePeople(_ offsets: IndexSet, in entries: [(key: String, email: String)]) {
+        let keys = offsets.map { entries[$0].key }
+        Task {
+            await controller.updateSettings { settings in
+                for key in keys { settings.rules.personAliases[key] = nil }
+            }
         }
     }
 

@@ -1,8 +1,8 @@
 // The binder-rules editor, driven through the accessibility tree against fixtures.
 //
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `RulesView.ID`,
-// `SettingsView.ID` and `RowID`, never by their visible text, except for the swipe action and the
-// navigation back button, which have none.
+// `SettingsView.ID` and `RowID`, never by their visible text, except for the swipe action, the
+// context-menu Delete and the navigation back button, which have none.
 
 import XCTest
 
@@ -189,6 +189,51 @@ final class RulesUITests: XCTestCase {
         let reason = element(app, "eventReason.3")
         XCTAssertTrue(reason.waitForExistence(timeout: 30), "eventReason.3 never appeared")
         waitUntil(reason, "NOT (label CONTAINS %@)", "Personal block")
+    }
+
+    /// Guards the long-press Delete on a rules row, which lets a default be removed without
+    /// discovering the swipe.
+    @MainActor
+    func testLongPressDeletesADefaultOutOfOfficeWord() {
+        let app = launch()
+        openRules(app)
+
+        let row = element(app, "rulesRow.outOfOfficeWords.3")
+        reveal(app, row)
+        XCTAssertEqual(row.label, "PTO")
+        let delete = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ OR label == %@", "rulesDeleteAction", "Delete")
+        ).firstMatch
+        var presses = 0
+        while !delete.exists && presses < 3 {
+            row.press(forDuration: 1.2)
+            presses += 1
+            _ = delete.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(delete.exists, "the Delete menu never appeared after \(presses) presses")
+        delete.tap()
+
+        let gone = XCTWaiter().wait(
+            for: [
+                XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "exists == false"), object: row)
+            ], timeout: 30)
+        XCTAssertEqual(gone, .completed, "PTO was never deleted")
+        XCTAssertEqual(element(app, "rulesRow.outOfOfficeWords.2").label, "Vacation")
+    }
+
+    /// Guards the Edit button on the rules screen, which shows the delete controls without a swipe.
+    @MainActor
+    func testEditTogglesTheRulesIntoEditing() {
+        let app = launch()
+        openRules(app)
+
+        let button = app.buttons["rulesEditButton"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30), "the Edit button never appeared")
+        button.tap()
+        waitUntil(button, "label == %@", "Done")
+        button.tap()
+        waitUntil(button, "label == %@", "Edit")
     }
 
     @MainActor
