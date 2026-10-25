@@ -187,12 +187,15 @@ struct AgendaDraftTests {
         var value = draft(tasks: [task("t1", "Call"), task("t2", "Book", included: false)])
         value.setIncluded(false, forDelegated: "d2")
         let content = value.content()
-        #expect(content.todoItems == [TodoItem(text: "Call", notes: "Some notes", due: "09/30")])
+        #expect(
+            content.todoItems == [
+                TodoItem(text: "Call", notes: "Some notes", due: "09/30", taskID: "t1")
+            ])
         #expect(
             content.delegated == [
                 DelegatedItem(
                     text: "Hire", owner: "Anna", cadence: .weekly, marked: true,
-                    status: ["One", "Two"])
+                    status: ["One", "Two"], taskID: "d1")
             ])
     }
 
@@ -203,5 +206,41 @@ struct AgendaDraftTests {
         let content = value.content()
         #expect(content.schedule.isEmpty)
         #expect(content.meetings.isEmpty)
+    }
+
+    @Test("Content carries task IDs and each meeting's summary skill")
+    func contentIDsAndSkills() {
+        var first = event("a", "Sync", slot: 2)
+        first.summarySkill = "s1"
+        let value = draft(
+            events: [first, event("b", "Other", slot: 4)], tasks: [task("t1", "Call")])
+        let content = value.content()
+        #expect(content.todoItems.map(\.taskID) == ["t1"])
+        #expect(content.delegated.map(\.taskID) == ["d1", "d2"])
+        #expect(content.meetingSummarySkills == ["s1", ""])
+    }
+
+    @Test("A short name that maps to a skill gives the events with that key the skill")
+    func shortNameSkill() {
+        var value = AgendaDraft(
+            date: day, notices: [], titlePrefixes: [],
+            events: [event("a", "Team sync", slot: 2, key: "k"), event("b", "Other", slot: 4)],
+            tasks: [], delegated: [], summarySkills: ["Sync": "weekly"])
+        value.applyShortName("sync", key: "k")
+        #expect(value.events.map(\.summarySkill) == ["weekly", nil])
+        value.applyShortName("", key: "k")
+        #expect(value.events.map(\.summarySkill) == [nil, nil])
+    }
+
+    @Test("A title that maps to a skill gives the event the skill")
+    func titleSkill() {
+        var value = AgendaDraft(
+            date: day, notices: [], titlePrefixes: [],
+            events: [event("a", "Team sync", slot: 2)], tasks: [], delegated: [],
+            summarySkills: ["Sync": "weekly"])
+        value.setTitle("Sync", forEvent: "primary|a")
+        #expect(value.events[0].summarySkill == "weekly")
+        value.setTitle("Elsewhere", forEvent: "primary|a")
+        #expect(value.events[0].summarySkill == nil)
     }
 }

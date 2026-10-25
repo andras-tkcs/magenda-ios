@@ -518,6 +518,17 @@ struct AgendaControllerTests {
         #expect(context.controller.message == GoogleAPIError.signedOut.userMessage)
     }
 
+    @Test("Missing scopes sign the person out with the scope message")
+    func loadMissingScopes() async throws {
+        let context = try make(data: FailingDataSource(error: GoogleAPIError.missingScopes))
+        await context.controller.start()
+        #expect(context.controller.status == .signedOut)
+        #expect(
+            context.controller.message
+                == "Magenda needs your calendars, your tasks and the files it creates in Google Drive. Sign in again and allow all three."
+        )
+    }
+
     @Test("other errors fail the load with a message")
     func loadFailed() async throws {
         let network = try make(data: FailingDataSource(error: GoogleAPIError.network))

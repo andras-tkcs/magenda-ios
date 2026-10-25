@@ -8,18 +8,18 @@ import Testing
 private let clientID = "123-abc.apps.googleusercontent.com"
 private let otherClientID = "456-xyz.apps.googleusercontent.com"
 private let redirectScheme = "com.googleusercontent.apps.123-abc"
-private let bothScopes =
-    "https://www.googleapis.com/auth/calendar.readonly "
-    + "https://www.googleapis.com/auth/tasks.readonly"
+private let allScopes = GoogleOAuthConfiguration.scopes.joined(separator: " ")
 private let clock = Date(timeIntervalSince1970: 1_800_000_000)
 private let apiURL = URL(fileURLWithPath: "/").appending(path: "calendar")
 private let tokenURL = "https://oauth2.googleapis.com/token"
 private let revokeURL = "https://oauth2.googleapis.com/revoke"
 
 private let freshTokens = OAuthTokens(
-    accessToken: "old-access", refreshToken: "refresh-1", expiresAt: clock.addingTimeInterval(3600))
+    accessToken: "old-access", refreshToken: "refresh-1", expiresAt: clock.addingTimeInterval(3600),
+    scopes: GoogleOAuthConfiguration.scopes)
 private let refreshJSON =
-    #"{"access_token":"new-access","expires_in":3600,"token_type":"Bearer"}"#
+    #"{"access_token":"new-access","expires_in":3600,"token_type":"Bearer","scope":""#
+    + allScopes + #""}"#
 private let okJSON = #"{"ok":true}"#
 
 private struct Unrelated: Error {}
@@ -75,7 +75,7 @@ private func apiRequest() -> HTTPRequest {
 private func expiring(in seconds: TimeInterval) -> OAuthTokens {
     OAuthTokens(
         accessToken: "old-access", refreshToken: "refresh-1",
-        expiresAt: clock.addingTimeInterval(seconds))
+        expiresAt: clock.addingTimeInterval(seconds), scopes: GoogleOAuthConfiguration.scopes)
 }
 
 private func bearers(_ http: FakeHTTPClient) -> [String?] {
@@ -149,7 +149,59 @@ struct GoogleSessionSendTests {
             store.tokens
                 == OAuthTokens(
                     accessToken: "new-access", refreshToken: "refresh-1",
-                    expiresAt: clock.addingTimeInterval(3600)))
+                    expiresAt: clock.addingTimeInterval(3600),
+                    scopes: GoogleOAuthConfiguration.scopes))
+    }
+
+    @Test("Tokens without recorded scopes are refreshed before the request")
+    func refreshesWithoutScopes() async throws {
+        let http = FakeHTTPClient()
+        http.enqueue(status: 200, json: refreshJSON)
+        http.enqueue(status: 200, json: okJSON)
+        let legacy = OAuthTokens(
+            accessToken: "old-access", refreshToken: "refresh-1",
+            expiresAt: clock.addingTimeInterval(3600))
+        let store = FakeTokenStore(legacy)
+        let google = try session(http: http, store: store)
+        _ = try await google.send(apiRequest())
+        #expect(http.requests.map(\.url.absoluteString) == [tokenURL, apiURL.absoluteString])
+        #expect(bearers(http) == ["Bearer new-access"])
+        #expect(store.tokens?.scopes == GoogleOAuthConfiguration.scopes)
+    }
+
+    @Test("A refresh that returns the old two-scope grant signs out with missing scopes")
+    func refreshReturnsOldGrant() async throws {
+        let http = FakeHTTPClient()
+        let old = GoogleOAuthConfiguration.scopes.dropLast().joined(separator: " ")
+        http.enqueue(
+            status: 200,
+            json: #"{"access_token":"a","expires_in":3600,"token_type":"Bearer","scope":""#
+                + old + #""}"#)
+        let legacy = OAuthTokens(
+            accessToken: "old-access", refreshToken: "refresh-1",
+            expiresAt: clock.addingTimeInterval(3600))
+        let store = FakeTokenStore(legacy)
+        let google = try session(http: http, store: store)
+        await #expect(throws: GoogleAPIError.missingScopes) { try await google.send(apiRequest()) }
+        #expect(http.requests.count == 1)
+        #expect(store.tokens == nil)
+    }
+
+    @Test("Tokens with every scope are not refreshed early")
+    func noEarlyRefreshWithScopes() async throws {
+        let http = FakeHTTPClient()
+        http.enqueue(status: 200, json: okJSON)
+        let google = try session(http: http, store: FakeTokenStore(expiring(in: 3600)))
+        _ = try await google.send(apiRequest())
+        #expect(http.requests.map(\.url.absoluteString) == [apiURL.absoluteString])
+    }
+
+    @Test("A 404 is not found")
+    func notFound() async throws {
+        let http = FakeHTTPClient()
+        http.enqueue(status: 404, json: "{}")
+        let google = try session(http: http, store: FakeTokenStore(freshTokens))
+        await #expect(throws: GoogleAPIError.notFound) { try await google.send(apiRequest()) }
     }
 
     @Test("A token valid for more than 60 seconds is used as it is")
@@ -299,8 +351,8 @@ struct GoogleSessionSendTests {
     @Test(
         "A non-2xx answer maps to its error",
         arguments: [
-            (403, GoogleAPIError.forbidden), (429, .rateLimited), (500, .unexpectedResponse),
-            (302, .unexpectedResponse),
+            (403, GoogleAPIError.forbidden), (404, .notFound), (429, .rateLimited),
+            (500, .unexpectedResponse), (302, .unexpectedResponse),
         ])
     func statusMapping(status: Int, error: GoogleAPIError) async throws {
         let http = FakeHTTPClient()
@@ -332,7 +384,7 @@ struct GoogleSessionSendTests {
 struct GoogleSessionSignInTests {
     private let signInJSON = """
         {"access_token":"access-1","expires_in":3599,"token_type":"Bearer",
-         "refresh_token":"refresh-1","scope":"\(bothScopes)"}
+         "refresh_token":"refresh-1","scope":"\(allScopes)"}
         """
 
     @Test("Sign-in opens the consent URL, exchanges the code and stores the tokens")
@@ -366,7 +418,8 @@ struct GoogleSessionSignInTests {
             store.tokens
                 == OAuthTokens(
                     accessToken: "access-1", refreshToken: "refresh-1",
-                    expiresAt: clock.addingTimeInterval(3599)))
+                    expiresAt: clock.addingTimeInterval(3599),
+                    scopes: GoogleOAuthConfiguration.scopes))
         #expect(await google.isSignedIn())
     }
 

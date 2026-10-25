@@ -4,6 +4,11 @@
 
 - [`../README.md`](../README.md) — what the app does, and how to build and run it.
 
+## Reference
+
+- [`end-of-day-handoff.md`](end-of-day-handoff.md) — what Magenda sends when a day is finished, and
+  what the end-of-day Claude routine must do with it.
+
 ## Contributing
 
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — branches, pull requests, plans and ADRs.

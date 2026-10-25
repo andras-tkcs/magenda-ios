@@ -69,6 +69,38 @@ the day fresh. Once a day is started, it opens without a network connection. The
 PDF preview (ADR 0020, ADR 0021, ADR 0024 to ADR 0026). The saved binder and the shared PDFs can't
 be read while the device is locked (ADR 0022).
 
+## Finishing a day
+
+On an iPad, **Finish Day** in the binder's toolbar sends the day to Google Drive and starts your
+end-of-day Claude routine (ADR 0027, ADR 0028). Magenda renders the day once, with the printed
+text kept as text and your handwriting on top, and uploads it as `Magenda <date>.pdf` to a
+`Magenda` folder in your Drive. Next to it, it creates a Google Doc named `Magenda <date> notes`
+whose first line is the day's status. Magenda sees only the files it created. A day finished
+without a connection waits and is sent the next time the app becomes active; finishing a day again
+before it was sent replaces its PDF.
+
+To send days to Claude, open Settings → End-of-day routine and enter the fire URL and token of the
+routine's API trigger (from claude.ai/code/routines). The token stays in the device's Keychain and
+is sent only to that routine; Forget routine deletes it. Without a routine the day is still
+uploaded, and the Review list offers Try again once a routine is saved. The routine itself, and
+what it must do with the day, are described in
+[`docs/end-of-day-handoff.md`](docs/end-of-day-handoff.md).
+
+The **Review** button in the agenda's toolbar opens the list of finished days (ADR 0029). Each row
+shows the day's state, an error if the last step failed, **Open Doc** to read and edit the notes in
+Google Docs, and the one button the state calls for: Try again (not yet uploaded or sent), Approve
+notes (the notes are ready) or Approve (the summary is ready). Each approval starts the routine's
+next step, which changes the Doc's first line (`Status: …`); Magenda reads only that line.
+
+A meeting that needs a summary names the Claude skill that writes it (ADR 0031). Map a meeting
+title to a skill under Settings → Binder rules → Meeting summaries, or write the skill name by hand
+on the ruled **Summary:** line that every meeting page prints under its title. A mapped skill is
+printed on the line.
+
+Five days after Magenda first reads `Status: Closed`, it deletes that day's handwriting and its
+stored PDF from the device (ADR 0030). A small record of the day stays, so the day can't be sent
+twice. The PDF and the Doc in Drive are not touched.
+
 ## Delegated tasks
 
 The delegated page reads a second Google Tasks list ("Claude Delegations" by default; "None" in
@@ -95,13 +127,15 @@ The app ships without a Google client. You create your own and enter its client 
 repository never holds one (ADR 0013).
 
 1. In the [Google Cloud console](https://console.cloud.google.com/), create a project.
-2. Under **APIs & Services → Library**, enable the **Google Calendar API** and the **Google Tasks
-   API**.
+2. Under **APIs & Services → Library**, enable the **Google Calendar API**, the **Google Tasks
+   API** and the **Google Drive API**.
 3. Under **Google Auth platform** (OAuth consent screen), configure the app: choose **Internal** if
    the project belongs to your Google Workspace organization, otherwise **External** and keep it in
-   **Testing** with your Google account added as a test user. Add exactly two scopes:
-   `https://www.googleapis.com/auth/calendar.readonly` and
-   `https://www.googleapis.com/auth/tasks.readonly`.
+   **Testing** with your Google account added as a test user. Add exactly three scopes:
+   `https://www.googleapis.com/auth/calendar.readonly`,
+   `https://www.googleapis.com/auth/tasks.readonly` and
+   `https://www.googleapis.com/auth/drive.file` (Magenda sees only the files it creates in Drive; ADR 0027).
+   After an update that added a scope, Magenda asks you to sign in again.
 4. Under **Clients**, create an OAuth client of type **iOS** with the bundle ID `name.tkcs.magenda`.
 5. Open Magenda, enter the client ID (it looks like `123456789012-test.apps.googleusercontent.com`)
    on the "Connect Google" screen and sign in. Fill in the client secret only for a client type

@@ -309,4 +309,17 @@ struct EventSelectionTests {
                 "You're out of office on this day (“OOO - Budapest”).",
             ])
     }
+
+    @Test("A mapped title gets its summary skill")
+    func summarySkill() {
+        var custom = BinderRules.default
+        custom.summarySkills = ["team sync": "weekly-summary"]
+        let others = [me, person("p@example.com")]
+        let events = [
+            event("Team Sync", id: "a", attendees: others),
+            event("Other", id: "b", start: .timed(at(11)), attendees: others),
+        ]
+        #expect(drafts(events, rules: custom).map(\.summarySkill) == ["weekly-summary", nil])
+        #expect(drafts(events).map(\.summarySkill) == [nil, nil])
+    }
 }

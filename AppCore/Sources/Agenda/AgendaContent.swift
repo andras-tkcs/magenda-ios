@@ -18,12 +18,15 @@ public struct TodoItem: Equatable, Codable, Sendable {
     public var notes: String
     /// The due date as `MM/DD`, or empty.
     public var due: String
+    /// The ID of the task the row came from, if it came from one.
+    public var taskID: String?
 
     /// Creates a to-do row.
-    public init(text: String, notes: String, due: String) {
+    public init(text: String, notes: String, due: String, taskID: String? = nil) {
         self.text = text
         self.notes = notes
         self.due = due
+        self.taskID = taskID
     }
 }
 
@@ -56,14 +59,20 @@ public struct DelegatedItem: Equatable, Codable, Sendable {
     public var marked: Bool
     /// The latest log lines, oldest first.
     public var status: [String]
+    /// The ID of the task the row came from, if it came from one.
+    public var taskID: String?
 
     /// Creates a delegated-task row.
-    public init(text: String, owner: String, cadence: Cadence, marked: Bool, status: [String]) {
+    public init(
+        text: String, owner: String, cadence: Cadence, marked: Bool, status: [String],
+        taskID: String? = nil
+    ) {
         self.text = text
         self.owner = owner
         self.cadence = cadence
         self.marked = marked
         self.status = status
+        self.taskID = taskID
     }
 }
 
@@ -82,11 +91,13 @@ public struct AgendaContent: Equatable, Codable, Sendable {
     public var meetingIDs: [String]
     /// The delegated-tasks rows.
     public var delegated: [DelegatedItem]
+    /// The summary skill of each meeting page, in the order of `meetings`; "" means none.
+    public var meetingSummarySkills: [String]
 
     /// Creates agenda content.
     public init(
         date: CalendarDay, todoItems: [TodoItem], schedule: [ScheduleEntry], meetings: [String],
-        meetingIDs: [String] = [], delegated: [DelegatedItem]
+        meetingIDs: [String] = [], delegated: [DelegatedItem], meetingSummarySkills: [String] = []
     ) {
         self.date = date
         self.todoItems = todoItems
@@ -94,6 +105,24 @@ public struct AgendaContent: Equatable, Codable, Sendable {
         self.meetings = meetings
         self.meetingIDs = meetingIDs
         self.delegated = delegated
+        self.meetingSummarySkills = meetingSummarySkills
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case date, todoItems, schedule, meetings, meetingIDs, delegated, meetingSummarySkills
+    }
+
+    /// Decodes content written by any build; a missing `meetingSummarySkills` is empty.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        date = try container.decode(CalendarDay.self, forKey: .date)
+        todoItems = try container.decode([TodoItem].self, forKey: .todoItems)
+        schedule = try container.decode([ScheduleEntry].self, forKey: .schedule)
+        meetings = try container.decode([String].self, forKey: .meetings)
+        meetingIDs = try container.decode([String].self, forKey: .meetingIDs)
+        delegated = try container.decode([DelegatedItem].self, forKey: .delegated)
+        meetingSummarySkills =
+            try container.decodeIfPresent([String].self, forKey: .meetingSummarySkills) ?? []
     }
 }
 

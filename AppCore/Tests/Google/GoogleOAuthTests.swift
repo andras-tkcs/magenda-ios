@@ -8,6 +8,8 @@ import Testing
 private let clientID = "123-abc.apps.googleusercontent.com"
 private let calendarScope = "https://www.googleapis.com/auth/calendar.readonly"
 private let tasksScope = "https://www.googleapis.com/auth/tasks.readonly"
+private let driveScope = "https://www.googleapis.com/auth/drive.file"
+private let allScopes = [calendarScope, tasksScope, driveScope]
 private let redirect = "com.googleusercontent.apps.123-abc:/oauth2redirect"
 private let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
@@ -97,9 +99,9 @@ struct GoogleOAuthConfigurationTests {
         #expect(config.redirectURI == "com.googleusercontent.apps.123-abc:/oauth2redirect")
     }
 
-    @Test("The scopes are exactly the two read-only ones")
+    @Test("The scopes are calendar, tasks and drive.file")
     func scopes() {
-        #expect(GoogleOAuthConfiguration.scopes == [calendarScope, tasksScope])
+        #expect(GoogleOAuthConfiguration.scopes == allScopes)
     }
 }
 
@@ -163,12 +165,14 @@ struct GoogleOAuthAuthorizationRequestTests {
                 URLQueryItem(name: "client_id", value: clientID),
                 URLQueryItem(name: "redirect_uri", value: redirect),
                 URLQueryItem(name: "response_type", value: "code"),
-                URLQueryItem(name: "scope", value: "\(calendarScope) \(tasksScope)"),
+                URLQueryItem(name: "scope", value: allScopes.joined(separator: " ")),
                 URLQueryItem(name: "code_challenge", value: "-_8"),
                 URLQueryItem(name: "code_challenge_method", value: "S256"),
                 URLQueryItem(name: "state", value: request.state),
             ])
-        #expect(request.url.absoluteString.contains("scope=\(calendarScope)%20\(tasksScope)"))
+        #expect(
+            request.url.absoluteString.contains(
+                "scope=\(calendarScope)%20\(tasksScope)%20\(driveScope)"))
     }
 }
 
@@ -303,7 +307,7 @@ struct GoogleOAuthTokenResponseTests {
     private func body(_ fields: [String: String?] = [:]) -> String {
         var json = [
             "access_token": #""ya29.a""#, "expires_in": "3599", "token_type": #""Bearer""#,
-            "refresh_token": #""1//r""#, "scope": "\"\(calendarScope) \(tasksScope)\"",
+            "refresh_token": #""1//r""#, "scope": "\"\(allScopes.joined(separator: " "))\"",
         ]
         for (key, value) in fields {
             json[key] = value
@@ -313,21 +317,24 @@ struct GoogleOAuthTokenResponseTests {
     }
 
     private func tokens(
-        status: Int = 200, _ json: String, previous: String? = nil, requireScopes: Bool = true
+        status: Int = 200, _ json: String, previous: String? = nil,
+        previousScopes: [String]? = nil, requireScopes: Bool = true
     ) throws -> OAuthTokens {
         try GoogleOAuth.tokens(
             from: HTTPResponse(status: status, body: Data(json.utf8)),
-            previousRefreshToken: previous, requireScopes: requireScopes, now: now)
+            previousRefreshToken: previous, previousScopes: previousScopes,
+            requireScopes: requireScopes, now: now)
     }
 
     @Test("A full response becomes tokens that expire expires_in seconds from now")
     func success() throws {
-        let json = body(["scope": "\"\(tasksScope) \(calendarScope) openid\""])
+        let json = body(["scope": "\"\(tasksScope) \(driveScope) \(calendarScope) openid\""])
         #expect(
             try tokens(json, previous: "old")
                 == OAuthTokens(
                     accessToken: "ya29.a", refreshToken: "1//r",
-                    expiresAt: now.addingTimeInterval(3599)))
+                    expiresAt: now.addingTimeInterval(3599),
+                    scopes: [tasksScope, driveScope, calendarScope, "openid"]))
     }
 
     @Test("A lowercase bearer type and a fractional lifetime are accepted")
@@ -365,16 +372,37 @@ struct GoogleOAuthTokenResponseTests {
         #expect(throws: GoogleAPIError.unexpectedResponse) { try tokens(json) }
     }
 
-    @Test("A missing scope fails only when scopes are required")
+    @Test("A missing scope falls back to the previous scopes unless scopes are required")
     func missingScope() throws {
         let json = body(["scope": nil])
         #expect(throws: GoogleAPIError.missingScopes) { try tokens(json, requireScopes: true) }
-        #expect(try tokens(json, requireScopes: false).accessToken == "ya29.a")
+        #expect(throws: GoogleAPIError.missingScopes) {
+            try tokens(json, previousScopes: allScopes, requireScopes: true)
+        }
+        let result = try tokens(json, previousScopes: allScopes, requireScopes: false)
+        #expect(result.accessToken == "ya29.a")
+        #expect(result.scopes == allScopes)
+    }
+
+    @Test("With no scope and no previous scopes the grant is unknown, so missing")
+    func unknownScopes() {
+        #expect(throws: GoogleAPIError.missingScopes) {
+            try tokens(body(["scope": nil]), requireScopes: false)
+        }
+    }
+
+    @Test("A response scope wins over the previous scopes")
+    func responseScopeWins() throws {
+        let result = try tokens(body(), previousScopes: [calendarScope], requireScopes: false)
+        #expect(result.scopes == allScopes)
     }
 
     @Test(
-        "A scope without both read-only scopes fails, required or not",
-        arguments: [calendarScope, tasksScope, "", calendarScope + tasksScope], [true, false])
+        "A scope lacking any of the three fails, required or not",
+        arguments: [
+            calendarScope, tasksScope, driveScope, "", calendarScope + tasksScope,
+            "\(calendarScope) \(tasksScope)",
+        ], [true, false])
     func partialScope(granted: String, requireScopes: Bool) {
         #expect(throws: GoogleAPIError.missingScopes) {
             try tokens(body(["scope": "\"\(granted)\""]), requireScopes: requireScopes)

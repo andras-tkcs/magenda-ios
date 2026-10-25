@@ -211,6 +211,49 @@ final class RulesUITests: XCTestCase {
     }
 
     @MainActor
+    private func addSummary(_ app: XCUIApplication, title: String, skill: String) {
+        enter(app, element(app, "summaryTitleField"), title)
+        enter(app, element(app, "summarySkillField"), skill)
+        let add = app.buttons["summaryAdd"].firstMatch
+        reveal(app, add)
+        add.tap()
+    }
+
+    @MainActor
+    func testAddingAMeetingSummaryShowsTheRow() {
+        let app = launch()
+        openRules(app)
+
+        addSummary(app, title: "Board meeting", skill: "board-summary")
+        let row = element(app, "rulesRow.summaries.0")
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "the summary never appeared")
+    }
+
+    @MainActor
+    func testAnInvalidSummarySkillShowsAnError() {
+        let app = launch()
+        openRules(app)
+
+        addSummary(app, title: "Board meeting", skill: "bad skill!")
+        let error = element(app, "summarySkillError")
+        XCTAssertTrue(error.waitForExistence(timeout: 30), "summarySkillError never appeared")
+    }
+
+    @MainActor
+    func testADuplicateSummaryTitleShowsAnError() {
+        let app = launch()
+        openRules(app)
+
+        addSummary(app, title: "Board meeting", skill: "board-summary")
+        XCTAssertTrue(
+            element(app, "rulesRow.summaries.0").waitForExistence(timeout: 30),
+            "the summary never appeared")
+        addSummary(app, title: "board MEETING", skill: "other-summary")
+        let error = element(app, "summarySkillError")
+        XCTAssertTrue(error.waitForExistence(timeout: 30), "summarySkillError never appeared")
+    }
+
+    @MainActor
     func testTheLookAheadStepperIncrements() {
         let app = launch()
         openRules(app)

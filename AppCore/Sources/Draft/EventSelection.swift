@@ -74,7 +74,10 @@ public enum EventSelection {
                     attendeeEmails: others.map { $0.email.lowercased() },
                     attendeeFirstNames: others.map(firstName),
                     isIncluded: exclusion == nil,
-                    includesMeetingPage: exclusion == nil && !others.isEmpty))
+                    includesMeetingPage: exclusion == nil && !others.isEmpty,
+                    summarySkill: SummarySkill.skill(
+                        pageTitle: title, originalTitle: candidate.title,
+                        skills: rules.summarySkills)))
         }
         return result
     }

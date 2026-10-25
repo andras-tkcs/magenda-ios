@@ -4,6 +4,8 @@ import Foundation
 public enum HTTPMethod: String, Sendable {
     case get = "GET"
     case post = "POST"
+    case put = "PUT"
+    case patch = "PATCH"
 }
 
 /// A request the app sends, independent of `URLSession` so it can be built and checked on Linux.
@@ -32,17 +34,25 @@ public struct HTTPRequest: Equatable, Sendable {
     }
 }
 
-/// A response: its status code and body.
+/// A response: its status code, headers and body.
 public struct HTTPResponse: Equatable, Sendable {
     /// The HTTP status code.
     public var status: Int
     /// The body, empty when there was none.
     public var body: Data
+    /// Header fields by name, as the server spelled them.
+    public var headers: [String: String]
 
     /// Creates a response.
-    public init(status: Int, body: Data) {
+    public init(status: Int, body: Data, headers: [String: String] = [:]) {
         self.status = status
         self.body = body
+        self.headers = headers
+    }
+
+    /// The value of the header called `name`, compared without regard to case.
+    public func header(_ name: String) -> String? {
+        headers.first { $0.key.caseInsensitiveCompare(name) == .orderedSame }?.value
     }
 }
 
