@@ -26,16 +26,18 @@ public final class HandoffController {
     @ObservationIgnored private let readFile: @Sendable (URL) throws -> Data
     @ObservationIgnored private let removeFile: @Sendable (URL) -> Void
 
-    private static let folderName = "Magenda"
+    @ObservationIgnored private let folderName: @MainActor () -> String
 
     /// Creates a controller. `readFile` and `removeFile` read and delete the rendered PDF.
+    /// `folderName` is read at each first upload of a day or a meeting.
     public init(
         store: any HandoffStore, binderStore: any BinderStore, drive: any DriveFiling,
         trigger: any RoutineFiring, routineCredentials: any RoutineCredentialsStore,
         renderer: any AgendaRendering, hasher: any SHA256Hashing,
         today: @escaping @Sendable () -> CalendarDay,
         readFile: @escaping @Sendable (URL) throws -> Data,
-        removeFile: @escaping @Sendable (URL) -> Void
+        removeFile: @escaping @Sendable (URL) -> Void,
+        folderName: @escaping @MainActor () -> String = { DriveFolderName.default }
     ) {
         self.store = store
         self.binderStore = binderStore
@@ -47,6 +49,7 @@ public final class HandoffController {
         self.today = today
         self.readFile = readFile
         self.removeFile = removeFile
+        self.folderName = folderName
     }
 
     /// Loads the finished days and the stored routine.
@@ -127,6 +130,7 @@ public final class HandoffController {
         let earlier = stored(Self.dayID(date))
         handoff.driveFileID = earlier?.driveFileID
         handoff.docID = earlier?.docID
+        handoff.folderID = earlier?.folderID
         do {
             try store.savePDF(pdf, for: Self.dayID(date))
             try store.save(handoff)
@@ -298,6 +302,11 @@ public final class HandoffController {
         days.first { $0.id == id }
     }
 
+    /// The folder another record of `date` was uploaded to, so one date stays in one folder.
+    private func sameDateFolderID(_ date: CalendarDay) -> String? {
+        days.first { $0.date == date && $0.folderID != nil }?.folderID
+    }
+
     /// Keeps `handoff` in `days`, in its place in `HandoffID.listOrder`, replacing the record with
     /// the same ID.
     private func remember(_ handoff: DayHandoff) {
@@ -342,7 +351,16 @@ public final class HandoffController {
                     try save(handoff)
                     return
                 }
-                let folderID = try await drive.folderID(named: Self.folderName)
+                let folderID: String
+                if let known = handoff.folderID ?? sameDateFolderID(handoff.date) {
+                    folderID = known
+                } else {
+                    // A file uploaded before folders were recorded is in the default folder, and
+                    // replacing it does not move it.
+                    let name = handoff.driveFileID == nil ? folderName() : DriveFolderName.default
+                    folderID = try await drive.folderID(named: name)
+                }
+                handoff.folderID = folderID
                 handoff.driveFileID = try await drive.uploadPDF(
                     pdf, name: handoff.pdfName, folderID: folderID,
                     replacing: handoff.driveFileID)

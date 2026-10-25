@@ -600,6 +600,15 @@ struct AgendaControllerTests {
         #expect(context.settingsStore.load().rules.shortNames.isEmpty)
     }
 
+    @Test("changing only the Drive folder keeps the rendered PDF")
+    func driveFolderKeepsRendered() async throws {
+        let context = try await started(.standard)
+        await context.controller.render()
+        await context.controller.updateSettings { $0.driveFolderName = "Work notes" }
+        #expect(context.controller.rendered != nil)
+        #expect(context.settingsStore.load().driveFolderName == "Work notes")
+    }
+
     @Test("edits to the draft and the settings clear the rendered PDF")
     func editsClearRendered() async throws {
         let context = try await started(.standard)

@@ -14,12 +14,14 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
     public var delegatedListTitle: String
     /// The binder rules.
     public var rules: BinderRules
+    /// The name of the Google Drive folder finished days are uploaded to.
+    public var driveFolderName: String
 
     /// Creates settings; the defaults are what a fresh install uses.
     public init(
         fontPack: FontPack = .outfit, colors: ThemeColors = .default, calendarIDs: [String] = [],
         todoListTitle: String = "Claude", delegatedListTitle: String = "Claude Delegations",
-        rules: BinderRules = .default
+        rules: BinderRules = .default, driveFolderName: String = DriveFolderName.default
     ) {
         self.fontPack = fontPack
         self.colors = colors
@@ -27,6 +29,7 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
         self.todoListTitle = todoListTitle
         self.delegatedListTitle = delegatedListTitle
         self.rules = rules
+        self.driveFolderName = driveFolderName
     }
 
     /// The font pack and colors as a theme.
@@ -49,11 +52,14 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
             calendarIDs: try value(.calendarIDs, defaults.calendarIDs),
             todoListTitle: try value(.todoListTitle, defaults.todoListTitle),
             delegatedListTitle: try value(.delegatedListTitle, defaults.delegatedListTitle),
-            rules: try value(.rules, defaults.rules))
+            rules: try value(.rules, defaults.rules),
+            driveFolderName: DriveFolderName.validated(
+                try value(.driveFolderName, defaults.driveFolderName)) ?? defaults.driveFolderName)
     }
 
     private enum CodingKeys: String, CodingKey {
         case fontPack, colors, calendarIDs, todoListTitle, delegatedListTitle, rules
+        case driveFolderName
     }
 }
 

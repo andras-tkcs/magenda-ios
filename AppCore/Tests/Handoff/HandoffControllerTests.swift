@@ -144,6 +144,11 @@ private struct FailingCredentialsStore: RoutineCredentialsStore {
 private struct OtherFailure: Error {}
 
 @MainActor
+private final class FolderNameBox {
+    var name = "Magenda"
+}
+
+@MainActor
 @Suite("Hand-off controller")
 struct HandoffControllerTests {
     private static let fireURL = "https://api.anthropic.com/v1/claude_code/routines/trig_abc/fire"
@@ -168,7 +173,8 @@ struct HandoffControllerTests {
         drive: FakeDrive = FakeDrive(), renderer: FakeRenderer? = nil,
         store: any HandoffStore = InMemoryHandoffStore(),
         binderStore: any BinderStore = InMemoryBinderStore(),
-        credentials: (any RoutineCredentialsStore)? = nil
+        credentials: (any RoutineCredentialsStore)? = nil,
+        folderName: (@MainActor () -> String)? = nil
     ) throws {
         layout = BinderLayout(
             manifest: try TemplateManifest.bundled(), measurer: FakeTextMeasurer())
@@ -185,16 +191,25 @@ struct HandoffControllerTests {
         let reads = reads
         let removals = removals
         let clock = clock
-        controller = HandoffController(
-            store: store, binderStore: binderStore, drive: drive, trigger: trigger,
-            routineCredentials: credentials ?? self.credentials,
-            renderer: renderer ?? self.renderer,
-            hasher: FakeHasher([
-                Data("pdf".utf8): Data(repeating: 0xAB, count: 32),
-                Data("pdf2".utf8): Data(repeating: 0xCD, count: 32),
-            ]),
-            today: { clock.today }, readFile: { _ in try reads.read() },
-            removeFile: { removals.remove($0) })
+        let hasher = FakeHasher([
+            Data("pdf".utf8): Data(repeating: 0xAB, count: 32),
+            Data("pdf2".utf8): Data(repeating: 0xCD, count: 32),
+        ])
+        if let folderName {
+            controller = HandoffController(
+                store: store, binderStore: binderStore, drive: drive, trigger: trigger,
+                routineCredentials: credentials ?? self.credentials,
+                renderer: renderer ?? self.renderer, hasher: hasher,
+                today: { clock.today }, readFile: { _ in try reads.read() },
+                removeFile: { removals.remove($0) }, folderName: folderName)
+        } else {
+            controller = HandoffController(
+                store: store, binderStore: binderStore, drive: drive, trigger: trigger,
+                routineCredentials: credentials ?? self.credentials,
+                renderer: renderer ?? self.renderer, hasher: hasher,
+                today: { clock.today }, readFile: { _ in try reads.read() },
+                removeFile: { removals.remove($0) })
+        }
     }
 
     private static func binderDay(on date: CalendarDay) -> BinderDay {
@@ -417,9 +432,10 @@ struct HandoffControllerTests {
         reads.set(Data("pdf2".utf8))
         await controller.finish(binder)
         let calls = await drive.calls
-        #expect(calls.count == 5)
+        #expect(calls.count == 4)
+        #expect(calls.filter { if case .folderID = $0 { true } else { false } }.count == 1)
         #expect(
-            calls[4]
+            calls[3]
                 == .uploadPDF(
                     data: Data("pdf2".utf8), name: "Magenda 2026-09-30.pdf",
                     folderID: "folder-1", replacing: "file-1"))
@@ -427,10 +443,78 @@ struct HandoffControllerTests {
         let handoff = try saved()
         #expect(handoff.driveFileID == "file-1")
         #expect(handoff.docID == "doc-1")
+        #expect(handoff.folderID == "folder-1")
         #expect(handoff.stage == .notesRequested)
         #expect(handoff.checksum == "sha256:" + String(repeating: "cd", count: 32))
         #expect(try store.pdf(for: dayID) == Data("pdf2".utf8))
         #expect(try fired(1)["docID"] as? String == "doc-1")
+    }
+
+    @Test("the first upload uses the folder the setting names")
+    func folderFromSetting() async throws {
+        let box = FolderNameBox()
+        let rig = try HandoffControllerTests(folderName: { box.name })
+        box.name = "Work notes"
+        await rig.controller.finish(rig.binder)
+        #expect(await rig.drive.calls.contains(.folderID(named: "Work notes")))
+        #expect(try rig.saved().folderID == "folder-1")
+    }
+
+    @Test("a day keeps the folder of its first upload")
+    func dayKeepsFolder() async throws {
+        let box = FolderNameBox()
+        let rig = try HandoffControllerTests(folderName: { box.name })
+        await rig.drive.setError(GoogleAPIError.network, for: .createDoc)
+        await rig.controller.finish(rig.binder)
+        box.name = "Other"
+        await rig.drive.setError(nil, for: .createDoc)
+        await rig.controller.refresh(excluding: rig.otherDay)
+        let calls = await rig.drive.calls
+        let folderCalls = calls.filter { if case .folderID = $0 { true } else { false } }
+        #expect(folderCalls == [.folderID(named: "Magenda")])
+        let docCalls = calls.filter { if case .createDoc = $0 { true } else { false } }
+        #expect(docCalls.count == 2)
+        for case .createDoc(_, let folderID, _) in docCalls {
+            #expect(folderID == "folder-1")
+        }
+    }
+
+    @Test("a meeting and its day share a folder across a rename")
+    func meetingAndDayShareFolder() async throws {
+        let box = FolderNameBox()
+        let rig = try HandoffControllerTests(folderName: { box.name })
+        let meeting = rig.meetingBinder()
+        await rig.controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        box.name = "Other"
+        await rig.controller.finish(meeting)
+        let folderCalls = await rig.drive.calls.filter {
+            if case .folderID = $0 { true } else { false }
+        }
+        #expect(folderCalls == [.folderID(named: "Magenda")])
+        #expect(rig.controller.days.count == 2)
+        #expect(rig.controller.days.allSatisfy { $0.folderID == "folder-1" })
+    }
+
+    @Test("a day uploaded before folders were recorded is replaced in the default folder")
+    func legacyDayUsesDefaultFolder() async throws {
+        let box = FolderNameBox()
+        let store = InMemoryHandoffStore()
+        var legacy = DayHandoff(
+            date: try #require(CalendarDay(year: 2026, month: 9, day: 30)),
+            checksum: "sha256:" + String(repeating: "ab", count: 32),
+            pages: [HandoffPage(page: 1, key: "meeting:cal|a")], tasks: [], delegated: [])
+        legacy.driveFileID = "file-0"
+        legacy.stage = .queued
+        try store.savePDF(Data("pdf".utf8), for: legacy.id)
+        try store.save(legacy)
+        let rig = try HandoffControllerTests(store: store, folderName: { box.name })
+        box.name = "Other"
+        rig.controller.start()
+        await rig.controller.refresh(excluding: rig.otherDay)
+        let folderCalls = await rig.drive.calls.filter {
+            if case .folderID = $0 { true } else { false }
+        }
+        #expect(folderCalls == [.folderID(named: "Magenda")])
     }
 
     @Test("finishing after the notes were requested is refused")
