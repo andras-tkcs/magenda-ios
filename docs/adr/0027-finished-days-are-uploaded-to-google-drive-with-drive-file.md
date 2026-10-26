@@ -5,6 +5,7 @@
 Accepted — 2026-10-24. Implemented.
 Amends [ADR 0013](0013-google-sign-in-uses-pkce-with-aswebauthenticationsession.md): the scopes, and "the app never writes to Google".
 Amends [ADR 0014](0014-agenda-inputs-come-live-from-google-calendar-and-google-tasks.md): "No Drive upload".
+Amended by [ADR 0033](0033-a-meeting-can-be-sent-before-the-day-ends.md): a meeting sent early is its own PDF.
 
 ## Context
 

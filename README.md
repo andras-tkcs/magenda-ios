@@ -65,7 +65,7 @@ shares the day with your handwriting on its pages.
 Handwriting is saved on the device per page. Rendering the day again keeps it on its page, and a
 meeting page you wrote on stays even when the meeting has left the agenda. Start over, in the
 agenda's toolbar, deletes all of the day's handwriting and added pages after asking, and renders
-the day fresh. Once a day is started, it opens without a network connection. The iPhone shows the
+the day fresh; it is refused while a meeting of the day is sent (ADR 0035). Once a day is started, it opens without a network connection. The iPhone shows the
 PDF preview (ADR 0020, ADR 0021, ADR 0024 to ADR 0026). The saved binder and the shared PDFs can't
 be read while the device is locked (ADR 0022).
 
@@ -78,6 +78,8 @@ text kept as text and your handwriting on top, and uploads it as `Magenda <date>
 whose first line is the day's status. Magenda sees only the files it created. A day finished
 without a connection waits and is sent the next time the app becomes active; finishing a day again
 before it was sent replaces its PDF. **Reset Hand-off**, after a confirmation, forgets that a day was sent so you can finish it again (ADR 0032); the earlier PDF and Doc stay in Drive.
+
+On a meeting page, **Send Meeting** sends that meeting on its own, with its own PDF and Google Doc and its own row in Review, and locks its pages so they can't be written on afterwards; Finish Day then skips it in the notes (ADR 0033, ADR 0034).
 
 To send days to Claude, open Settings → End-of-day routine and enter the fire URL and token of the
 routine's API trigger (from claude.ai/code/routines). The token stays in the device's Keychain and
