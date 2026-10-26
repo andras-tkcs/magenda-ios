@@ -192,7 +192,9 @@ final class RulesUITests: XCTestCase {
     }
 
     /// Guards the long-press Delete on a rules row, which lets a default be removed without
-    /// discovering the swipe.
+    /// discovering the swipe. Each attempt presses, waits for the Delete button to be hittable and
+    /// taps it, and repeats (at most 3 times) while the row is still there, because a tap that
+    /// lands mid-animation is swallowed.
     @MainActor
     func testLongPressDeletesADefaultOutOfOfficeWord() {
         let app = launch()
@@ -204,14 +206,26 @@ final class RulesUITests: XCTestCase {
         let delete = app.buttons.matching(
             NSPredicate(format: "identifier == %@ OR label == %@", "rulesDeleteAction", "Delete")
         ).firstMatch
-        var presses = 0
-        while !delete.exists && presses < 3 {
+        var attempts = 0
+        while row.exists && attempts < 3 {
             row.press(forDuration: 1.2)
-            presses += 1
-            _ = delete.waitForExistence(timeout: 10)
+            attempts += 1
+            guard delete.waitForExistence(timeout: 10) else { continue }
+            // The menu animates in; a tap before it settles is swallowed on the oldest runtime.
+            let settled = XCTWaiter().wait(
+                for: [
+                    XCTNSPredicateExpectation(
+                        predicate: NSPredicate(format: "isHittable == true"), object: delete)
+                ], timeout: 10)
+            if settled == .completed {
+                delete.tap()
+            }
+            _ = XCTWaiter().wait(
+                for: [
+                    XCTNSPredicateExpectation(
+                        predicate: NSPredicate(format: "exists == false"), object: row)
+                ], timeout: 10)
         }
-        XCTAssertTrue(delete.exists, "the Delete menu never appeared after \(presses) presses")
-        delete.tap()
 
         let gone = XCTWaiter().wait(
             for: [
