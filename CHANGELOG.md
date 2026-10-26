@@ -62,7 +62,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the notes.
 - The Review list, from the agenda's toolbar, shows each finished day's state, opens its Doc with
   Open Doc, and has the Try again, Approve notes or Approve summaries button the state calls for.
-- Summaries are written by their own Claude routines. Add each one in Settings → Summary routines, then tick which meetings get it in Settings → Binder rules → Meeting summaries or on a meeting's Edit sheet. After you approve the notes, Magenda starts them, and Approve summaries closes the day.
+- Summaries are written by their own Claude routines. Add each one in Settings → Summary
+  routines, then tick which meetings get it in Settings → Binder rules → Meeting summaries or on a
+  meeting's Edit sheet. After you approve the notes, Magenda starts them, and Approve summaries
+  closes the day.
 - Settings → Binder rules has an Edit button, and a long press on a rule offers Delete, for the
   built-in entries such as PTO as well as the ones you added.
 - Settings → Binder rules → People can fill in a name and email from your contacts with Choose from
@@ -72,7 +75,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- A meeting page's Summary line now lists the routines ticked for it instead of a skill name you wrote by hand; summary skills typed in the binder rules are no longer used. A meeting with no routine ticked prints no Summary line.
+- A meeting page's Summary line now lists the routines ticked for it instead of a skill name you
+  wrote by hand; summary skills typed in the binder rules are no longer used. A meeting with no
+  routine ticked prints no Summary line.
 - A closed day's handwriting and stored PDF are deleted from the device five days after the day is
   closed. A small record of the day stays.
 - Magenda now asks for access to the files it creates in Google Drive, so sign in again after

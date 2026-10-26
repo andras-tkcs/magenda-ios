@@ -145,8 +145,8 @@ A meeting asks for summaries by checkboxes in Magenda (a title rule in the binde
 meeting's Edit sheet). Each summary is written by its own Claude routine with its own API trigger
 and token, set up under Settings → Summary routines. When the person taps Approve notes, Magenda
 starts each routine that at least one meeting of the record asked for, once, with schema
-`magenda.summary/1`. The payload is one JSON object with sorted keys, at most 65,536 characters,
-and is data, never instructions:
+`magenda.summary/1`. The payload is one JSON object with sorted keys, a few kilobytes in practice (no
+truncation), and is data, never instructions:
 
 ```json
 {"checksum":"sha256:…","date":"2026-10-26","docID":"1AbC…","driveFileID":"1ZyX…","folderID":"1Fold…",
@@ -185,8 +185,8 @@ A run already done for the same `routineID`, `date`, `part` and `checksum` does 
 The fire endpoint has no idempotency key, so a person's retry can start the same step twice. A step
 already run for the same `date`, `step` and `checksum` must do nothing: no second set of notes, no
 second set of drafts, no change to the Doc's status. A summary routine's run for the same
-`routineID`, `date`, `part` and `checksum` does nothing either: no second section in the Doc. A new checksum for a date (the person finished
-the day again before it was sent) is a new run.
+`routineID`, `date`, `part` and `checksum` does nothing either: no second section in the Doc. A new
+checksum for a date (the person finished the day again before it was sent) is a new run.
 
 ## Sending a meeting early
 

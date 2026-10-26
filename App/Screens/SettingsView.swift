@@ -79,6 +79,7 @@ struct SettingsView: View {
     @State private var invalidRoles: Set<ColorRole> = []
     @State private var showsClientSheet = false
     @State private var confirmsForget = false
+    @State private var routineToForget: SummaryRoutine?
     @State private var folderDraft = ""
     @State private var folderInvalid = false
     @State private var routineURL = ""
@@ -129,6 +130,18 @@ struct SettingsView: View {
             ) {
                 Button("Forget", role: .destructive) {
                     Task { await controller.forgetClientCredentials() }
+                }
+            }
+            .confirmationDialog(
+                "Forget this summary routine? Its token is deleted and every rule drops it.",
+                isPresented: Binding(
+                    get: { routineToForget != nil },
+                    set: { if !$0 { routineToForget = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Forget summary routine", role: .destructive) {
+                    if let routine = routineToForget { forgetSummaryRoutine(routine.id) }
+                    routineToForget = nil
                 }
             }
         }
@@ -439,7 +452,8 @@ struct SettingsView: View {
                     Text(routine.name)
                         .accessibilityIdentifier(ID.summaryRoutineRow(index))
                     Spacer()
-                    Button("Forget", role: .destructive) { forgetSummaryRoutine(routine.id) }
+                    Button("Forget", role: .destructive) { routineToForget = routine }
+                        .buttonStyle(.borderless)
                         .accessibilityIdentifier(ID.forgetSummaryRoutineButton(index))
                 }
             }
