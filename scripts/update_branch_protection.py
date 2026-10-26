@@ -31,12 +31,15 @@ REQUIRED_STATUS_CHECKS = [
     "app (ipad, newest)",
     "ui (iphone, newest, edit-screen)",
     "ui (iphone, newest, settings)",
+    "ui (iphone, newest, rules)",
     "ui (iphone, newest, rest)",
     "ui (iphone, oldest, edit-screen)",
     "ui (iphone, oldest, settings)",
+    "ui (iphone, oldest, rules)",
     "ui (iphone, oldest, rest)",
     "ui (ipad, newest, edit-screen)",
     "ui (ipad, newest, settings)",
+    "ui (ipad, newest, rules)",
     "ui (ipad, newest, rest)",
 ]
 
