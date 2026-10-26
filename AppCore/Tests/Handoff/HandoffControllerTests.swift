@@ -141,6 +141,12 @@ private struct FailingCredentialsStore: RoutineCredentialsStore {
     func delete() throws { throw KeychainFailure() }
 }
 
+private struct FailingSummaryCredentialsStore: SummaryRoutineCredentialsStore {
+    func load(id: String) throws -> RoutineCredentials? { nil }
+    func save(_ credentials: RoutineCredentials, id: String) throws { throw KeychainFailure() }
+    func delete(id: String) throws { throw KeychainFailure() }
+}
+
 private struct OtherFailure: Error {}
 
 @MainActor
@@ -158,6 +164,8 @@ struct HandoffControllerTests {
     private let otherDay: CalendarDay
     private let drive: FakeDrive
     private let trigger = FakeRoutineTrigger()
+    private let summaryTrigger = FakeSummaryTrigger()
+    private let summaryCredentials = InMemorySummaryRoutineCredentialsStore()
     private let renderer = FakeRenderer(url: URL(fileURLWithPath: "/tmp/finished.pdf"))
     private let store: any HandoffStore
     private let binderStore: any BinderStore
@@ -174,13 +182,15 @@ struct HandoffControllerTests {
         store: any HandoffStore = InMemoryHandoffStore(),
         binderStore: any BinderStore = InMemoryBinderStore(),
         credentials: (any RoutineCredentialsStore)? = nil,
+        summaryCredentials: (any SummaryRoutineCredentialsStore)? = nil,
+        routines: [SummaryRoutine] = [],
         folderName: (@MainActor () -> String)? = nil
     ) throws {
         layout = BinderLayout(
             manifest: try TemplateManifest.bundled(), measurer: FakeTextMeasurer())
         date = try #require(CalendarDay(year: 2026, month: 9, day: 30))
         otherDay = try #require(CalendarDay(year: 2026, month: 9, day: 1))
-        let day = Self.binderDay(on: date)
+        let day = Self.binderDay(on: date, routines: routines)
         self.drive = drive
         self.store = store
         self.binderStore = binderStore
@@ -199,6 +209,8 @@ struct HandoffControllerTests {
             controller = HandoffController(
                 store: store, binderStore: binderStore, drive: drive, trigger: trigger,
                 routineCredentials: credentials ?? self.credentials,
+                summaryTrigger: summaryTrigger,
+                summaryCredentials: summaryCredentials ?? self.summaryCredentials,
                 renderer: renderer ?? self.renderer, hasher: hasher,
                 today: { clock.today }, readFile: { _ in try reads.read() },
                 removeFile: { removals.remove($0) }, folderName: folderName)
@@ -206,18 +218,28 @@ struct HandoffControllerTests {
             controller = HandoffController(
                 store: store, binderStore: binderStore, drive: drive, trigger: trigger,
                 routineCredentials: credentials ?? self.credentials,
+                summaryTrigger: summaryTrigger,
+                summaryCredentials: summaryCredentials ?? self.summaryCredentials,
                 renderer: renderer ?? self.renderer, hasher: hasher,
                 today: { clock.today }, readFile: { _ in try reads.read() },
                 removeFile: { removals.remove($0) })
         }
     }
 
-    private static func binderDay(on date: CalendarDay) -> BinderDay {
+    private static let memo = SummaryRoutine(
+        id: "11111111-1111-4111-8111-111111111111", name: "Client memo")
+    private static let decisionLog = SummaryRoutine(
+        id: "22222222-2222-4222-8222-222222222222", name: "Decision log")
+
+    private static func binderDay(
+        on date: CalendarDay, routines: [SummaryRoutine] = []
+    ) -> BinderDay {
         BinderDay(
             content: AgendaContent(
                 date: date, todoItems: [],
                 schedule: [ScheduleEntry(slot: 2, text: "A", meetingIndex: 0)],
-                meetings: ["A"], meetingIDs: ["cal|a"], delegated: []),
+                meetings: ["A"], meetingIDs: ["cal|a"], delegated: [],
+                meetingSummaryRoutines: routines.isEmpty ? [] : [routines]),
             theme: Theme())
     }
 
@@ -248,7 +270,7 @@ struct HandoffControllerTests {
 
     /// A record of the meeting sent as part `number`, as the store would hold it.
     private func partRecord(
-        _ number: Int, stage: HandoffStage = .summaryApproved, closedOn: CalendarDay? = nil,
+        _ number: Int, stage: HandoffStage = .closing, closedOn: CalendarDay? = nil,
         docID: String? = nil
     ) -> DayHandoff {
         var record = DayHandoff(
@@ -266,7 +288,7 @@ struct HandoffControllerTests {
         var record = DayHandoff(
             date: date, checksum: "sha256:" + String(repeating: "ab", count: 32),
             pages: [HandoffPage(page: 1, key: "meeting:cal|a")], tasks: [], delegated: [])
-        record.stage = .summaryApproved
+        record.stage = .closing
         record.closedOn = closedOn
         return record
     }
@@ -639,21 +661,19 @@ struct HandoffControllerTests {
         #expect(await drive.calls.last == .exportText(docID: "doc-1"))
     }
 
-    @Test("approving the notes fires the step and reads the Doc again")
-    func approveNotes() async throws {
+    @Test("approving the notes with no summary asked for fires close once and ends in closing")
+    func approveNotesWithoutSummaries() async throws {
         await controller.finish(binder)
         await drive.setExportedText("Status: Notes ready for review\n")
         await controller.refresh(excluding: otherDay)
-        await drive.setExportedText("Status: Summary ready for review\n")
-        await controller.perform(.approve(.approveNotes), on: dayID)
-        #expect(try fired(1)["step"] as? String == "approve-notes")
-        #expect(try saved().stage == .notesApproved)
-        #expect(try saved().docStatus == .summaryReady)
-        #expect(controller.days.first?.phase == .summaryReady)
-        await controller.perform(.approve(.approveSummary), on: dayID)
-        #expect(try fired(2)["step"] as? String == "approve-summary")
-        #expect(try saved().stage == .summaryApproved)
+        await controller.perform(.approveNotes, on: dayID)
+        #expect(trigger.texts.count == 2)
+        #expect(try fired(1)["step"] as? String == "close")
+        #expect(summaryTrigger.fires.isEmpty)
+        #expect(try saved().stage == .closing)
+        #expect(try saved().sessionURL == trigger.sessionURL)
         #expect(controller.days.first?.phase == .closing)
+        #expect(await drive.calls.last == .exportText(docID: "doc-1"))
     }
 
     @Test("approving the notes of a day that closes at once makes it closed")
@@ -662,7 +682,7 @@ struct HandoffControllerTests {
         await drive.setExportedText("Status: Notes ready for review\n")
         await controller.refresh(excluding: otherDay)
         await drive.setExportedText("Status: Closed\n")
-        await controller.perform(.approve(.approveNotes), on: dayID)
+        await controller.perform(.approveNotes, on: dayID)
         let closeOn = try #require(CalendarDay(year: 2026, month: 10, day: 6))
         #expect(try saved().closedOn == clock.today)
         #expect(controller.days.first?.phase == .closed(deleteOn: closeOn, purged: false))
@@ -671,8 +691,8 @@ struct HandoffControllerTests {
     @Test("an approve the phase does not offer does nothing")
     func approveNotOffered() async throws {
         await controller.finish(binder)
-        await controller.perform(.approve(.approveNotes), on: dayID)
-        await controller.perform(.approve(.approveSummary), on: dayID)
+        await controller.perform(.approveNotes, on: dayID)
+        await controller.perform(.approveSummaries, on: dayID)
         await controller.perform(.retry, on: dayID)
         await controller.perform(.retry, on: HandoffID(date: otherDay, part: nil))
         #expect(trigger.texts.count == 1)
@@ -685,10 +705,210 @@ struct HandoffControllerTests {
         await drive.setExportedText("Status: Notes ready for review\n")
         await controller.refresh(excluding: otherDay)
         trigger.setError(RoutineTriggerError.unavailable)
-        await controller.perform(.approve(.approveNotes), on: dayID)
+        await controller.perform(.approveNotes, on: dayID)
         #expect(try saved().stage == .notesRequested)
         #expect(try saved().lastError == RoutineTriggerError.unavailable.userMessage)
         #expect(controller.days.first?.phase == .notesReady)
+    }
+
+    // MARK: - Summaries
+
+    /// The Doc text a summary routine leaves for `routines` on the meeting page of `record`.
+    private func summaryText(_ routines: [SummaryRoutine], of record: DayHandoff) throws -> String {
+        let page = try #require(record.pages.first { $0.key == "meeting:cal|a" }).page
+        return "Status: Notes ready for review\n"
+            + routines.map { "Summary ready: \($0.id) \(page)\nFixture summary.\n" }.joined()
+    }
+
+    /// Finishes the day and reads its Doc as notes ready for review.
+    private func reachNotesReady() async {
+        await controller.finish(binder)
+        await drive.setExportedText("Status: Notes ready for review\n")
+        await controller.refresh(excluding: otherDay)
+    }
+
+    private func summaryPayload(_ index: Int) throws -> [String: Any] {
+        let text = try #require(summaryTrigger.fires[safe: index]?.text)
+        let object = try JSONSerialization.jsonObject(with: Data(text.utf8))
+        return try #require(object as? [String: Any])
+    }
+
+    @Test("approving the notes starts each summary routine once with its own payload")
+    func approveNotesStartsSummaries() async throws {
+        let rig = try HandoffControllerTests(routines: [Self.memo, Self.decisionLog])
+        await rig.reachNotesReady()
+        await rig.controller.perform(.approveNotes, on: rig.dayID)
+        #expect(rig.summaryTrigger.fires.map(\.routineID) == [Self.memo.id, Self.decisionLog.id])
+        #expect(try rig.summaryPayload(0)["routineName"] as? String == "Client memo")
+        #expect(try rig.summaryPayload(1)["routineName"] as? String == "Decision log")
+        #expect(try rig.summaryPayload(1)["schema"] as? String == "magenda.summary/1")
+        let meetings = try #require(try rig.summaryPayload(0)["meetings"] as? [[String: Any]])
+        #expect(meetings.map { $0["key"] as? String } == ["meeting:cal|a"])
+        #expect(rig.trigger.texts.count == 1)
+        let handoff = try rig.saved()
+        #expect(handoff.stage == .summariesRequested)
+        #expect(handoff.firedSummaries == [Self.memo.id, Self.decisionLog.id])
+        #expect(handoff.sessionURL == rig.summaryTrigger.sessionURL)
+        #expect(handoff.lastError == nil)
+        #expect(rig.controller.days.first?.phase == .writingSummaries)
+        #expect(await rig.drive.calls.last == .exportText(docID: "doc-1"))
+    }
+
+    @Test("markers read by a refresh flip the row to summaries ready, and approving closes")
+    func summariesReadyThenApprove() async throws {
+        let rig = try HandoffControllerTests(routines: [Self.memo, Self.decisionLog])
+        await rig.reachNotesReady()
+        await rig.controller.perform(.approveNotes, on: rig.dayID)
+        await rig.drive.setExportedText(try rig.summaryText([Self.memo], of: try rig.saved()))
+        await rig.controller.refresh(excluding: rig.otherDay)
+        #expect(try rig.saved().summaryMarkers.count == 1)
+        #expect(rig.controller.days.first?.phase == .writingSummaries)
+        await rig.drive.setExportedText(
+            try rig.summaryText([Self.memo, Self.decisionLog], of: try rig.saved()))
+        await rig.controller.refresh(excluding: rig.otherDay)
+        #expect(try rig.saved().summaryMarkers.count == 2)
+        #expect(rig.controller.days.first?.phase == .summaryReady)
+        await rig.controller.perform(.approveSummaries, on: rig.dayID)
+        #expect(rig.trigger.texts.count == 2)
+        #expect(try rig.fired(1)["step"] as? String == "close")
+        #expect(rig.summaryTrigger.fires.count == 2)
+        #expect(try rig.saved().stage == .closing)
+        #expect(rig.controller.days.first?.phase == .closing)
+    }
+
+    @Test("a failing second routine leaves the day pending and Try again fires only that one")
+    func secondSummaryFails() async throws {
+        let rig = try HandoffControllerTests(routines: [Self.memo, Self.decisionLog])
+        await rig.reachNotesReady()
+        rig.summaryTrigger.setFailing([Self.decisionLog.id])
+        await rig.controller.perform(.approveNotes, on: rig.dayID)
+        let failure = "Something went wrong. Try again."
+        var handoff = try rig.saved()
+        #expect(handoff.stage == .summariesPending)
+        #expect(handoff.firedSummaries == [Self.memo.id])
+        #expect(handoff.lastError == failure)
+        #expect(rig.controller.days.first?.phase == .summariesWaitingToSend)
+        #expect(rig.controller.days.first?.phase.action == .retry)
+
+        await rig.controller.refresh(excluding: rig.otherDay)
+        handoff = try rig.saved()
+        #expect(handoff.stage == .summariesPending)
+        #expect(handoff.lastError == failure)
+
+        rig.summaryTrigger.setFailing([])
+        await rig.controller.perform(.retry, on: rig.dayID)
+        #expect(
+            rig.summaryTrigger.fires.map(\.routineID)
+                == [Self.memo.id, Self.decisionLog.id, Self.decisionLog.id])
+        handoff = try rig.saved()
+        #expect(handoff.stage == .summariesRequested)
+        #expect(handoff.firedSummaries == [Self.memo.id, Self.decisionLog.id])
+        #expect(handoff.lastError == nil)
+        #expect(rig.trigger.texts.count == 1)
+    }
+
+    @Test("approving the notes saves the pending stage first, so a save failure fires nothing")
+    func approveNotesSaveFails() async throws {
+        let failing = FailingHandoffStore()
+        let rig = try HandoffControllerTests(store: failing, routines: [Self.memo])
+        var record = DayHandoff(
+            date: rig.date, checksum: "sha256:" + String(repeating: "ab", count: 32),
+            pages: [
+                HandoffPage(
+                    page: 1, key: "meeting:cal|a", calendarID: "cal", eventID: "a", title: "A",
+                    summaryRoutines: [Self.memo])
+            ], tasks: [], delegated: [])
+        record.stage = .notesRequested
+        record.docStatus = .notesReady
+        record.docID = "doc-1"
+        try rig.seed([record])
+        failing.failSave(after: 0)
+        await rig.controller.perform(.approveNotes, on: rig.dayID)
+        #expect(rig.summaryTrigger.fires.isEmpty)
+        #expect(
+            rig.controller.days.first?.lastError
+                == "Couldn't save the finished day. Free some space on this device and try again.")
+    }
+
+    @Test("a meeting sent early walks the same flow: summaries for its part, then close")
+    func meetingSummariesFlow() async throws {
+        let rig = try HandoffControllerTests(routines: [Self.memo])
+        let meeting = rig.meetingBinder(routines: [Self.memo])
+        await rig.controller.sendMeeting(containing: Self.meetingA, of: meeting)
+        await rig.drive.setExportedText("Status: Notes ready for review\n")
+        await rig.controller.refresh(excluding: rig.otherDay)
+        await rig.controller.perform(.approveNotes, on: rig.partID(1))
+        let payload = try rig.summaryPayload(0)
+        #expect(payload["scope"] as? String == "meeting")
+        #expect(payload["part"] as? Int == 1)
+        #expect(payload["routineID"] as? String == Self.memo.id)
+        #expect(rig.summaryTrigger.fires.count == 1)
+        let part = try #require(try rig.store.handoff(rig.partID(1)))
+        #expect(part.stage == .summariesRequested)
+        await rig.drive.setExportedText(try rig.summaryText([Self.memo], of: part))
+        await rig.controller.refresh(excluding: rig.otherDay)
+        #expect(rig.controller.days.first?.phase == .summaryReady)
+        await rig.controller.perform(.approveSummaries, on: rig.partID(1))
+        #expect(try rig.fired(1)["step"] as? String == "close")
+        #expect(try rig.fired(1)["part"] as? Int == 1)
+        #expect(try rig.store.handoff(rig.partID(1))?.stage == .closing)
+        #expect(try rig.store.handoff(rig.dayID) == nil)
+    }
+
+    @Test("a summary routine with a bad name, URL or token is rejected with its message")
+    func saveSummaryRoutineRejects() throws {
+        #expect(
+            controller.saveSummaryRoutine(name: " ", fireURL: Self.fireURL, token: Self.token)
+                == nil)
+        #expect(controller.message == SummaryRoutine.invalidNameMessage)
+        #expect(
+            controller.saveSummaryRoutine(
+                name: "Memo", fireURL: "https://example.com/fire", token: Self.token) == nil)
+        #expect(
+            controller.message
+                == "That isn't a routine fire URL. Copy it from the routine's API trigger at claude.ai/code/routines; it ends in /fire."
+        )
+        #expect(
+            controller.saveSummaryRoutine(name: "Memo", fireURL: Self.fireURL, token: "nope")
+                == nil)
+        #expect(controller.message == "That isn't a routine token. It starts with sk-ant-oat01-.")
+        #expect(try summaryCredentials.load(id: Self.memo.id) == nil)
+    }
+
+    @Test("a valid summary routine is stored, replaced under the same ID and forgotten")
+    func saveReplaceAndForgetSummaryRoutine() throws {
+        let saved = try #require(
+            controller.saveSummaryRoutine(
+                name: "  Client memo ", fireURL: Self.fireURL, token: Self.token,
+                id: Self.memo.id))
+        #expect(saved == Self.memo)
+        #expect(controller.message == nil)
+        #expect(try summaryCredentials.load(id: Self.memo.id)?.token == Self.token)
+
+        let replaced = try #require(
+            controller.saveSummaryRoutine(
+                name: "Client memo", fireURL: Self.fireURL, token: "sk-ant-oat01-other",
+                id: Self.memo.id))
+        #expect(replaced.id == Self.memo.id)
+        #expect(try summaryCredentials.load(id: Self.memo.id)?.token == "sk-ant-oat01-other")
+
+        let fresh = try #require(
+            controller.saveSummaryRoutine(name: "Log", fireURL: Self.fireURL, token: Self.token))
+        #expect(SummaryRoutine.isValidID(fresh.id) && fresh.id != Self.memo.id)
+
+        controller.forgetSummaryRoutine(id: Self.memo.id)
+        #expect(try summaryCredentials.load(id: Self.memo.id) == nil)
+        #expect(try summaryCredentials.load(id: fresh.id) != nil)
+    }
+
+    @Test("a Keychain failure saving a summary routine is reported")
+    func summaryKeychainFails() throws {
+        let rig = try HandoffControllerTests(summaryCredentials: FailingSummaryCredentialsStore())
+        #expect(
+            rig.controller.saveSummaryRoutine(
+                name: "Memo", fireURL: Self.fireURL, token: Self.token) == nil)
+        #expect(rig.controller.message == "Couldn't save the routine in the Keychain. Try again.")
+        rig.controller.forgetSummaryRoutine(id: Self.memo.id)
     }
 
     // MARK: - Purge
@@ -799,22 +1019,22 @@ struct HandoffControllerTests {
         let closed = try #require(CalendarDay(year: 2026, month: 10, day: 1))
         try seed([closedDayRecord(on: closed), part])
         #expect(controller.days.last?.phase == .notesReady)
-        await controller.perform(.approve(.approveNotes), on: dayID)
+        await controller.perform(.approveNotes, on: dayID)
         #expect(trigger.texts.isEmpty)
-        await drive.setExportedText("Status: Summary ready for review\n")
-        await controller.perform(.approve(.approveNotes), on: partID(1))
-        #expect(try fired(0)["step"] as? String == "approve-notes")
+        await drive.setExportedText("Status: Notes ready for review\n")
+        await controller.perform(.approveNotes, on: partID(1))
+        #expect(try fired(0)["step"] as? String == "close")
         #expect(try fired(0)["part"] as? Int == 1)
         let after = try #require(try store.handoff(partID(1)))
-        #expect(after.stage == .notesApproved)
-        #expect(after.docStatus == .summaryReady)
-        #expect(try saved().stage == .summaryApproved)
+        #expect(after.stage == .closing)
+        #expect(after.docStatus == .notesReady)
+        #expect(try saved().stage == .closing)
         #expect(await drive.calls.last == .exportText(docID: "doc-p"))
     }
 
     @Test("a refresh reads a part's Doc and closes it")
     func refreshClosesPart() async throws {
-        try seed([partRecord(1, stage: .summaryApproved, docID: "doc-p")])
+        try seed([partRecord(1, stage: .closing, docID: "doc-p")])
         await drive.setExportedText("Status: Closed\n")
         await controller.refresh(excluding: otherDay)
         #expect(try store.handoff(partID(1))?.closedOn == clock.today)
@@ -996,7 +1216,7 @@ struct HandoffControllerTests {
 
     /// A binder of this rig's date with meetings `cal|a` and `cal|b`, and an added copy of the
     /// first, which is `extra:id-1`.
-    private func meetingBinder() -> BinderSession {
+    private func meetingBinder(routines: [SummaryRoutine] = []) -> BinderSession {
         let day = BinderDay(
             content: AgendaContent(
                 date: date, todoItems: [],
@@ -1004,7 +1224,8 @@ struct HandoffControllerTests {
                     ScheduleEntry(slot: 2, text: "A", meetingIndex: 0),
                     ScheduleEntry(slot: 4, text: "B", meetingIndex: 1),
                 ],
-                meetings: ["A", "B"], meetingIDs: ["cal|a", "cal|b"], delegated: []),
+                meetings: ["A", "B"], meetingIDs: ["cal|a", "cal|b"], delegated: [],
+                meetingSummaryRoutines: routines.isEmpty ? [] : [routines, []]),
             theme: Theme())
         let session = BinderSession(
             day: day, plan: layout.plan(for: day), ink: [:], store: binderStore, layout: layout,
@@ -1037,7 +1258,7 @@ struct HandoffControllerTests {
                     text: DocStatus.initialDocText),
             ])
         let payload = try fired(0)
-        #expect(payload["schema"] as? String == "magenda.end-of-day/2")
+        #expect(payload["schema"] as? String == "magenda.end-of-day/3")
         #expect(payload["scope"] as? String == "meeting")
         #expect(payload["part"] as? Int == 1)
         #expect(payload["step"] as? String == "notes")
@@ -1206,9 +1427,9 @@ struct HandoffControllerTests {
         part.docStatus = .notesReady
         try store.save(part)
         controller.start()
-        await controller.perform(.approve(.approveNotes), on: partID(1))
+        await controller.perform(.approveNotes, on: partID(1))
         let payload = try fired(1)
-        #expect(payload["step"] as? String == "approve-notes")
+        #expect(payload["step"] as? String == "close")
         #expect(payload["part"] as? Int == 1)
         #expect(try store.handoff(dayID) == nil)
         #expect(controller.days.map(\.id) == [partID(1)])

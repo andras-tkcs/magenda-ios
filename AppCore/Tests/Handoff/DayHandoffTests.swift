@@ -172,11 +172,15 @@ struct DayHandoffTests {
         let deleteOn: String?
         let title: String
         let action: HandoffAction?
+        /// Whether the single page asks for the routine named `s`.
+        var asksForSummary = false
+        var fired: [String] = []
+        var markers: [String] = []
     }
 
     static let rows: [PhaseRow] = [
         PhaseRow(
-            stage: .summaryApproved, status: .closed, closedOn: "2026-10-20", purged: false,
+            stage: .closing, status: .closed, closedOn: "2026-10-20", purged: false,
             phase: nil, deleteOn: "2026-10-25",
             title: "Closed. Handwriting is deleted on 2026-10-25.", action: nil),
         PhaseRow(
@@ -194,33 +198,57 @@ struct DayHandoffTests {
         PhaseRow(
             stage: .notesRequested, status: .notesReady, closedOn: nil, purged: false,
             phase: .notesReady, deleteOn: nil, title: "Notes ready for review",
-            action: .approve(.approveNotes)),
+            action: .approveNotes),
         PhaseRow(
             stage: .notesRequested, status: .waitingForNotes, closedOn: nil, purged: false,
             phase: .writingNotes, deleteOn: nil, title: "Claude is writing the notes",
             action: nil),
         PhaseRow(
-            stage: .notesRequested, status: .summaryReady, closedOn: nil, purged: false,
+            stage: .notesRequested, status: .unknown, closedOn: nil, purged: false,
             phase: .writingNotes, deleteOn: nil, title: "Claude is writing the notes",
             action: nil),
         PhaseRow(
-            stage: .notesApproved, status: .summaryReady, closedOn: nil, purged: false,
-            phase: .summaryReady, deleteOn: nil, title: "Summary ready for review",
-            action: .approve(.approveSummary)),
+            stage: .summariesPending, status: .notesReady, closedOn: nil, purged: false,
+            phase: .summariesWaitingToSend, deleteOn: nil,
+            title: "Notes approved. Summaries not yet sent to Claude", action: .retry,
+            asksForSummary: true),
         PhaseRow(
-            stage: .notesApproved, status: .notesReady, closedOn: nil, purged: false,
-            phase: .working, deleteOn: nil, title: "Claude is working on the next step",
-            action: nil),
+            stage: .summariesPending, status: .notesReady, closedOn: nil, purged: false,
+            phase: .writingSummaries, deleteOn: nil, title: "Claude is writing the summaries",
+            action: nil, asksForSummary: true, fired: ["id-s"]),
         PhaseRow(
-            stage: .summaryApproved, status: .summaryReady, closedOn: nil, purged: false,
+            stage: .summariesPending, status: .notesReady, closedOn: nil, purged: false,
+            phase: .summaryReady, deleteOn: nil, title: "Summaries ready for review",
+            action: .approveSummaries, asksForSummary: true, fired: ["id-s"],
+            markers: ["id-s 1"]),
+        PhaseRow(
+            stage: .summariesRequested, status: .notesReady, closedOn: nil, purged: false,
+            phase: .writingSummaries, deleteOn: nil, title: "Claude is writing the summaries",
+            action: nil, asksForSummary: true, fired: ["id-s"]),
+        PhaseRow(
+            stage: .summariesRequested, status: .notesReady, closedOn: nil, purged: false,
+            phase: .summaryReady, deleteOn: nil, title: "Summaries ready for review",
+            action: .approveSummaries, asksForSummary: true, fired: ["id-s"],
+            markers: ["id-s 1"]),
+        PhaseRow(
+            stage: .closing, status: .notesReady, closedOn: nil, purged: false,
             phase: .closing, deleteOn: nil, title: "Claude is closing the day", action: nil),
     ]
 
     @Test("The phase and its title and action follow the table, row by row", arguments: rows)
     func phases(row: PhaseRow) throws {
-        let handoff = try Self.handoff(
+        var handoff = try Self.handoff(
             stage: row.stage, docStatus: row.status,
             closedOn: row.closedOn.flatMap(CalendarDay.init(isoString:)), purged: row.purged)
+        if row.asksForSummary {
+            handoff.pages = [
+                HandoffPage(
+                    page: 1, key: "meeting:c|e", calendarID: "c", eventID: "e", title: "T",
+                    summaryRoutines: [Self.routine("s")])
+            ]
+        }
+        handoff.firedSummaries = row.fired
+        handoff.summaryMarkers = row.markers
         let expected: HandoffPhase
         if let phase = row.phase {
             expected = phase
@@ -231,6 +259,24 @@ struct DayHandoffTests {
         #expect(handoff.phase == expected)
         #expect(handoff.phase.title == row.title)
         #expect(handoff.phase.action == row.action)
+    }
+
+    @Test("A stage an earlier build saved after approving decodes as closing")
+    func legacyStages() throws {
+        func decode(_ raw: String) throws -> HandoffStage {
+            try JSONDecoder().decode(HandoffStage.self, from: Data(#""\#(raw)""#.utf8))
+        }
+        #expect(try decode("notesApproved") == .closing)
+        #expect(try decode("summaryApproved") == .closing)
+        for stage in [
+            HandoffStage.queued, .uploaded, .notesRequested, .summariesPending,
+            .summariesRequested, .closing,
+        ] {
+            #expect(try decode(stage.rawValue) == stage)
+        }
+        #expect(throws: DecodingError.self) { try decode("somethingNew") }
+        let encoded = try JSONEncoder().encode(HandoffStage.summariesPending)
+        #expect(String(decoding: encoded, as: UTF8.self) == #""summariesPending""#)
     }
 
     @Test("The Drive folder round-trips, is optional on disk and is in the payload only when set")
@@ -263,7 +309,7 @@ struct DayHandoffTests {
         handoff.tasks = [HandoffTask(taskID: nil, text: "Do", due: "10/27")]
         handoff.delegated = [HandoffDelegated(taskID: "d", text: "Ask", owner: "Sam")]
         handoff.driveFileID = "file"
-        let text = handoff.payload(step: .approveNotes)
+        let text = handoff.payload(step: .close)
 
         let object = try #require(
             JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
@@ -272,10 +318,10 @@ struct DayHandoffTests {
                 "schema", "scope", "step", "date", "checksum", "driveFileID", "pageCount", "pages",
                 "tasks", "delegated",
             ])
-        #expect(object["schema"] as? String == "magenda.end-of-day/2")
+        #expect(object["schema"] as? String == "magenda.end-of-day/3")
         #expect(object["scope"] as? String == "day")
         #expect(object["part"] == nil)
-        #expect(object["step"] as? String == "approve-notes")
+        #expect(object["step"] as? String == "close")
         #expect(object["date"] as? String == "2026-10-26")
         #expect(object["checksum"] as? String == Self.checksum)
         #expect(object["driveFileID"] as? String == "file")
@@ -405,7 +451,7 @@ struct DayHandoffTests {
                 "schema", "scope", "part", "step", "date", "checksum", "driveFileID", "pageCount",
                 "pages",
             ])
-        #expect(object["schema"] as? String == "magenda.end-of-day/2")
+        #expect(object["schema"] as? String == "magenda.end-of-day/3")
         #expect(object["scope"] as? String == "meeting")
         #expect(object["part"] as? Int == 2)
         #expect(object["pageCount"] as? Int == 2)

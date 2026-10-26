@@ -74,6 +74,38 @@ struct PlatformTests {
         #expect(try store.load() == nil)
     }
 
+    @Test("The summary routine credentials store keeps one item per routine ID")
+    func summaryRoutineStoreRoundTrip() throws {
+        let store = KeychainSummaryRoutineCredentialsStore(
+            service: "name.tkcs.magenda.tests-summary-routine")
+        let first = "11111111-1111-4111-8111-111111111111"
+        let second = "22222222-2222-4222-8222-222222222222"
+        try store.delete(id: first)
+        try store.delete(id: second)
+        defer {
+            try? store.delete(id: first)
+            try? store.delete(id: second)
+        }
+
+        #expect(try store.load(id: first) == nil)
+        let memo = try #require(
+            RoutineCredentials(
+                fireURL: "https://api.anthropic.com/v1/claude_code/routines/trig_memo/fire",
+                token: "sk-ant-oat01-memo"))
+        let log = try #require(
+            RoutineCredentials(
+                fireURL: "https://api.anthropic.com/v1/claude_code/routines/trig_log/fire",
+                token: "sk-ant-oat01-log"))
+        try store.save(memo, id: first)
+        try store.save(log, id: second)
+        #expect(try store.load(id: first) == memo)
+        #expect(try store.load(id: second) == log)
+
+        try store.delete(id: first)
+        #expect(try store.load(id: first) == nil)
+        #expect(try store.load(id: second) == log)
+    }
+
     @Test("Settings round-trip through UserDefaults and garbage loads as defaults")
     func settingsRoundTrip() throws {
         let suite = "name.tkcs.magenda.tests.settings"
