@@ -1,13 +1,33 @@
 name: Tests
 
-# Layers 1-3 of docs/testing-policy.md, on every PR. A 100% pass rate is required to merge. Job
-# names here are what scripts/update_branch_protection.py's REQUIRED_STATUS_CHECKS lists; rename
-# one and update that list in the same PR.
+# Layers 1-3 of docs/testing-policy.md, on every PR. A 100% pass rate is required to merge. The
+# simulator jobs are four timed shards on the newest iPad: each builds once, then runs its share of
+# the hosted and UI tests (scripts/ui_shards.py). Job names here are what
+# scripts/update_branch_protection.py's REQUIRED_STATUS_CHECKS lists; rename one and update that
+# list in the same PR.
 on:
   push:
     branches: [main, "releases/**"]
   pull_request:
+  schedule:
+    - cron: "17 3 * * 1"   # Mondays 03:17 UTC: the oldest supported runtime, on main
   workflow_dispatch:
+    inputs:
+      simulators:
+        description: Build the app and run its hosted and UI tests on simulators
+        type: boolean
+        default: true
+      runtimes:
+        description: Which iOS runtimes the simulator jobs test on
+        type: choice
+        options: [newest, oldest, both]
+        default: newest
+
+# A new push to a PR, or a new dispatch on the same branch, cancels the stale run. Pushes and the
+# weekly run get a group of their own, so they are never cancelled or replaced.
+concurrency:
+  group: tests-${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && format('{0}-{1}', github.event_name, github.ref) || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -44,82 +64,23 @@ jobs:
       - name: Test scripts/
         run: python3 -m unittest discover -s scripts/tests -v
 
-  # The app itself, on simulators: its hosted unit tests (layer 1), on the newest and the oldest
-  # supported iOS and on an iPad (layer 3). Three points, not a product of every device and every
-  # runtime (docs/testing-policy.md). The UI tests (layer 2) run in the `ui` job below.
-  app:
-    name: app (${{ matrix.family }}, ${{ matrix.runtime }})
-    runs-on: macos-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { family: iphone, runtime: newest }
-          - { family: iphone, runtime: oldest }
-          - { family: ipad, runtime: newest }
-    env:
-      FAMILY: ${{ matrix.family }}
-      RUNTIME: ${{ matrix.runtime }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Show Xcode
-        run: xcodebuild -version
-      # project.yml's minimumXcodeGenVersion refuses anything older than the spec needs (ADR 0003).
-      - name: Generate the Xcode project
-        run: |
-          brew install xcodegen
-          xcodegen generate
-      - name: Pick a simulator
-        run: echo "DESTINATION=$(python3 scripts/simulator.py --family "$FAMILY" --runtime "$RUNTIME")" >> "$GITHUB_ENV"
-      - name: Build for testing
-        run: |
-          xcodebuild build-for-testing -project Magenda.xcodeproj -scheme Magenda \
-            -destination "$DESTINATION" -derivedDataPath build/DerivedData -quiet
-      - name: App tests (100% pass rate required)
-        run: |
-          xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
-            -destination "$DESTINATION" -derivedDataPath build/DerivedData \
-            -only-testing:MagendaTests -resultBundlePath build/app-tests.xcresult
-      - name: Upload test results
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: xcresult-${{ matrix.family }}-${{ matrix.runtime }}
-          path: build/*.xcresult
-          if-no-files-found: ignore
-          retention-days: 14
-
-  # The UI tests, sharded per device point so a failed shard is re-run alone ("Re-run failed jobs")
-  # and no job runs for long. `rest` selects the whole bundle minus the other shards' classes, so a
-  # UI test class added later runs there instead of in no shard. The binder classes are iPad-only
-  # (every test skips on iPhone), so only the iPad has a `binder` shard. Each job builds for itself.
+  # The hosted tests and the UI tests on simulators, as four shards so a failed shard is re-run
+  # alone ("Re-run failed jobs") and no job runs for long. scripts/ui_shards.py balances the shards
+  # from measured timings. Each job builds for itself, then runs its share.
   ui:
-    name: ui (${{ matrix.family }}, ${{ matrix.runtime }}, ${{ matrix.shard }})
+    name: ui (ipad, ${{ matrix.runtime }}, ${{ matrix.shard }})
+    if: github.event_name != 'workflow_dispatch' || inputs.simulators
     runs-on: macos-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { family: iphone, runtime: newest, shard: edit-screen, args: "-only-testing:MagendaUITests/AgendaEditUITests -only-testing:MagendaUITests/AgendaScreenUITests -only-testing:MagendaUITests/LongTextUITests" }
-          - { family: iphone, runtime: newest, shard: settings, args: "-only-testing:MagendaUITests/SettingsUITests" }
-          - { family: iphone, runtime: newest, shard: rules, args: "-only-testing:MagendaUITests/RulesUITests" }
-          - { family: iphone, runtime: newest, shard: rest, args: "-only-testing:MagendaUITests -skip-testing:MagendaUITests/AgendaEditUITests -skip-testing:MagendaUITests/AgendaScreenUITests -skip-testing:MagendaUITests/LongTextUITests -skip-testing:MagendaUITests/SettingsUITests -skip-testing:MagendaUITests/RulesUITests -skip-testing:MagendaUITests/BinderUITests -skip-testing:MagendaUITests/StartOverUITests -skip-testing:MagendaUITests/HandoffUITests" }
-          - { family: iphone, runtime: oldest, shard: edit-screen, args: "-only-testing:MagendaUITests/AgendaEditUITests -only-testing:MagendaUITests/AgendaScreenUITests -only-testing:MagendaUITests/LongTextUITests" }
-          - { family: iphone, runtime: oldest, shard: settings, args: "-only-testing:MagendaUITests/SettingsUITests" }
-          - { family: iphone, runtime: oldest, shard: rules, args: "-only-testing:MagendaUITests/RulesUITests" }
-          - { family: iphone, runtime: oldest, shard: rest, args: "-only-testing:MagendaUITests -skip-testing:MagendaUITests/AgendaEditUITests -skip-testing:MagendaUITests/AgendaScreenUITests -skip-testing:MagendaUITests/LongTextUITests -skip-testing:MagendaUITests/SettingsUITests -skip-testing:MagendaUITests/RulesUITests -skip-testing:MagendaUITests/BinderUITests -skip-testing:MagendaUITests/StartOverUITests -skip-testing:MagendaUITests/HandoffUITests" }
-          - { family: ipad, runtime: newest, shard: edit-screen, args: "-only-testing:MagendaUITests/AgendaEditUITests -only-testing:MagendaUITests/AgendaScreenUITests -only-testing:MagendaUITests/LongTextUITests" }
-          - { family: ipad, runtime: newest, shard: settings, args: "-only-testing:MagendaUITests/SettingsUITests" }
-          - { family: ipad, runtime: newest, shard: rules, args: "-only-testing:MagendaUITests/RulesUITests" }
-          - { family: ipad, runtime: newest, shard: binder, args: "-only-testing:MagendaUITests/BinderUITests -only-testing:MagendaUITests/StartOverUITests -only-testing:MagendaUITests/HandoffUITests" }
-          - { family: ipad, runtime: newest, shard: rest, args: "-only-testing:MagendaUITests -skip-testing:MagendaUITests/AgendaEditUITests -skip-testing:MagendaUITests/AgendaScreenUITests -skip-testing:MagendaUITests/LongTextUITests -skip-testing:MagendaUITests/SettingsUITests -skip-testing:MagendaUITests/RulesUITests -skip-testing:MagendaUITests/BinderUITests -skip-testing:MagendaUITests/StartOverUITests -skip-testing:MagendaUITests/HandoffUITests" }
+        runtime: ${{ fromJSON((github.event_name == 'schedule' || inputs.runtimes == 'both') && '["newest","oldest"]' || (inputs.runtimes == 'oldest' && '["oldest"]' || '["newest"]')) }}
+        shard: [1, 2, 3, 4]
     env:
-      FAMILY: ${{ matrix.family }}
       RUNTIME: ${{ matrix.runtime }}
       SHARD: ${{ matrix.shard }}
-      SHARD_ARGS: ${{ matrix.args }}
+      HOMEBREW_NO_AUTO_UPDATE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Show Xcode
@@ -130,28 +91,35 @@ jobs:
           brew install xcodegen
           xcodegen generate
       - name: Pick a simulator
-        run: echo "DESTINATION=$(python3 scripts/simulator.py --family "$FAMILY" --runtime "$RUNTIME")" >> "$GITHUB_ENV"
-      # A device's first boot keeps the runner busy for minutes, and UI tests started on it time out
-      # at launch. Booting it here lets that work overlap the build, and the tests wait for the boot.
-      - name: Boot the simulator
-        run: xcrun simctl boot "${DESTINATION#id=}"
+        run: |
+          destination=$(python3 scripts/simulator.py --family ipad --runtime "$RUNTIME")
+          echo "DESTINATION=$destination" >> "$GITHUB_ENV"
+      - name: Choose this shard's tests
+        run: |
+          args=$(python3 scripts/ui_shards.py --shard "$SHARD")
+          echo "SHARD_ARGS=$args" >> "$GITHUB_ENV"
       - name: Build for testing
         run: |
           xcodebuild build-for-testing -project Magenda.xcodeproj -scheme Magenda \
             -destination "$DESTINATION" -derivedDataPath build/DerivedData -quiet
-      - name: Wait for the simulator to finish booting
+      # The boot comes after the build: a boot that overlaps the build slows it from about 1 minute
+      # to 4-7 minutes. `bootstatus -b` returns only once the device is fully up, so the first test
+      # does not launch into a half-booted simulator.
+      - name: Boot the simulator and wait for it
         run: xcrun simctl bootstatus "${DESTINATION#id=}" -b
-      - name: UI tests (100% pass rate required)
+      - name: Tests (100% pass rate required)
         run: |
-          # SHARD_ARGS is deliberately unquoted: it is several -only-testing/-skip-testing words.
+          # SHARD_ARGS is deliberately unquoted: it is several -only-testing words.
           xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
             -destination "$DESTINATION" -derivedDataPath build/DerivedData \
-            $SHARD_ARGS -resultBundlePath "build/ui-tests-$SHARD.xcresult"
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 600 \
+            -maximum-test-execution-time-allowance 600 \
+            $SHARD_ARGS -resultBundlePath "build/tests-$SHARD.xcresult"
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: xcresult-ui-${{ matrix.family }}-${{ matrix.runtime }}-${{ matrix.shard }}
+          name: xcresult-ipad-${{ matrix.runtime }}-${{ matrix.shard }}
           path: build/*.xcresult
           if-no-files-found: ignore
           retention-days: 14

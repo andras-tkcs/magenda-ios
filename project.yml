@@ -86,9 +86,8 @@ schemes:
         Magenda: all
     test:
       config: Debug
-      gatherCoverageData: true
-      coverageTargets:
-        - Magenda
+      # The coverage ratchet is AppCore's (ADR 0007); the app's coverage is not read.
+      gatherCoverageData: false
       targets:
         - MagendaTests
         - MagendaUITests

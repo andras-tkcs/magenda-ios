@@ -5,8 +5,8 @@ Simulator names and runtimes change with every Xcode release and differ between 
 nothing in this repository names a device. The workflows and `scripts/pre_release_check.py` ask
 this script instead:
 
-    python3 scripts/simulator.py                          # newest iOS, an iPhone -> id=<udid>
-    python3 scripts/simulator.py --family ipad
+    python3 scripts/simulator.py                          # newest iOS, an iPad -> id=<udid>
+    python3 scripts/simulator.py --family iphone
     python3 scripts/simulator.py --runtime oldest         # oldest installed iOS >= the deployment target
 
 `--runtime oldest` is the compatibility layer's lower bound (docs/testing-policy.md). When the
@@ -68,7 +68,7 @@ def choose(devices: dict, *, family: str, runtime: str, minimum: tuple[int, int]
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--family", choices=sorted(_FAMILIES), default="iphone")
+    parser.add_argument("--family", choices=sorted(_FAMILIES), default="ipad")
     parser.add_argument("--runtime", choices=["newest", "oldest"], default="newest")
     parser.add_argument("--devices-json", type=Path, help="read `simctl list devices available -j` output from a file")
     args = parser.parse_args(argv)

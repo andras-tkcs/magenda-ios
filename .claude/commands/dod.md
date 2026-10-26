@@ -34,8 +34,8 @@ If the run has not finished, the row is `pending`, not PASS.
 **Then check the conditional rows against the actual diff** (`git diff --stat origin/main...HEAD`),
 and for each one that applies, say whether it has been satisfied — do not silently drop it:
 
-- Touched `project.yml`? → `xcodegen generate` succeeds and the app builds (an `app` job of
-  `tests.yml` is green on this commit), new targets are in the scheme, changed settings commented.
+- Touched `project.yml`? → `xcodegen generate` succeeds and the app builds (the four `ui (ipad, newest, N)`
+  jobs of `tests.yml` are green on this commit), new targets are in the scheme, changed settings commented.
 - Touched permissions, entitlements, `INFOPLIST_KEY_NS*UsageDescription` or `PrivacyInfo.xcprivacy`?
   → purpose strings written for the user, and the changed App Store Connect privacy answers listed
   in the PR's "Manual verification".

@@ -152,7 +152,7 @@ blocking commands, and `.github/pull_request_template.md` repeats the checklist.
       passes (the coverage ratchet).
 - [ ] `swift format lint --strict` passes over the paths above, and
       `python3 -m unittest discover -s scripts/tests` passes.
-- [ ] The app tests and UI tests pass on every simulator `tests.yml` runs: locally on macOS with
+- [ ] The app tests and UI tests pass on every simulator `tests.yml` runs on a pull request: locally on macOS with
       `python3 scripts/pre_release_check.py`, or from the branch's `tests.yml` run.
 - [ ] A user-visible change has a line under `CHANGELOG.md`'s `## [Unreleased]` heading, never
       under a concrete version heading. Internal-only changes don't need one.
