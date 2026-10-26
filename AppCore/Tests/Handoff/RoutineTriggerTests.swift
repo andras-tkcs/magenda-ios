@@ -135,6 +135,18 @@ struct RoutineTriggerTests {
         #expect(sent.timeout == 30)
     }
 
+    @Test("The shared send gives the same request and answer as fire")
+    func sharedSend() async throws {
+        let routine = try #require(RoutineCredentials(fireURL: goodURL, token: goodToken))
+        let http = FakeHTTPClient()
+        http.enqueue(status: 200, json: sessionJSON)
+        http.enqueue(status: 200, json: sessionJSON)
+        let sent = try await RoutineTriggerClient.send(text: "x", to: routine, http: http)
+        let fired = try await client(http).fire(text: "x")
+        #expect(sent == fired)
+        #expect(http.requests[0] == http.requests[1])
+    }
+
     @Test("isConfigured follows the stored credentials")
     func configured() {
         #expect(client(FakeHTTPClient()).isConfigured())
@@ -219,9 +231,9 @@ struct RoutineTriggerTests {
     @Test("The messages are word for word and never mention a token")
     func messages() {
         let all: [RoutineTriggerError] = [
-            .notConfigured, .rejectedToken, .notFound, .notStarted, .forbidden,
-            .rateLimited(retryAfter: 5), .rateLimited(retryAfter: nil), .unavailable, .network,
-            .unexpectedResponse,
+            .notConfigured, .summaryNotConfigured, .rejectedToken, .notFound, .notStarted,
+            .forbidden, .rateLimited(retryAfter: 5), .rateLimited(retryAfter: nil), .unavailable,
+            .network, .unexpectedResponse,
         ]
         for error in all {
             #expect(!error.userMessage.contains("sk-ant"))
@@ -229,6 +241,10 @@ struct RoutineTriggerTests {
         #expect(
             RoutineTriggerError.notConfigured.userMessage
                 == "Add the end-of-day routine in Settings to send this day for processing.")
+        #expect(
+            RoutineTriggerError.summaryNotConfigured.userMessage
+                == "A summary routine's trigger is missing. Save it again under the same name in Settings → Summary routines."
+        )
         #expect(
             RoutineTriggerError.rejectedToken.userMessage
                 == "Claude rejected the routine token. Generate a new token at claude.ai/code/routines and enter it in Settings."

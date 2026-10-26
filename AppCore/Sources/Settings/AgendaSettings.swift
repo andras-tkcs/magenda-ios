@@ -16,12 +16,15 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
     public var rules: BinderRules
     /// The name of the Google Drive folder finished days are uploaded to.
     public var driveFolderName: String
+    /// The summary routines the person set up, without their secrets.
+    public var summaryRoutines: [SummaryRoutine]
 
     /// Creates settings; the defaults are what a fresh install uses.
     public init(
         fontPack: FontPack = .outfit, colors: ThemeColors = .default, calendarIDs: [String] = [],
         todoListTitle: String = "Claude", delegatedListTitle: String = "Claude Delegations",
-        rules: BinderRules = .default, driveFolderName: String = DriveFolderName.default
+        rules: BinderRules = .default, driveFolderName: String = DriveFolderName.default,
+        summaryRoutines: [SummaryRoutine] = []
     ) {
         self.fontPack = fontPack
         self.colors = colors
@@ -30,6 +33,7 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
         self.delegatedListTitle = delegatedListTitle
         self.rules = rules
         self.driveFolderName = driveFolderName
+        self.summaryRoutines = summaryRoutines
     }
 
     /// The font pack and colors as a theme.
@@ -54,12 +58,29 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
             delegatedListTitle: try value(.delegatedListTitle, defaults.delegatedListTitle),
             rules: try value(.rules, defaults.rules),
             driveFolderName: DriveFolderName.validated(
-                try value(.driveFolderName, defaults.driveFolderName)) ?? defaults.driveFolderName)
+                try value(.driveFolderName, defaults.driveFolderName)) ?? defaults.driveFolderName,
+            summaryRoutines: try value(.summaryRoutines, defaults.summaryRoutines))
+    }
+
+    /// The routine whose `BinderText.fold`ed name equals the fold of `name`, if any.
+    public func summaryRoutine(named name: String) -> SummaryRoutine? {
+        let wanted = BinderText.fold(name)
+        return summaryRoutines.first { BinderText.fold($0.name) == wanted }
+    }
+
+    /// Removes the routine and its ID from every entry of `rules.summaryRoutines`; an entry left
+    /// with no ID is removed.
+    public mutating func removeSummaryRoutine(id: String) {
+        summaryRoutines.removeAll { $0.id == id }
+        rules.summaryRoutines = rules.summaryRoutines.compactMapValues { ids in
+            let kept = ids.filter { $0 != id }
+            return kept.isEmpty ? nil : kept
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
         case fontPack, colors, calendarIDs, todoListTitle, delegatedListTitle, rules
-        case driveFolderName
+        case driveFolderName, summaryRoutines
     }
 }
 
