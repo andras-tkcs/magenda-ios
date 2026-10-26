@@ -7,17 +7,14 @@
 import XCTest
 
 final class RulesUITests: XCTestCase {
+    /// Launches straight into the rules and waits for the first block's row.
     @MainActor
-    private func launch(_ extraArguments: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "standard"] + extraArguments
-        app.launch()
+    private func launchIntoRules(_ extraArguments: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication.launchMagenda(["-MagendaOpen", "rules"] + extraArguments)
+        XCTAssertTrue(
+            app.element("rulesRow.personalBlocks.0").waitForExistence(timeout: 30),
+            "the rules never opened")
         return app
-    }
-
-    @MainActor
-    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier].firstMatch
     }
 
     @MainActor
@@ -28,34 +25,6 @@ final class RulesUITests: XCTestCase {
         let result = XCTWaiter().wait(
             for: [XCTNSPredicateExpectation(predicate: predicate, object: element)], timeout: 30)
         XCTAssertEqual(result, .completed, "\(element) never satisfied \(format)")
-    }
-
-    /// Opens the settings sheet, then the rules, retrying dropped taps.
-    @MainActor
-    private func openRules(_ app: XCUIApplication) {
-        XCTAssertTrue(
-            element(app, "eventRow.0").waitForExistence(timeout: 30), "the list never appeared")
-        let button = app.buttons["settingsButton"].firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 30), "the settings button never appeared")
-        let done = app.buttons["settingsDone"].firstMatch
-        var taps = 0
-        while !done.exists && taps < 5 {
-            button.tap()
-            taps += 1
-            _ = done.waitForExistence(timeout: 10)
-        }
-        XCTAssertTrue(done.exists, "the settings sheet never opened after \(taps) taps")
-
-        let link = element(app, "rulesLink")
-        reveal(app, link)
-        let first = element(app, "rulesRow.personalBlocks.0")
-        taps = 0
-        while !first.exists && taps < 5 {
-            link.tap()
-            taps += 1
-            _ = first.waitForExistence(timeout: 10)
-        }
-        XCTAssertTrue(first.exists, "the rules never opened after \(taps) taps")
     }
 
     /// Goes back from the rules to the settings form and closes the sheet.
@@ -72,69 +41,22 @@ final class RulesUITests: XCTestCase {
         while done.exists && taps < 5 {
             done.tap()
             taps += 1
-            _ = XCTWaiter().wait(
-                for: [
-                    XCTNSPredicateExpectation(
-                        predicate: NSPredicate(format: "exists == false"), object: done)
-                ], timeout: 10)
+            _ = done.waitForNonExistence(timeout: 10)
         }
         XCTAssertFalse(done.exists, "the settings sheet never closed")
     }
 
-    /// The bar the form scrolls under: the settings sheet's own, never the agenda's behind it.
+    /// The rules form, which the scroll helpers drag.
     @MainActor
-    private func formTop(_ app: XCUIApplication) -> XCUIElement {
-        let done = app.buttons["settingsDone"].firstMatch
-        return done.exists ? done : app.navigationBars["Binder rules"].firstMatch
+    private func rulesForm(_ app: XCUIApplication) -> XCUIElement {
+        app.element("rulesForm")
     }
 
-    /// Drags the form by `distance` points (positive scrolls further down). The drag starts below
-    /// the sheet's top bar, so it lands in the form on a phone and in an iPad's form sheet alike,
-    /// and it holds at the end so the form does not fling past a row.
+    /// The bottom limit for a field about to be typed into: the top half of the screen, clear of
+    /// the keyboard.
     @MainActor
-    private func drag(_ app: XCUIApplication, by distance: CGFloat) {
-        let top = formTop(app)
-        let center = top.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let sideways: CGFloat = top.identifier == "settingsDone" ? -150 : 0
-        let anchor = center.withOffset(CGVector(dx: sideways, dy: 275))
-        let start = anchor.withOffset(CGVector(dx: 0, dy: distance / 2))
-        let end = anchor.withOffset(CGVector(dx: 0, dy: -distance / 2))
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: 300, thenHoldForDuration: 0.3)
-    }
-
-    /// Scrolls in held drags until `target` can be tapped. A lazy row does not exist until it is
-    /// scrolled near, so a missing target is looked for further down first and then back up. With
-    /// `upperHalf`, the target should also sit in the top half of the screen, clear of the keyboard
-    /// that tapping a text field brings up, unless the form cannot scroll any further.
-    @MainActor
-    private func reveal(_ app: XCUIApplication, _ target: XCUIElement, upperHalf: Bool = false) {
-        let bottom = upperHalf ? app.windows.firstMatch.frame.height / 2 : .greatestFiniteMagnitude
-        var drags = 0
-        var lastMid: CGFloat?
-        var stalled = 0
-        while drags < 40 {
-            guard target.waitForExistence(timeout: 1) else {
-                lastMid = nil
-                drag(app, by: drags < 12 ? 300 : -300)
-                drags += 1
-                continue
-            }
-            let top = formTop(app).frame.maxY + 40
-            let mid = target.frame.midY
-            stalled = lastMid.map { abs($0 - mid) < 2 ? stalled + 1 : 0 } ?? 0
-            lastMid = mid
-            if mid < top {
-                drag(app, by: -min(max(top - mid + 40, 100), 300))
-            } else if target.isHittable && (mid <= bottom || stalled >= 1) {
-                break
-            } else if stalled >= 3 {
-                break
-            } else {
-                drag(app, by: min(max(mid - bottom + 40, 100), 300))
-            }
-            drags += 1
-        }
-        XCTAssertTrue(target.exists && target.isHittable, "\(target) was never scrolled into view")
+    private func upperHalf(_ app: XCUIApplication) -> CGFloat {
+        app.windows.firstMatch.frame.height / 2
     }
 
     /// Types `text` and presses return in a field. The keys go to whatever has focus rather than
@@ -142,32 +64,28 @@ final class RulesUITests: XCTestCase {
     /// it makes room for the keyboard.
     @MainActor
     private func enter(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
-        reveal(app, field, upperHalf: true)
+        field.reveal(in: rulesForm(app), bottom: upperHalf(app))
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         app.typeText(text)
     }
 
     @MainActor
     func testAddingAPersonalBlockLeavesMatchingEventsOffTheAgenda() {
-        let app = launch()
-        openRules(app)
-
-        enter(app, element(app, "rulesAdd.personalBlocks"), "Week preparation\n")
-        let added = element(app, "rulesRow.personalBlocks.2")
+        let app = launchIntoRules()
+        enter(app, app.element("rulesAdd.personalBlocks"), "Week preparation\n")
+        let added = app.element("rulesRow.personalBlocks.2")
         XCTAssertTrue(added.waitForExistence(timeout: 30), "the new block never appeared")
 
         closeSettings(app)
-        let reason = element(app, "eventReason.6")
+        let reason = app.element("eventReason.6")
         XCTAssertTrue(reason.waitForExistence(timeout: 30), "eventReason.6 never appeared")
         waitUntil(reason, "label CONTAINS %@", "Personal block")
     }
 
     @MainActor
     func testDeletingAPersonalBlockBringsItsEventsBack() {
-        let app = launch()
-        openRules(app)
-
-        let row = element(app, "rulesRow.personalBlocks.0")
+        let app = launchIntoRules()
+        let row = app.element("rulesRow.personalBlocks.0")
         var swipes = 0
         while row.exists && swipes < 5 {
             row.swipeLeft()
@@ -186,7 +104,7 @@ final class RulesUITests: XCTestCase {
         XCTAssertNotEqual(row.label, "Lunch", "Lunch was never deleted")
 
         closeSettings(app)
-        let reason = element(app, "eventReason.3")
+        let reason = app.element("eventReason.3")
         XCTAssertTrue(reason.waitForExistence(timeout: 30), "eventReason.3 never appeared")
         waitUntil(reason, "NOT (label CONTAINS %@)", "Personal block")
     }
@@ -197,11 +115,9 @@ final class RulesUITests: XCTestCase {
     /// lands mid-animation is swallowed.
     @MainActor
     func testLongPressDeletesADefaultOutOfOfficeWord() {
-        let app = launch()
-        openRules(app)
-
-        let row = element(app, "rulesRow.outOfOfficeWords.3")
-        reveal(app, row)
+        let app = launchIntoRules()
+        let row = app.element("rulesRow.outOfOfficeWords.3")
+        row.reveal(in: rulesForm(app))
         XCTAssertEqual(row.label, "PTO")
         let delete = app.buttons.matching(
             NSPredicate(format: "identifier == %@ OR label == %@", "rulesDeleteAction", "Delete")
@@ -212,55 +128,37 @@ final class RulesUITests: XCTestCase {
             attempts += 1
             guard delete.waitForExistence(timeout: 10) else { continue }
             // The menu animates in; a tap before it settles is swallowed on the oldest runtime.
-            let settled = XCTWaiter().wait(
-                for: [
-                    XCTNSPredicateExpectation(
-                        predicate: NSPredicate(format: "isHittable == true"), object: delete)
-                ], timeout: 10)
-            if settled == .completed {
+            if delete.waitUntil(\.isHittable, is: true, timeout: 10) {
                 delete.tap()
             }
-            _ = XCTWaiter().wait(
-                for: [
-                    XCTNSPredicateExpectation(
-                        predicate: NSPredicate(format: "exists == false"), object: row)
-                ], timeout: 10)
+            _ = row.waitForNonExistence(timeout: 10)
         }
 
-        let gone = XCTWaiter().wait(
-            for: [
-                XCTNSPredicateExpectation(
-                    predicate: NSPredicate(format: "exists == false"), object: row)
-            ], timeout: 30)
-        XCTAssertEqual(gone, .completed, "PTO was never deleted")
-        XCTAssertEqual(element(app, "rulesRow.outOfOfficeWords.2").label, "Vacation")
+        XCTAssertTrue(row.waitForNonExistence(timeout: 30), "PTO was never deleted")
+        XCTAssertEqual(app.element("rulesRow.outOfOfficeWords.2").label, "Vacation")
     }
 
     /// Guards the Edit button on the rules screen, which shows the delete controls without a swipe.
     @MainActor
     func testEditTogglesTheRulesIntoEditing() {
-        let app = launch()
-        openRules(app)
-
+        let app = launchIntoRules()
         let button = app.buttons["rulesEditButton"].firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30), "the Edit button never appeared")
         button.tap()
-        waitUntil(button, "label == %@", "Done")
+        XCTAssertTrue(button.waitUntil(\.label, is: "Done"), "\(button) never said Done")
         button.tap()
-        waitUntil(button, "label == %@", "Edit")
+        XCTAssertTrue(button.waitUntil(\.label, is: "Edit"), "\(button) never said Edit")
     }
 
     @MainActor
     func testAddingAPersonShowsTheAlias() {
-        let app = launch()
-        openRules(app)
-
-        enter(app, element(app, "peopleName"), "Nora\n")
-        enter(app, element(app, "peopleEmail"), "nora@example.com\n")
+        let app = launchIntoRules()
+        enter(app, app.element("peopleName"), "Nora\n")
+        enter(app, app.element("peopleEmail"), "nora@example.com\n")
         let add = app.buttons["peopleAdd"].firstMatch
-        reveal(app, add)
+        add.reveal(in: rulesForm(app))
         var taps = 0
-        let row = element(app, "rulesRow.people.0")
+        let row = app.element("rulesRow.people.0")
         while !row.exists && taps < 5 {
             add.tap()
             taps += 1
@@ -271,33 +169,32 @@ final class RulesUITests: XCTestCase {
 
     @MainActor
     func testChoosingAContactFillsThePerson() {
-        let app = launch()
-        openRules(app)
-
+        let app = launchIntoRules()
         let choose = app.buttons["peopleFromContacts"].firstMatch
-        reveal(app, choose)
+        choose.reveal(in: rulesForm(app))
         choose.tap()
-        waitUntil(element(app, "peopleName"), "value == %@", "Nora")
-        waitUntil(element(app, "peopleEmail"), "value == %@", "nora.kim@example.com")
+        waitUntil(app.element("peopleName"), "value == %@", "Nora")
+        waitUntil(app.element("peopleEmail"), "value == %@", "nora.kim@example.com")
 
         let add = app.buttons["peopleAdd"].firstMatch
-        reveal(app, add)
+        add.reveal(in: rulesForm(app))
         var taps = 0
-        let row = element(app, "rulesRow.people.0")
+        let row = app.element("rulesRow.people.0")
         while !row.exists && taps < 5 {
             add.tap()
             taps += 1
             _ = row.waitForExistence(timeout: 10)
         }
-        waitUntil(row, "label == %@", "nora → nora.kim@example.com")
+        let alias = "nora → nora.kim@example.com"
+        XCTAssertTrue(row.waitUntil(\.label, is: alias), "\(row) never said \(alias)")
     }
 
     @MainActor
     private func addSummary(_ app: XCUIApplication, title: String, tickFirst: Bool) {
-        enter(app, element(app, "summaryTitleField"), title)
+        enter(app, app.element("summaryTitleField"), title)
         if tickFirst {
-            let choice = element(app, "summaryChoice.0")
-            reveal(app, choice)
+            let choice = app.element("summaryChoice.0")
+            choice.reveal(in: rulesForm(app))
             let toggle = choice.switches.firstMatch.exists ? choice.switches.firstMatch : choice
             var taps = 0
             while (toggle.value as? String) != "1" && taps < 5 {
@@ -307,62 +204,52 @@ final class RulesUITests: XCTestCase {
             XCTAssertEqual(toggle.value as? String, "1", "the summary choice did not turn on")
         }
         let add = app.buttons["summaryAdd"].firstMatch
-        reveal(app, add)
+        add.reveal(in: rulesForm(app))
         add.tap()
     }
 
     @MainActor
     func testAddingAMeetingSummaryShowsTheRowWithTheRoutineName() {
-        let app = launch()
-        openRules(app)
-
+        let app = launchIntoRules()
         addSummary(app, title: "Board meeting", tickFirst: true)
-        let row = element(app, "rulesRow.summaries.0")
+        let row = app.element("rulesRow.summaries.0")
         XCTAssertTrue(row.waitForExistence(timeout: 30), "the summary never appeared")
         XCTAssertTrue(row.label.contains("Client memo"), "the row named no routine: \(row.label)")
     }
 
     @MainActor
     func testADuplicateSummaryTitleShowsAnError() {
-        let app = launch()
-        openRules(app)
-
+        let app = launchIntoRules()
         addSummary(app, title: "Board meeting", tickFirst: true)
         XCTAssertTrue(
-            element(app, "rulesRow.summaries.0").waitForExistence(timeout: 30),
+            app.element("rulesRow.summaries.0").waitForExistence(timeout: 30),
             "the first summary never appeared")
         addSummary(app, title: "Board meeting", tickFirst: true)
-        let error = element(app, "summaryError")
+        let error = app.element("summaryError")
         XCTAssertTrue(error.waitForExistence(timeout: 30), "summaryError never appeared")
     }
 
     @MainActor
     func testAddingASummaryWithoutAChoiceShowsAnError() {
-        let app = launch()
-        openRules(app)
-
+        let app = launchIntoRules()
         addSummary(app, title: "Board meeting", tickFirst: false)
-        let error = element(app, "summaryError")
+        let error = app.element("summaryError")
         XCTAssertTrue(error.waitForExistence(timeout: 30), "summaryError never appeared")
     }
 
     @MainActor
     func testWithoutSummaryRoutinesTheRulesSaySoInsteadOfCheckboxes() {
-        let app = launch(["-MagendaNoSummaryRoutines"])
-        openRules(app)
-
-        let note = element(app, "summaryNoRoutines")
-        reveal(app, note)
+        let app = launchIntoRules(["-MagendaNoSummaryRoutines"])
+        let note = app.element("summaryNoRoutines")
+        note.reveal(in: rulesForm(app))
         XCTAssertTrue(note.exists)
     }
 
     @MainActor
     func testTheLookAheadStepperIncrements() {
-        let app = launch()
-        openRules(app)
-
-        let stepper = element(app, "lookAheadStepper")
-        reveal(app, stepper)
+        let app = launchIntoRules()
+        let stepper = app.element("lookAheadStepper")
+        stepper.reveal(in: rulesForm(app))
         // The stepper's plus half is at the trailing edge of its row.
         stepper.coordinate(withNormalizedOffset: CGVector(dx: 0.96, dy: 0.5)).tap()
         let expected = "Upcoming tasks: 6 days"
@@ -371,10 +258,8 @@ final class RulesUITests: XCTestCase {
 
     @MainActor
     func testResetRulesRestoresTheDefaults() {
-        let app = launch()
-        openRules(app)
-
-        let first = element(app, "rulesRow.personalBlocks.0")
+        let app = launchIntoRules()
+        let first = app.element("rulesRow.personalBlocks.0")
         var swipes = 0
         while first.exists && first.label == "Lunch" && swipes < 5 {
             first.swipeLeft()
@@ -392,11 +277,11 @@ final class RulesUITests: XCTestCase {
         XCTAssertNotEqual(first.label, "Lunch", "Lunch was never deleted")
 
         let reset = app.buttons["resetRulesButton"].firstMatch
-        reveal(app, reset)
+        reset.reveal(in: rulesForm(app))
         reset.tap()
-        reveal(app, element(app, "rulesRow.personalBlocks.1"))
-        XCTAssertTrue(element(app, "rulesRow.personalBlocks.1").exists)
-        reveal(app, first)
-        waitUntil(first, "label == %@", "Lunch")
+        app.element("rulesRow.personalBlocks.1").reveal(in: rulesForm(app))
+        XCTAssertTrue(app.element("rulesRow.personalBlocks.1").exists)
+        first.reveal(in: rulesForm(app))
+        XCTAssertTrue(first.waitUntil(\.label, is: "Lunch"), "\(first) never said Lunch")
     }
 }
