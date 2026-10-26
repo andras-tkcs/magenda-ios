@@ -2,7 +2,26 @@ import Foundation
 
 /// How far a finished day has come.
 public enum HandoffStage: String, Codable, Sendable {
-    case queued, uploaded, notesRequested, notesApproved, summaryApproved
+    case queued, uploaded, notesRequested
+    /// Approve notes was tapped and some summary routine has not been started.
+    case summariesPending
+    case summariesRequested, closing
+
+    /// Decodes the raw stage. `notesApproved` and `summaryApproved`, which an earlier build wrote
+    /// once it had started the end-of-day routine's closing steps, read as `.closing`.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        switch raw {
+        case "notesApproved", "summaryApproved": self = .closing
+        default:
+            guard let stage = HandoffStage(rawValue: raw) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container, debugDescription: "Unknown hand-off stage \(raw).")
+            }
+            self = stage
+        }
+    }
 }
 
 /// One page of the PDF, for the routine.
@@ -130,8 +149,7 @@ public struct HandoffPart: Equatable, Codable, Sendable {
 
 /// What the Review list can do with a day.
 public enum HandoffAction: Equatable, Sendable {
-    case retry
-    case approve(RoutineStep)
+    case retry, approveNotes, approveSummaries
 }
 
 /// What the Review list shows for a day.
@@ -141,8 +159,9 @@ public enum HandoffPhase: Equatable, Sendable {
     case waitingToSend
     case notesReady
     case writingNotes
+    case summariesWaitingToSend
+    case writingSummaries
     case summaryReady
-    case working
     case closing
     case meetingClosed
 
@@ -156,8 +175,9 @@ public enum HandoffPhase: Equatable, Sendable {
         case .waitingToSend: "Uploaded, not yet sent to Claude"
         case .notesReady: "Notes ready for review"
         case .writingNotes: "Claude is writing the notes"
-        case .summaryReady: "Summary ready for review"
-        case .working: "Claude is working on the next step"
+        case .summariesWaitingToSend: "Notes approved. Summaries not yet sent to Claude"
+        case .writingSummaries: "Claude is writing the summaries"
+        case .summaryReady: "Summaries ready for review"
         case .closing: "Claude is closing the day"
         case .meetingClosed: "Closed"
         }
@@ -166,10 +186,10 @@ public enum HandoffPhase: Equatable, Sendable {
     /// The button the row offers, if any.
     public var action: HandoffAction? {
         switch self {
-        case .waitingToUpload, .waitingToSend: .retry
-        case .notesReady: .approve(.approveNotes)
-        case .summaryReady: .approve(.approveSummary)
-        case .closed, .meetingClosed, .writingNotes, .working, .closing: nil
+        case .waitingToUpload, .waitingToSend, .summariesWaitingToSend: .retry
+        case .notesReady: .approveNotes
+        case .summaryReady: .approveSummaries
+        case .closed, .meetingClosed, .writingNotes, .writingSummaries, .closing: nil
         }
     }
 }
@@ -385,14 +405,19 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         case (.uploaded, _): return .waitingToSend
         case (.notesRequested, .notesReady): return .notesReady
         case (.notesRequested, _): return .writingNotes
-        case (.notesApproved, .summaryReady): return .summaryReady
-        case (.notesApproved, _): return .working
-        case (.summaryApproved, _): return .closing
+        case (.summariesPending, _):
+            return unsentSummaryRoutines.isEmpty ? summariesPhase : .summariesWaitingToSend
+        case (.summariesRequested, _): return summariesPhase
+        case (.closing, _): return .closing
         }
     }
 
-    /// What the routine receives for `step`: one JSON object with sorted keys. When it would be
-    /// over 65,536 characters it leaves out `tasks` and `delegated` and sets `truncated`; when
+    private var summariesPhase: HandoffPhase {
+        summariesWritten ? .summaryReady : .writingSummaries
+    }
+
+    /// What the end-of-day routine receives for `step` (`notes` or `close`): one JSON object with
+    /// sorted keys. When it would be over 65,536 characters it leaves out `tasks` and `delegated` and sets `truncated`; when
     /// that is still too long it also leaves out every page's `title`, `summaryRoutines` and `source`.
     /// A meeting run has no `tasks` and no `delegated`.
     public func payload(step: RoutineStep) -> String {
@@ -420,7 +445,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
 
     /// The JSON the routine receives.
     private struct Payload: Encodable {
-        let schema = "magenda.end-of-day/2"
+        let schema = "magenda.end-of-day/3"
         let scope: String
         let part: Int?
         let step: String

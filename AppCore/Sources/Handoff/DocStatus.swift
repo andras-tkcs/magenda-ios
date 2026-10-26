@@ -3,16 +3,13 @@ import Foundation
 /// A step the end-of-day routine runs.
 public enum RoutineStep: String, Codable, Sendable {
     case notes
-    case close = "close"
-    case approveNotes = "approve-notes"
-    case approveSummary = "approve-summary"
+    case close
 }
 
 /// The first line of the day's Doc, as the routine sets it.
 public enum DocStatus: String, Codable, Sendable {
     case waitingForNotes
     case notesReady
-    case summaryReady
     case closed
     case unknown
 
@@ -27,8 +24,8 @@ public enum DocStatus: String, Codable, Sendable {
 
     /// Reads the first non-empty line of `text` (a leading U+FEFF and surrounding whitespace
     /// ignored). It must start with `Status:` (ASCII case-insensitive). The rest, trimmed, is
-    /// compared case-insensitively with `Waiting for notes`, `Notes ready for review`,
-    /// `Summary ready for review` and `Closed`. Anything else is `.unknown`.
+    /// compared case-insensitively with `Waiting for notes`, `Notes ready for review` and
+    /// `Closed`. Anything else is `.unknown`.
     public static func parse(_ text: String) -> DocStatus {
         guard let line = trimmedLines(of: text).first(where: { !$0.isEmpty }),
             line.prefix(7).lowercased() == "status:"
@@ -36,7 +33,6 @@ public enum DocStatus: String, Codable, Sendable {
         switch line.dropFirst(7).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "waiting for notes": return .waitingForNotes
         case "notes ready for review": return .notesReady
-        case "summary ready for review": return .summaryReady
         case "closed": return .closed
         default: return .unknown
         }

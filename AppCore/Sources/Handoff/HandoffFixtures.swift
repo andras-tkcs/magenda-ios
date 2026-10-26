@@ -4,17 +4,12 @@ import Foundation
 /// meeting. It stands in for the end-of-day
 /// routine so UI tests and previews can walk a day through every Doc status.
 public actor FixtureEndOfDay {
-    private struct Fired {
-        let step: String
-        let hadSummarySkill: Bool
-    }
-
     private struct SummaryRecord: Equatable {
         let routineID: String
         let page: Int
     }
 
-    private var fired: [String: Fired] = [:]
+    private var steps: [String: String] = [:]
     private var summaries: [String: [SummaryRecord]] = [:]
 
     /// Creates a routine that has been asked for nothing.
@@ -41,11 +36,7 @@ public actor FixtureEndOfDay {
             return
         }
         let key = decoded.part.map { "\(decoded.date)-part-\($0)" } ?? decoded.date
-        fired[key] = Fired(
-            step: decoded.step,
-            hadSummarySkill: decoded.pages.contains {
-                $0.summarySkill != nil && $0.earlierPart == nil
-            })
+        steps[key] = decoded.step
     }
 
     /// The text of a Doc as the routine would have left it; `key` is the date, or the date,
@@ -59,14 +50,10 @@ public actor FixtureEndOfDay {
     }
 
     private func statusLine(forKey key: String) -> String {
-        guard let last = fired[key] else { return "Status: Waiting for notes\n" }
-        switch last.step {
-        case "notes": return "Status: Notes ready for review\n"
-        case "approve-notes":
-            return last.hadSummarySkill
-                ? "Status: Summary ready for review\n" : "Status: Closed\n"
-        case "approve-summary": return "Status: Closed\n"
-        default: return "Status: Waiting for notes\n"
+        switch steps[key] {
+        case "notes": "Status: Notes ready for review\n"
+        case "close": "Status: Closed\n"
+        default: "Status: Waiting for notes\n"
         }
     }
 
@@ -83,15 +70,9 @@ public actor FixtureEndOfDay {
     }
 
     private struct Payload: Decodable {
-        struct Page: Decodable {
-            let summarySkill: String?
-            let earlierPart: Int?
-        }
-
         let date: String
         let step: String
         let part: Int?
-        let pages: [Page]
     }
 }
 

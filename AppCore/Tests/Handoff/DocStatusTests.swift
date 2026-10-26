@@ -12,12 +12,11 @@ struct DocStatusTests {
         arguments: [
             ("Status: Waiting for notes\n", DocStatus.waitingForNotes),
             ("Status: Notes ready for review\nThe notes.", .notesReady),
-            ("Status: Summary ready for review", .summaryReady),
+            ("Status: Summary ready for review", .unknown),
             ("Status: Closed", .closed),
             ("\u{FEFF}Status: Closed\n", .closed),
             ("\n\n  \r\n  Status: Notes ready for review\n", .notesReady),
             ("status: closed", .closed),
-            ("STATUS: SUMMARY READY FOR REVIEW", .summaryReady),
             ("  Status:    Waiting for notes   \r\nbody", .waitingForNotes),
             ("Status:Closed", .closed),
             ("Status: Done", .unknown),
@@ -42,12 +41,6 @@ struct DocStatusTests {
     @Test("Routine steps use the names the routine knows")
     func stepNames() {
         #expect(RoutineStep.notes.rawValue == "notes")
-        #expect(RoutineStep.approveNotes.rawValue == "approve-notes")
-        #expect(RoutineStep.approveSummary.rawValue == "approve-summary")
-    }
-
-    @Test("The close step uses the name the routine knows")
-    func closeStepName() {
         #expect(RoutineStep.close.rawValue == "close")
     }
 
@@ -57,7 +50,7 @@ struct DocStatusTests {
             try JSONDecoder().decode(DocStatus.self, from: Data(#""\#(raw)""#.utf8))
         }
         #expect(try decode("somethingNew") == .unknown)
-        #expect(try decode("summaryReady") == .summaryReady)
+        #expect(try decode("summaryReady") == .unknown)
         #expect(try decode("closed") == .closed)
         let encoded = try JSONEncoder().encode(DocStatus.notesReady)
         #expect(String(decoding: encoded, as: UTF8.self) == #""notesReady""#)
