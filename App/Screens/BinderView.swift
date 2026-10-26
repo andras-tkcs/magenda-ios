@@ -11,6 +11,9 @@ struct BinderView: View {
         static let binderShareButton = "binderShareButton"
         static let finishDayButton = "finishDayButton"
         static let handoffMessage = "handoffMessage"
+        static let resetHandoffButton = "resetHandoffButton"
+        static let confirmResetHandoffButton = "confirmResetHandoffButton"
+        static let cancelResetHandoffButton = "cancelResetHandoffButton"
         static let overviewButton = "binderOverviewButton"
         static let delegatedButton = "binderDelegatedButton"
         static let notesButton = "binderNotesButton"
@@ -37,6 +40,7 @@ struct BinderView: View {
     @State private var tool = BinderTool.pen(.black)
     @State private var lastPen = BinderPen.black
     @State private var confirmsDelete = false
+    @State private var confirmsResetHandoff = false
 
     /// The position of the page on screen; the first page until it moves.
     private var visibleIndex: Int {
@@ -136,6 +140,18 @@ struct BinderView: View {
         }
         .background(Color(.secondarySystemBackground))
         .toolbar {
+            if handoff.hasHandoff(on: binder.date) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        confirmsResetHandoff = true
+                    } label: {
+                        Label("Reset Hand-off", systemImage: "arrow.uturn.backward.circle")
+                    }
+                    .disabled(handoff.isBusy)
+                    .accessibilityLabel("Reset this day's hand-off")
+                    .accessibilityIdentifier(ID.resetHandoffButton)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { await handoff.finish(binder) }
@@ -167,6 +183,18 @@ struct BinderView: View {
                 .accessibilityIdentifier(ID.cancelDeletePageButton)
         } message: {
             Text("The page and its handwriting will be removed. This can't be undone.")
+        }
+        .alert("Reset this day's hand-off?", isPresented: $confirmsResetHandoff) {
+            Button("Reset", role: .destructive) {
+                handoff.resetHandoff(for: binder.date)
+            }
+            .accessibilityIdentifier(ID.confirmResetHandoffButton)
+            Button("Cancel", role: .cancel) {}
+                .accessibilityIdentifier(ID.cancelResetHandoffButton)
+        } message: {
+            Text(
+                "Magenda forgets that this day was sent, so Finish Day works again and creates a new Doc. The PDF and Doc already in your Drive stay. This can't be undone."
+            )
         }
     }
 

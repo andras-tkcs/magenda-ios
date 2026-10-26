@@ -22,6 +22,8 @@ public protocol HandoffStore: Sendable {
     func savePDF(_ data: Data, for date: CalendarDay) throws
     /// Removes the PDF of `date`; having none is not an error.
     func deletePDF(for date: CalendarDay) throws
+    /// Removes the hand-off and the PDF of `date`; having none is not an error.
+    func deleteHandoff(for date: CalendarDay) throws
 }
 
 /// A store that keeps hand-offs in memory, for tests and previews.
@@ -63,6 +65,14 @@ public final class InMemoryHandoffStore: HandoffStore, @unchecked Sendable {
     /// Drops the held PDF.
     public func deletePDF(for date: CalendarDay) throws {
         lock.withLock { pdfs[date] = nil }
+    }
+
+    /// Drops the held hand-off and PDF.
+    public func deleteHandoff(for date: CalendarDay) throws {
+        lock.withLock {
+            held[date] = nil
+            pdfs[date] = nil
+        }
     }
 }
 
@@ -141,6 +151,17 @@ public struct FileHandoffStore: HandoffStore {
             let file = folder(date).appending(path: "day.pdf")
             if FileManager.default.fileExists(atPath: file.path) {
                 try FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+
+    /// Removes the day's folder, with `handoff.json` and `day.pdf`; throws `.unwritable` when it
+    /// cannot be removed.
+    public func deleteHandoff(for date: CalendarDay) throws {
+        try writing {
+            let dayFolder = folder(date)
+            if FileManager.default.fileExists(atPath: dayFolder.path) {
+                try FileManager.default.removeItem(at: dayFolder)
             }
         }
     }

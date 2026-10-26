@@ -65,6 +65,11 @@ public final class HandoffController {
         return handoff.stage == .queued || handoff.stage == .uploaded
     }
 
+    /// Whether `date` has a hand-off that `resetHandoff(for:)` can forget.
+    public func hasHandoff(on date: CalendarDay) -> Bool {
+        stored(on: date) != nil
+    }
+
     /// The link to the day's Google Doc, or nil when it has none.
     public func docURL(for date: CalendarDay) -> URL? {
         stored(on: date)?.docID.map {
@@ -149,6 +154,21 @@ public final class HandoffController {
         case .approve(let step):
             await approve(step, on: handoff)
         }
+    }
+
+    /// Forgets the hand-off of `date` and deletes its stored PDF, so the day can be finished again
+    /// as if it had never been sent. What is already in Drive stays, and finishing again creates
+    /// a new Doc.
+    public func resetHandoff(for date: CalendarDay) {
+        guard !isBusy, stored(on: date) != nil else { return }
+        do {
+            try store.deleteHandoff(for: date)
+        } catch {
+            message = "Couldn't reset this day. Try again."
+            return
+        }
+        days.removeAll { $0.date == date }
+        message = "This day can be finished again."
     }
 
     /// Stores the routine's fire URL and token; returns false and sets `message` when they are

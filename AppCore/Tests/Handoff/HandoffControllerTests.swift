@@ -67,7 +67,7 @@ private final class TestClock: @unchecked Sendable {
 // `@unchecked Sendable` is safe because `failing` and `saveSuccesses` go through `lock`.
 private final class FailingHandoffStore: HandoffStore, @unchecked Sendable {
     enum Method: Sendable {
-        case handoffs, save, savePDF
+        case handoffs, save, savePDF, deleteHandoff
     }
 
     let base = InMemoryHandoffStore()
@@ -119,6 +119,11 @@ private final class FailingHandoffStore: HandoffStore, @unchecked Sendable {
 
     func deletePDF(for date: CalendarDay) throws {
         try base.deletePDF(for: date)
+    }
+
+    func deleteHandoff(for date: CalendarDay) throws {
+        try check(.deleteHandoff)
+        try base.deleteHandoff(for: date)
     }
 
     private func check(_ method: Method) throws {
@@ -255,6 +260,41 @@ struct HandoffControllerTests {
             controller.docURL(for: date)?.absoluteString
                 == "https://docs.google.com/document/d/doc-1/edit")
         #expect(controller.docURL(for: otherDay) == nil)
+    }
+
+    @Test("resetting a sent day forgets it, so it can be finished and sent again")
+    func resetAfterSending() async throws {
+        await controller.finish(binder)
+        #expect(controller.hasHandoff(on: date))
+        controller.resetHandoff(for: date)
+        #expect(!controller.hasHandoff(on: date))
+        #expect(controller.days.isEmpty)
+        #expect(try store.handoff(date) == nil)
+        #expect(try store.pdf(for: date) == nil)
+        #expect(controller.canFinish(date))
+        #expect(controller.message == "This day can be finished again.")
+        await controller.finish(binder)
+        #expect(try saved().stage == .notesRequested)
+        #expect(trigger.texts.count == 2)
+        #expect(await uploads().count == 2)
+    }
+
+    @Test("resetting a day that was never finished does nothing")
+    func resetWithoutHandoff() async throws {
+        controller.resetHandoff(for: date)
+        #expect(controller.message == nil)
+        #expect(!controller.hasHandoff(on: date))
+    }
+
+    @Test("a reset that cannot delete keeps the day and says so")
+    func resetFails() async throws {
+        let failing = FailingHandoffStore(failing: [.deleteHandoff])
+        let rig = try HandoffControllerTests(store: failing)
+        await rig.controller.finish(rig.binder)
+        rig.controller.resetHandoff(for: rig.date)
+        #expect(rig.controller.hasHandoff(on: rig.date))
+        #expect(try failing.handoff(rig.date) != nil)
+        #expect(rig.controller.message == "Couldn't reset this day. Try again.")
     }
 
     @Test("finished days are listed newest first")

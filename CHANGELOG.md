@@ -54,6 +54,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   creates the day's notes Doc next to it and starts your end-of-day Claude routine. Enter the
   routine's fire URL and token in Settings → End-of-day routine. A day finished offline is sent
   when the app is next active.
+- Reset Hand-off, in the binder of a finished day, forgets that the day was sent after asking, so
+  Finish Day works again. The PDF and Doc already in Drive stay, and the next finish creates a new
+  Doc.
 - The Review list, from the agenda's toolbar, shows each finished day's state, opens its Doc with
   Open Doc, and has the Try again, Approve notes or Approve button the state calls for.
 - Summary skills: map a meeting title to a skill under Settings → Binder rules → Meeting
