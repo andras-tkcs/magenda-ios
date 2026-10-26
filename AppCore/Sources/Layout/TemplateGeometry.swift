@@ -8,9 +8,7 @@ enum TemplateGeometry {
     static let meetingTitleWidth = 330.15
     /// The box the "Summary:" label sits in, below a meeting title.
     static let meetingSummaryBox = PlanRect(x0: 56.8, y0: 114.0, x1: 566.95, y1: 134.0)
-    /// The y of the ruled line a person writes a summary skill on.
-    static let meetingSummaryRuleY = 136.0
-    /// The gap between the "Summary:" label and the skill name or the ruled line.
+    /// The gap between the "Summary:" label and the routine names.
     static let meetingSummaryGap = 6.0
     /// The nominal size of the "Summary:" line.
     static let meetingSummaryPoints = 12.0

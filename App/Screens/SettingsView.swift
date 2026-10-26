@@ -20,10 +20,19 @@ struct SettingsView: View {
         static let routineError = "routineError"
         static let routineStatusLabel = "routineStatusLabel"
         static let forgetRoutineButton = "forgetRoutineButton"
+        static let summaryRoutineNameField = "summaryRoutineNameField"
+        static let summaryRoutineURLField = "summaryRoutineURLField"
+        static let summaryRoutineTokenField = "summaryRoutineTokenField"
+        static let saveSummaryRoutineButton = "saveSummaryRoutineButton"
+        static let summaryRoutineError = "summaryRoutineError"
         static let signOutButton = "signOutButton"
         static let version = "version"
         static let settingsDone = "settingsDone"
 
+        static func summaryRoutineRow(_ n: Int) -> String { "summaryRoutineRow.\(n)" }
+        static func forgetSummaryRoutineButton(_ n: Int) -> String {
+            "forgetSummaryRoutineButton.\(n)"
+        }
         static func calendarRow(_ n: Int) -> String { "calendarRow.\(n)" }
         static func fontOption(_ pack: FontPack) -> String { "fontOption.\(pack.rawValue)" }
         static func colorField(_ role: ColorRole) -> String { "colorField.\(role.rawValue)" }
@@ -69,6 +78,10 @@ struct SettingsView: View {
     @State private var routineURL = ""
     @State private var routineToken = ""
     @State private var routineSaveFailed = false
+    @State private var summaryRoutineName = ""
+    @State private var summaryRoutineURL = ""
+    @State private var summaryRoutineToken = ""
+    @State private var summaryRoutineError: String?
 
     var body: some View {
         NavigationStack {
@@ -84,6 +97,7 @@ struct SettingsView: View {
                 }
                 clientSection
                 routineSection
+                summaryRoutinesSection
                 accountSection
                 aboutSection
             }
@@ -364,6 +378,80 @@ struct SettingsView: View {
         } else {
             routineSaveFailed = true
         }
+    }
+
+    // MARK: Summary routines
+
+    private var summaryRoutinesSection: some View {
+        Section {
+            let routines = controller.settings.summaryRoutines
+            ForEach(Array(routines.enumerated()), id: \.element.id) { index, routine in
+                HStack {
+                    Text(routine.name)
+                        .accessibilityIdentifier(ID.summaryRoutineRow(index))
+                    Spacer()
+                    Button("Forget", role: .destructive) { forgetSummaryRoutine(routine.id) }
+                        .accessibilityIdentifier(ID.forgetSummaryRoutineButton(index))
+                }
+            }
+            TextField("Name", text: $summaryRoutineName)
+                .autocorrectionDisabled()
+                .onChange(of: summaryRoutineName) { summaryRoutineError = nil }
+                .accessibilityIdentifier(ID.summaryRoutineNameField)
+            TextField("Fire URL", text: $summaryRoutineURL)
+                .keyboardType(.URL)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onChange(of: summaryRoutineURL) { summaryRoutineError = nil }
+                .accessibilityIdentifier(ID.summaryRoutineURLField)
+            SecureField("Token", text: $summaryRoutineToken)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onChange(of: summaryRoutineToken) { summaryRoutineError = nil }
+                .accessibilityIdentifier(ID.summaryRoutineTokenField)
+            if let summaryRoutineError {
+                Text(summaryRoutineError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier(ID.summaryRoutineError)
+            }
+            Button("Save", action: saveSummaryRoutine)
+                .accessibilityIdentifier(ID.saveSummaryRoutineButton)
+        } header: {
+            Text("Summary routines")
+        } footer: {
+            Text(
+                "Each summary is written by its own Claude routine with its own API trigger. Create it at claude.ai/code/routines, give it only the access that summary needs, and add its trigger here. Saving a name that already exists replaces that routine's URL and token."
+            )
+        }
+    }
+
+    private func forgetSummaryRoutine(_ id: String) {
+        handoff.forgetSummaryRoutine(id: id)
+        Task { await controller.updateSettings { $0.removeSummaryRoutine(id: id) } }
+    }
+
+    private func saveSummaryRoutine() {
+        guard let name = SummaryRoutine.validatedName(summaryRoutineName) else {
+            summaryRoutineError = SummaryRoutine.invalidNameMessage
+            return
+        }
+        let existing = controller.settings.summaryRoutine(named: name)
+        guard
+            let routine = handoff.saveSummaryRoutine(
+                name: existing?.name ?? name, fireURL: summaryRoutineURL,
+                token: summaryRoutineToken, id: existing?.id ?? SummaryRoutine.makeID())
+        else {
+            summaryRoutineError = handoff.message
+            return
+        }
+        if existing == nil {
+            Task { await controller.updateSettings { $0.summaryRoutines.append(routine) } }
+        }
+        summaryRoutineName = ""
+        summaryRoutineURL = ""
+        summaryRoutineToken = ""
+        summaryRoutineError = nil
     }
 
     private var accountSection: some View {

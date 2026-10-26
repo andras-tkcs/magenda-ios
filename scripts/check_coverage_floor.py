@@ -83,8 +83,6 @@ MODULE_FLOORS: dict[str, float] = {
     "AppCore/Sources/Handoff/HandoffController.swift": 100.0,
     # The fixture Drive and routine behind the hand-off UI tests.
     "AppCore/Sources/Handoff/HandoffFixtures.swift": 100.0,
-    # Picks the summary skill a meeting asks for; a wrong match prints the wrong skill on the page.
-    "AppCore/Sources/Settings/SummarySkill.swift": 100.0,
     # Names, validates and looks up the summary routines a meeting asks for; a wrong match starts the wrong routine.
     "AppCore/Sources/Settings/SummaryRoutine.swift": 100.0,
     # Fires a summary routine with its own token; a wrong branch sends one routine's summary with another's token.

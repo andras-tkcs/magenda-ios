@@ -8,9 +8,9 @@ import XCTest
 
 final class RulesUITests: XCTestCase {
     @MainActor
-    private func launch() -> XCUIApplication {
+    private func launch(_ extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "standard"]
+        app.launchArguments = ["-MagendaFixture", "standard"] + extraArguments
         app.launch()
         return app
     }
@@ -211,46 +211,47 @@ final class RulesUITests: XCTestCase {
     }
 
     @MainActor
-    private func addSummary(_ app: XCUIApplication, title: String, skill: String) {
+    private func addSummary(_ app: XCUIApplication, title: String, tickFirst: Bool) {
         enter(app, element(app, "summaryTitleField"), title)
-        enter(app, element(app, "summarySkillField"), skill)
+        if tickFirst {
+            let choice = element(app, "summaryChoice.0")
+            reveal(app, choice)
+            choice.tap()
+        }
         let add = app.buttons["summaryAdd"].firstMatch
         reveal(app, add)
         add.tap()
     }
 
     @MainActor
-    func testAddingAMeetingSummaryShowsTheRow() {
+    func testAddingAMeetingSummaryShowsTheRowWithTheRoutineName() {
         let app = launch()
         openRules(app)
 
-        addSummary(app, title: "Board meeting", skill: "board-summary")
+        addSummary(app, title: "Board meeting", tickFirst: true)
         let row = element(app, "rulesRow.summaries.0")
         XCTAssertTrue(row.waitForExistence(timeout: 30), "the summary never appeared")
+        XCTAssertTrue(row.label.contains("Client memo"), "the row named no routine: \(row.label)")
     }
 
     @MainActor
-    func testAnInvalidSummarySkillShowsAnError() {
+    func testAddingASummaryWithoutAChoiceShowsAnError() {
         let app = launch()
         openRules(app)
 
-        addSummary(app, title: "Board meeting", skill: "bad skill!")
-        let error = element(app, "summarySkillError")
-        XCTAssertTrue(error.waitForExistence(timeout: 30), "summarySkillError never appeared")
+        addSummary(app, title: "Board meeting", tickFirst: false)
+        let error = element(app, "summaryError")
+        XCTAssertTrue(error.waitForExistence(timeout: 30), "summaryError never appeared")
     }
 
     @MainActor
-    func testADuplicateSummaryTitleShowsAnError() {
-        let app = launch()
+    func testWithoutSummaryRoutinesTheRulesSaySoInsteadOfCheckboxes() {
+        let app = launch(["-MagendaNoSummaryRoutines"])
         openRules(app)
 
-        addSummary(app, title: "Board meeting", skill: "board-summary")
-        XCTAssertTrue(
-            element(app, "rulesRow.summaries.0").waitForExistence(timeout: 30),
-            "the summary never appeared")
-        addSummary(app, title: "board MEETING", skill: "other-summary")
-        let error = element(app, "summarySkillError")
-        XCTAssertTrue(error.waitForExistence(timeout: 30), "summarySkillError never appeared")
+        let note = element(app, "summaryNoRoutines")
+        reveal(app, note)
+        XCTAssertTrue(note.exists)
     }
 
     @MainActor

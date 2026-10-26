@@ -342,4 +342,82 @@ final class SettingsUITests: XCTestCase {
             element(app, "routineURLField").waitForExistence(timeout: 30),
             "the fire URL field never came back")
     }
+
+    private static let summaryFireURL =
+        "https://api.anthropic.com/v1/claude_code/routines/trig_uisummary/fire"
+
+    /// Fills the summary routine fields and taps Save.
+    @MainActor
+    private func saveSummaryRoutine(
+        _ app: XCUIApplication, name: String, url: String, token: String
+    ) {
+        enterText(app, element(app, "summaryRoutineNameField"), name)
+        enterText(app, element(app, "summaryRoutineURLField"), url)
+        enterText(app, element(app, "summaryRoutineTokenField"), token)
+        let save = app.buttons["saveSummaryRoutineButton"].firstMatch
+        reveal(app, save, upperHalf: true)
+        save.tap()
+    }
+
+    @MainActor
+    func testAddingASummaryRoutineShowsItsRowAndForgettingRemovesIt() {
+        let app = launch()
+        openSettings(app)
+
+        saveSummaryRoutine(
+            app, name: "UI memo", url: Self.summaryFireURL, token: "sk-ant-oat01-test")
+        // The fixture has two routines, so the new one is the third row.
+        let row = element(app, "summaryRoutineRow.2")
+        reveal(app, row)
+        XCTAssertEqual(row.label, "UI memo")
+
+        let forget = app.buttons["forgetSummaryRoutineButton.2"].firstMatch
+        reveal(app, forget)
+        forget.tap()
+        let gone = XCTWaiter().wait(
+            for: [
+                XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "exists == false"), object: row)
+            ], timeout: 30)
+        XCTAssertEqual(gone, .completed, "the summary routine row stayed after Forget")
+    }
+
+    @MainActor
+    func testASummaryRoutineWithoutANameOrWithABadURLShowsAnError() {
+        let app = launch()
+        openSettings(app)
+
+        let save = app.buttons["saveSummaryRoutineButton"].firstMatch
+        reveal(app, save, upperHalf: true)
+        save.tap()
+        let error = element(app, "summaryRoutineError")
+        XCTAssertTrue(error.waitForExistence(timeout: 30), "no error for an empty name")
+
+        enterText(app, element(app, "summaryRoutineNameField"), "UI memo")
+        enterText(app, element(app, "summaryRoutineURLField"), "https://example.com/fire")
+        enterText(app, element(app, "summaryRoutineTokenField"), "sk-ant-oat01-test")
+        reveal(app, save, upperHalf: true)
+        save.tap()
+        XCTAssertTrue(
+            element(app, "summaryRoutineError").waitForExistence(timeout: 30),
+            "no error for a bad fire URL")
+        XCTAssertFalse(
+            element(app, "summaryRoutineRow.2").exists, "a routine was saved with a bad URL")
+    }
+
+    @MainActor
+    func testSavingAnExistingSummaryRoutineNameKeepsOneRow() {
+        let app = launch()
+        openSettings(app)
+
+        saveSummaryRoutine(
+            app, name: "Client memo", url: Self.summaryFireURL, token: "sk-ant-oat01-test")
+        // The saved form clears its fields: wait for that, then look for a duplicate.
+        let name = element(app, "summaryRoutineNameField")
+        reveal(app, name)
+        waitForValue(name, "Name")
+        XCTAssertTrue(
+            element(app, "summaryRoutineRow.1").exists, "the fixture's second routine is gone")
+        XCTAssertFalse(element(app, "summaryRoutineRow.2").exists, "the routine was duplicated")
+    }
 }
