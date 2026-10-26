@@ -92,13 +92,16 @@ what it must do with the day, are described in
 The **Review** button in the agenda's toolbar opens the list of finished days (ADR 0029). Each row
 shows the day's state, an error if the last step failed, **Open Doc** to read and edit the notes in
 Google Docs, and the one button the state calls for: Try again (not yet uploaded or sent), Approve
-notes (the notes are ready) or Approve (the summary is ready). Each approval starts the routine's
-next step, which changes the Doc's first line (`Status: …`); Magenda reads only that line.
+notes (the notes are ready) or Approve summaries (every asked-for summary is in the Doc). Approving
+the notes starts the summary routines, or closes the day when none was asked for; Approve summaries
+closes it. Magenda reads the Doc's first line (`Status: …`) and the `Summary ready:` marker lines
+the summary routines append (ADR 0039).
 
-A meeting that needs a summary names the Claude skill that writes it (ADR 0031). Map a meeting
-title to a skill under Settings → Binder rules → Meeting summaries, or write the skill name by hand
-on the ruled **Summary:** line that every meeting page prints under its title. A mapped skill is
-printed on the line.
+Each kind of summary is written by its own Claude routine (ADR 0038). Add each one under Settings →
+Summary routines with a name and the fire URL and token of its API trigger; the token stays in the
+Keychain. Then tick which meetings get it, by meeting title under Settings → Binder rules → Meeting
+summaries or for one meeting on its Edit sheet. The meeting page prints the ticked routines' names
+after **Summary:**. Magenda starts each ticked routine once, when the notes are approved.
 
 Five days after Magenda first reads `Status: Closed`, it deletes that day's handwriting and its
 stored PDF from the device (ADR 0030). A small record of the day stays, so the day can't be sent

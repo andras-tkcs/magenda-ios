@@ -4,6 +4,7 @@
 
 Accepted — 2026-10-26. Implemented.
 Amends [ADR 0028](0028-the-end-of-day-routine-is-started-through-its-api-trigger.md): the payload schema.
+Amended by [ADR 0040](0040-the-routine-payload-moves-to-schema-3-and-summaries-have-their-own-schema.md): schema 3.
 
 ## Context
 
