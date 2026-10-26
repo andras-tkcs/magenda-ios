@@ -2,9 +2,8 @@
 
 An iPad-first app that builds the daily binder from Google Calendar and Google Tasks. Sign in with
 Google, pick a day, review what the app selected and why, untick or edit anything and render the
-agenda as a PDF. On iPad the day opens as a binder you write in with Apple Pencil; on iPhone the
-app previews the PDF. The PDF can be shared anywhere. The rules are fixed and editable, and no AI
-is involved (ADR 0016).
+agenda as a PDF. The day opens as a binder you write in with Apple Pencil. The PDF can be shared
+anywhere. The rules are fixed and editable, and no AI is involved (ADR 0016).
 
 ## What goes on the agenda
 
@@ -66,9 +65,9 @@ shares the day with your handwriting on its pages.
 Handwriting is saved on the device per page. Rendering the day again keeps it on its page, and a
 meeting page you wrote on stays even when the meeting has left the agenda. Start over, in the
 agenda's toolbar, deletes all of the day's handwriting and added pages after asking, and renders
-the day fresh; it is refused while a meeting of the day is sent (ADR 0035). Once a day is started, it opens without a network connection. The iPhone shows the
-PDF preview (ADR 0020, ADR 0021, ADR 0024 to ADR 0026). The saved binder and the shared PDFs can't
-be read while the device is locked (ADR 0022).
+the day fresh; it is refused while a meeting of the day is sent (ADR 0035). Once a day is started, it
+opens without a network connection (ADR 0020, ADR 0021, ADR 0024 to ADR 0026). The saved binder and
+the shared PDFs can't be read while the device is locked (ADR 0022).
 
 ## Finishing a day
 

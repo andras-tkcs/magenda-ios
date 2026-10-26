@@ -42,8 +42,7 @@ because a release is being cut.
 
 ## Human checks
 
-With the release candidate installed from TestFlight on a real iPhone (and an iPad if the app
-supports it):
+With the release candidate installed from TestFlight on a real iPad:
 
 - [ ] The app launches, shows the version and build number TestFlight lists, and every screen
       changed in this release works.

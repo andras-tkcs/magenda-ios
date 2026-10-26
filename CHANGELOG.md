@@ -87,6 +87,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (docs/end-of-day-handoff.md): its steps are now `notes` and `close`, and it no longer writes
   summaries. Until it is, it stops on every payload.
 
+### Removed
+
+- Magenda no longer runs on iPhone; it is an iPad app.
+
 ## [0.1.1] — 2026-10-15
 
 First stable release. It also carries everything from the 0.1.0 alpha, which was never shipped.
