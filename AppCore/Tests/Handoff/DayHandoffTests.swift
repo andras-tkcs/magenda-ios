@@ -720,10 +720,10 @@ struct DayHandoffTests {
         handoff.docID = nil
         handoff.folderID = nil
         handoff.pages = [
-            HandoffPage(page: 1, key: "meeting:#0", summaryRoutines: [Self.routine("log")])
+            HandoffPage(page: 1, key: "meeting:bare", summaryRoutines: [Self.routine("log")])
         ]
         let expected =
-            #"{"checksum":"\#(Self.checksum)","date":"2026-10-26","meetings":[{"key":"meeting:#0","#
+            #"{"checksum":"\#(Self.checksum)","date":"2026-10-26","meetings":[{"key":"meeting:bare","#
             + #""page":1}],"pageCount":1,"routineID":"id-log","routineName":"log","#
             + #""schema":"magenda.summary\/1","scope":"day"}"#
         #expect(handoff.summaryPayload(for: Self.routine("log")) == expected)
