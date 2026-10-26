@@ -8,6 +8,7 @@ that skill to this page. The decisions behind it are in
 [ADR 0029](adr/0029-the-days-google-doc-is-the-review-record.md) (the Doc and the review),
 [ADR 0030](adr/0030-a-closed-days-handwriting-is-deleted-five-days-later.md) (deletion) and
 [ADR 0031](adr/0031-meeting-summaries-are-requested-by-skill.md) (summaries),
+[ADR 0036](adr/0036-finished-days-upload-to-a-drive-folder-named-in-settings.md) (the Drive folder),
 [ADR 0033](adr/0033-a-meeting-can-be-sent-before-the-day-ends.md) (meetings sent early) and
 [ADR 0034](adr/0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md) (schema 2).
 
@@ -17,11 +18,11 @@ Magenda creates everything below with the `drive.file` scope, so it only ever se
 
 | What | Name | Where |
 |---|---|---|
-| Folder | `Magenda` | the root of the person's Drive |
-| PDF | `Magenda <YYYY-MM-DD>.pdf` | in `Magenda` |
-| Doc | `Magenda <YYYY-MM-DD> notes` | in `Magenda` |
-| PDF of a meeting sent early | `Magenda <YYYY-MM-DD> part <n>.pdf` | in `Magenda` |
-| Doc of a meeting sent early | `Magenda <YYYY-MM-DD> part <n> notes` | in `Magenda` |
+| Folder | the folder named in Settings → Google Drive (`Magenda` unless changed) | anywhere in the person's Drive; created in the root |
+| PDF | `Magenda <YYYY-MM-DD>.pdf` | in the folder |
+| Doc | `Magenda <YYYY-MM-DD> notes` | in the folder |
+| PDF of a meeting sent early | `Magenda <YYYY-MM-DD> part <n>.pdf` | in the folder |
+| Doc of a meeting sent early | `Magenda <YYYY-MM-DD> part <n> notes` | in the folder |
 
 The PDF holds the day's pages: printed content as text, handwriting composited on top. A part's PDF
 holds only that meeting's pages. Titles never appear in Drive names. The Doc is
@@ -47,6 +48,7 @@ Schema `magenda.end-of-day/2`, a day run:
   ],
   "docID": "1AbCdEfGhIjKlMnOpQrStUvWxYz",
   "driveFileID": "1ZyXwVuTsRqPoNmLkJiHgFeDcBa",
+  "folderID": "1FoLdErIdExampleXyZ",
   "pageCount": 4,
   "pages": [
     {"key": "overview", "page": 1},
@@ -71,6 +73,8 @@ Schema `magenda.end-of-day/2`, a day run:
 - `step`: `notes`, `approve-notes` or `approve-summary` (see below).
 - `date`: the day, `YYYY-MM-DD`. `checksum`: `sha256:` and the 64 lowercase hex digits of the PDF.
 - `driveFileID` and `docID`: the PDF and the Doc. Left out when not known.
+- `folderID`: the Drive folder holding the PDF and the Doc. Left out on records uploaded before
+  Magenda recorded it.
 - `pageCount` equals the number of PDF pages. `pages[].page` is the 1-based position in the PDF
   and `key` is Magenda's page key (`overview`, `delegated:<n>`, `meeting:<event key>`, `notes`,
   `extra:<id>`).
@@ -89,7 +93,7 @@ Schema `magenda.end-of-day/2`, a day run:
 A meeting run, which is the same shape with `scope` `meeting`:
 
 ```json
-{"checksum":"sha256:…","date":"2026-10-26","docID":"…","driveFileID":"…","pageCount":2,"pages":[{"calendarID":"work@example.com","eventID":"ev1","key":"meeting:work@example.com|ev1","page":1,"summarySkill":"meeting-summary","title":"Weekly sync"},{"key":"extra:x1","page":2,"source":"meeting:work@example.com|ev1"}],"part":1,"schema":"magenda.end-of-day/2","scope":"meeting","step":"notes"}
+{"checksum":"sha256:…","date":"2026-10-26","docID":"…","driveFileID":"…","folderID":"1FoLdErIdExampleXyZ","pageCount":2,"pages":[{"calendarID":"work@example.com","eventID":"ev1","key":"meeting:work@example.com|ev1","page":1,"summarySkill":"meeting-summary","title":"Weekly sync"},{"key":"extra:x1","page":2,"source":"meeting:work@example.com|ev1"}],"part":1,"schema":"magenda.end-of-day/2","scope":"meeting","step":"notes"}
 ```
 
 The same meeting in the day run later: `{"calendarID":"work@example.com","earlierPart":1,"eventID":"ev1","key":"meeting:work@example.com|ev1","page":2,"title":"Weekly sync"}`.
@@ -100,7 +104,8 @@ Each step starts a new routine run. The routine does the work of its step only a
 Doc's first line.
 
 - **`notes`** (sent when the day is uploaded). Download `driveFileID` through PrivacyFence and
-  check that the file sits in the `Magenda` folder and that its SHA-256 equals `checksum`; stop
+  check that the file's parent is `folderID` (on a payload without `folderID`, a folder named
+  `Magenda`) and that its SHA-256 equals `checksum`; stop
   and say so in the Doc if not. Write the notes under the status line. Read each meeting page's
   `Summary:` line (a skill printed on the page, or one the person wrote by hand) together with
   `summarySkill`. Then set the first line to `Status: Notes ready for review`.
