@@ -65,6 +65,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A meeting page prints a Summary line only when the meeting asks for summary routines, with
+  their names after it; without one the page no longer has a ruled Summary line.
 - A closed day's handwriting and stored PDF are deleted from the device five days after the day is
   closed. A small record of the day stays.
 - Magenda now asks for access to the files it creates in Google Drive, so sign in again after

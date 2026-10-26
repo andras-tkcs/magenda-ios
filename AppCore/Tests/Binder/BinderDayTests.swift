@@ -95,16 +95,21 @@ struct BinderDayTests {
         #expect(day.extras == before)
     }
 
-    @Test("A day written without task IDs or summary skills still decodes")
+    @Test("A day written without task IDs or summary routines still decodes")
     func decodesWithoutNewKeys() throws {
         var day = try day()
         day.content.todoItems = [TodoItem(text: "a", notes: "", due: "", taskID: "t")]
-        day.content.meetingSummarySkills = ["s"]
+        day.content.meetingSummaryRoutines = [[SummaryRoutine(id: "a", name: "S")]]
         let data = try JSONEncoder().encode(day)
         func strip(_ value: Any) -> Any {
             if let object = value as? [String: Any] {
-                return object.filter { $0.key != "meetingSummarySkills" && $0.key != "taskID" }
-                    .mapValues(strip)
+                var kept = object.filter {
+                    $0.key != "meetingSummaryRoutines" && $0.key != "taskID"
+                }.mapValues(strip)
+                if object["meetingSummaryRoutines"] != nil {
+                    kept["meetingSummarySkills"] = ["s"]
+                }
+                return kept
             }
             if let array = value as? [Any] {
                 return array.map(strip)
@@ -114,7 +119,7 @@ struct BinderDayTests {
         let legacy = strip(try JSONSerialization.jsonObject(with: data))
         let decoded = try JSONDecoder().decode(
             BinderDay.self, from: JSONSerialization.data(withJSONObject: legacy))
-        #expect(decoded.content.meetingSummarySkills.isEmpty)
+        #expect(decoded.content.meetingSummaryRoutines.isEmpty)
         #expect(decoded.content.todoItems.first?.taskID == nil)
         #expect(decoded.content.todoItems.first?.text == "a")
         #expect(decoded.version == BinderDay.formatVersion)

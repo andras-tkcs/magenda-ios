@@ -104,14 +104,15 @@ struct BinderLayoutTests {
         var day = binder(
             AgendaContent(
                 date: self.day, todoItems: [], schedule: [], meetings: ["A"], meetingIDs: ["a"],
-                delegated: [], meetingSummarySkills: ["board-summary"]))
+                delegated: [],
+                meetingSummaryRoutines: [[SummaryRoutine(id: "a", name: "Board summary")]]))
         day.addPage(after: .meeting("a"), id: "x")
         let plan = layout.plan(for: day)
         let source = try #require(plan.pages.first { $0.key == .meeting("a") })
         let copy = try #require(plan.pages.first { $0.key == .extra("x") })
         #expect(texts(copy).contains("Summary:"))
-        #expect(texts(copy).contains("board-summary"))
-        #expect(texts(copy).filter { $0 == "board-summary" } == ["board-summary"])
+        #expect(texts(copy).contains("Board summary"))
+        #expect(texts(copy).filter { $0 == "Board summary" } == ["Board summary"])
         #expect(texts(source).contains("cont. A") == false)
         #expect(texts(copy).contains("cont. A"))
     }

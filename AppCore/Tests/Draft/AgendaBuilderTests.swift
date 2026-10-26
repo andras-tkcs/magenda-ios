@@ -113,12 +113,14 @@ struct AgendaBuilderTests {
         #expect(empty.content().schedule.isEmpty)
     }
 
-    @Test("The rules' summary skills reach the draft")
-    func summarySkills() {
+    @Test("The rules' summary routines and the available routines reach the draft")
+    func summaryRoutines() {
         var rules = BinderRules.default
-        rules.summarySkills = ["Sync": "s"]
-        let draft = AgendaBuilder(timeZone: zone, rules: rules).draft(
+        rules.summaryRoutines = ["Sync": ["a"]]
+        let routines = [SummaryRoutine(id: "a", name: "Recap")]
+        let draft = AgendaBuilder(timeZone: zone, rules: rules, summaryRoutines: routines).draft(
             for: day, events: [], tasks: [], delegated: [])
-        #expect(draft.summarySkills == ["Sync": "s"])
+        #expect(draft.summaryRules == ["Sync": ["a"]])
+        #expect(draft.summaryRoutines == routines)
     }
 }

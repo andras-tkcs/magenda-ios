@@ -310,16 +310,16 @@ struct EventSelectionTests {
             ])
     }
 
-    @Test("A mapped title gets its summary skill")
-    func summarySkill() {
+    @Test("A mapped title gets its summary routine IDs")
+    func summaryRoutineIDs() {
         var custom = BinderRules.default
-        custom.summarySkills = ["team sync": "weekly-summary"]
+        custom.summaryRoutines = ["team sync": ["id-a", "id-b"]]
         let others = [me, person("p@example.com")]
         let events = [
             event("Team Sync", id: "a", attendees: others),
             event("Other", id: "b", start: .timed(at(11)), attendees: others),
         ]
-        #expect(drafts(events, rules: custom).map(\.summarySkill) == ["weekly-summary", nil])
-        #expect(drafts(events).map(\.summarySkill) == [nil, nil])
+        #expect(drafts(events, rules: custom).map(\.summaryRoutineIDs) == [["id-a", "id-b"], []])
+        #expect(drafts(events).map(\.summaryRoutineIDs) == [[], []])
     }
 }
