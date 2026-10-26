@@ -118,6 +118,7 @@ public protocol RoutineFiring: Sendable {
 /// Why the routine did not start.
 public enum RoutineTriggerError: Error, Equatable, Sendable {
     case notConfigured
+    case summaryNotConfigured
     case rejectedToken
     case notFound
     case notStarted
@@ -132,6 +133,8 @@ public enum RoutineTriggerError: Error, Equatable, Sendable {
         switch self {
         case .notConfigured:
             "Add the end-of-day routine in Settings to send this day for processing."
+        case .summaryNotConfigured:
+            "A summary routine's trigger is missing. Save it again under the same name in Settings → Summary routines."
         case .rejectedToken:
             "Claude rejected the routine token. Generate a new token at claude.ai/code/routines and enter it in Settings."
         case .notFound:
@@ -173,6 +176,13 @@ public struct RoutineTriggerClient: RoutineFiring {
         guard let routine = stored() else {
             throw RoutineTriggerError.notConfigured
         }
+        return try await Self.send(text: text, to: routine, http: http)
+    }
+
+    /// Sends `text` to `routine` through `http` and returns the URL of the session it started.
+    static func send(
+        text: String, to routine: RoutineCredentials, http: any HTTPClient
+    ) async throws -> URL {
         let request = HTTPRequest(
             method: .post, url: routine.fireURL,
             headers: [
@@ -208,7 +218,7 @@ public struct RoutineTriggerClient: RoutineFiring {
         try? credentials.load()
     }
 
-    private func sessionURL(in body: Data) throws -> URL {
+    private static func sessionURL(in body: Data) throws -> URL {
         guard let fired = try? JSONDecoder().decode(Fired.self, from: body),
             fired.type == "routine_fire",
             let url = URL(string: fired.sessionURL),

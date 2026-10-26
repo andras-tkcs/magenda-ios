@@ -107,4 +107,44 @@ struct AgendaSettingsTests {
         let settings = try decode(#"{"rules":{"summarySkills":{"Sync":"s"}}}"#)
         #expect(settings.rules.summarySkills == ["Sync": "s"])
     }
+
+    @Test("A fresh install has no summary routines and no routine rules")
+    func summaryRoutinesDefault() {
+        #expect(AgendaSettings().summaryRoutines.isEmpty)
+        #expect(BinderRules.default.summaryRoutines == [:])
+    }
+
+    @Test("Settings and rules without summary routines decode with none")
+    func summaryRoutinesDecoding() throws {
+        #expect(try decode("{}").summaryRoutines.isEmpty)
+        #expect(try decode(#"{"rules":{"lookAheadDays":3}}"#).rules.summaryRoutines == [:])
+        let settings = try decode(
+            #"{"summaryRoutines":[{"id":"a","name":"Recap"}],"rules":{"summaryRoutines":{"Sync":["a"]}}}"#
+        )
+        #expect(settings.summaryRoutines == [SummaryRoutine(id: "a", name: "Recap")])
+        #expect(settings.rules.summaryRoutines == ["Sync": ["a"]])
+    }
+
+    @Test("A routine is found by its folded name")
+    func summaryRoutineNamed() {
+        let recap = SummaryRoutine(id: "a", name: "Weekly Récap")
+        let settings = AgendaSettings(summaryRoutines: [recap])
+        #expect(settings.summaryRoutine(named: "weekly recap") == recap)
+        #expect(settings.summaryRoutine(named: "other") == nil)
+    }
+
+    @Test("Removing a routine prunes the rules and drops an emptied entry")
+    func removeSummaryRoutine() {
+        var settings = AgendaSettings(
+            rules: BinderRules(
+                personalBlocks: [], titlePrefixes: [], outOfOfficeWords: [], shortNames: [:],
+                personAliases: [:], lookAheadDays: 5,
+                summaryRoutines: ["Sync": ["a", "b"], "Retro": ["a"]]),
+            summaryRoutines: [
+                SummaryRoutine(id: "a", name: "A"), SummaryRoutine(id: "b", name: "B"),
+            ])
+        settings.removeSummaryRoutine(id: "a")
+        #expect(settings.summaryRoutines == [SummaryRoutine(id: "b", name: "B")])
+        #expect(settings.rules.summaryRoutines == ["Sync": ["b"]])
+    }
 }
