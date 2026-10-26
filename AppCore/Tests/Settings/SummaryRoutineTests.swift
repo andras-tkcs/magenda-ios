@@ -83,9 +83,10 @@ struct SummaryRoutineTests {
 
     @Test("No matching entry gives no IDs")
     func noMatch() {
-        #expect(
-            SummaryRoutines.routineIDs(
-                pageTitle: "Lunch", originalTitle: "Lunch", rules: ["Sync": ["a"]]).isEmpty)
+        let rules = ["Sync": ["a"]]
+        let ids = SummaryRoutines.routineIDs(
+            pageTitle: "Lunch", originalTitle: "Lunch", rules: rules)
+        #expect(ids.isEmpty)
     }
 
     @Test("Routines come in the available order and an unknown ID is dropped")

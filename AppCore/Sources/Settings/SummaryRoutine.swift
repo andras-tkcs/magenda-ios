@@ -26,7 +26,8 @@ public struct SummaryRoutine: Equatable, Hashable, Codable, Identifiable, Sendab
         return name.isEmpty || name.count > maxNameLength || refused ? nil : name
     }
 
-    /// Whether `id` is a lowercase UUID string: 8-4-4-4-12 characters from `0-9a-f`, dashes between.
+    /// Whether `id` is a lowercase UUID string: 8-4-4-4-12 characters from `0-9a-f`, with dashes
+    /// between.
     public static func isValidID(_ id: String) -> Bool {
         // Checked byte by byte so no Unicode equivalence can let a look-alike character through.
         let bytes = Array(id.utf8)

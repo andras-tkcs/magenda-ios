@@ -231,9 +231,9 @@ struct RoutineTriggerTests {
     @Test("The messages are word for word and never mention a token")
     func messages() {
         let all: [RoutineTriggerError] = [
-            .notConfigured, .summaryNotConfigured, .rejectedToken, .notFound, .notStarted, .forbidden,
-            .rateLimited(retryAfter: 5), .rateLimited(retryAfter: nil), .unavailable, .network,
-            .unexpectedResponse,
+            .notConfigured, .summaryNotConfigured, .rejectedToken, .notFound, .notStarted,
+            .forbidden, .rateLimited(retryAfter: 5), .rateLimited(retryAfter: nil), .unavailable,
+            .network, .unexpectedResponse,
         ]
         for error in all {
             #expect(!error.userMessage.contains("sk-ant"))
