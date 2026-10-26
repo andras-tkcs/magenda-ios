@@ -340,9 +340,17 @@ public final class AgendaController {
         status = .ready
     }
 
+    /// Whether the day can be started over: no page of it was sent to Claude.
+    public var canStartOver: Bool { binder?.day.locked.isEmpty ?? true }
+
     /// Deletes the day's handwriting and added pages and renders the day fresh, as if it had never
     /// been started.
     public func startOver() async {
+        guard canStartOver else {
+            message =
+                "A meeting on this day was already sent to Claude, so it can't be started over. Reset its hand-off first."
+            return
+        }
         guard let draft else {
             return
         }

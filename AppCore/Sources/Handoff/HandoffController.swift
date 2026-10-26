@@ -5,7 +5,8 @@ import Observation
 /// routine, and follows the day through the review loop until it is closed and purged.
 @MainActor @Observable
 public final class HandoffController {
-    /// The finished days, newest first, as last read from the store.
+    /// The finished days and the meetings sent before them, in `HandoffID.listOrder`, as last read
+    /// from the store.
     public private(set) var days: [DayHandoff] = []
     /// The last notice for the binder or the Review list.
     public private(set) var message: String?
@@ -59,20 +60,39 @@ public final class HandoffController {
         routineTriggerID = (try? routineCredentials.load())?.triggerID
     }
 
-    /// Whether `date` can be finished: it has no hand-off, or none beyond the upload.
+    /// Whether `date` can be finished: its day has no hand-off, or none beyond the upload. Meetings
+    /// sent early do not count.
     public func canFinish(_ date: CalendarDay) -> Bool {
-        guard let handoff = stored(on: date) else { return true }
+        guard let handoff = stored(Self.dayID(date)) else { return true }
         return handoff.stage == .queued || handoff.stage == .uploaded
     }
 
-    /// Whether `date` has a hand-off that `resetHandoff(for:)` can forget.
+    /// Whether `date` has a hand-off, of the day or of a meeting, that `resetHandoff(for:)` can
+    /// forget.
     public func hasHandoff(on date: CalendarDay) -> Bool {
-        stored(on: date) != nil
+        days.contains { $0.date == date }
     }
 
-    /// The link to the day's Google Doc, or nil when it has none.
-    public func docURL(for date: CalendarDay) -> URL? {
-        stored(on: date)?.docID.map {
+    /// The pages of `date` already sent in a meeting.
+    public func sentKeys(on date: CalendarDay) -> Set<PageKey> {
+        days.filter { $0.date == date && $0.part != nil }
+            .reduce(into: Set<PageKey>()) { $0.formUnion($1.pageKeys) }
+    }
+
+    /// Whether the meeting that page `key` of `binder` belongs to can be sent now: `key` has a
+    /// meeting, none of its pages is sent or locked, and the date has no day record.
+    public func canSendMeeting(containing key: PageKey, of binder: BinderSession) -> Bool {
+        guard stored(Self.dayID(binder.date)) == nil,
+            let found = DayHandoff.meetingPages(
+                containing: key, day: binder.day, plan: binder.plan)
+        else { return false }
+        let sent = sentKeys(on: binder.date)
+        return !found.keys.contains { sent.contains($0) || binder.isLocked($0) }
+    }
+
+    /// The link to the Google Doc of `id`, or nil when it has none.
+    public func docURL(for id: HandoffID) -> URL? {
+        stored(id)?.docID.map {
             GoogleAPI.url(host: "docs.google.com", path: "/document/d").appending(path: $0)
                 .appending(path: "edit")
         }
@@ -96,13 +116,19 @@ public final class HandoffController {
             return
         }
         let digest = hasher.sha256(pdf).map { String(format: "%02x", $0) }.joined()
+        var earlierParts: [PageKey: Int] = [:]
+        for record in days where record.date == date {
+            guard let number = record.part?.number else { continue }
+            for key in record.pageKeys { earlierParts[key] = number }
+        }
         var handoff = DayHandoff(
-            date: date, checksum: "sha256:" + digest, day: binder.day, plan: binder.plan)
-        let earlier = stored(on: date)
+            date: date, checksum: "sha256:" + digest, day: binder.day, plan: binder.plan,
+            earlierParts: earlierParts)
+        let earlier = stored(Self.dayID(date))
         handoff.driveFileID = earlier?.driveFileID
         handoff.docID = earlier?.docID
         do {
-            try store.savePDF(pdf, for: date)
+            try store.savePDF(pdf, for: Self.dayID(date))
             try store.save(handoff)
         } catch {
             message =
@@ -111,10 +137,65 @@ public final class HandoffController {
         }
         remember(handoff)
         await runPipeline(handoff)
-        let result = stored(on: date)
+        let result = stored(Self.dayID(date))
         message =
             result?.stage == .notesRequested
             ? "Sent to Claude. The notes appear in the day's Google Doc." : result?.lastError
+    }
+
+    /// Renders the meeting's pages with their ink to a PDF, saves it as the next part, locks the
+    /// pages, uploads them and starts the routine's `notes` step for them.
+    public func sendMeeting(containing key: PageKey, of binder: BinderSession) async {
+        guard !isBusy else { return }
+        isBusy = true
+        defer { isBusy = false }
+        let date = binder.date
+        guard stored(Self.dayID(date)) == nil else {
+            message = "This day was already finished, so its meetings go with it."
+            return
+        }
+        guard
+            let found = DayHandoff.meetingPages(
+                containing: key, day: binder.day, plan: binder.plan)
+        else { return }
+        let sent = sentKeys(on: date)
+        guard !found.keys.contains(where: { sent.contains($0) || binder.isLocked($0) }) else {
+            message = "This meeting was already sent to Claude."
+            return
+        }
+        let number = (days.filter { $0.date == date }.compactMap { $0.part?.number }.max() ?? 0) + 1
+        // Locked at once, so nothing written during the awaits below is left out of the PDF.
+        binder.lock(found.keys)
+        let subset = binder.plan.subset(Set(found.keys))
+        let pdf: Data
+        do {
+            pdf = try await renderedPDF(
+                of: subset, ink: subset.pages.map { binder.ink[$0.key] },
+                fileName: "\(date.isoString)-part-\(number).pdf")
+        } catch {
+            binder.unlock(found.keys)
+            message = "Couldn't create the PDF. Try again."
+            return
+        }
+        let digest = hasher.sha256(pdf).map { String(format: "%02x", $0) }.joined()
+        let handoff = DayHandoff(
+            date: date, part: number, meeting: found.meeting, checksum: "sha256:" + digest,
+            day: binder.day, plan: subset)
+        do {
+            try store.savePDF(pdf, for: handoff.id)
+            try store.save(handoff)
+        } catch {
+            binder.unlock(found.keys)
+            message =
+                "Couldn't save the meeting. Free some space on this device and try again."
+            return
+        }
+        remember(handoff)
+        await runPipeline(handoff)
+        let result = stored(handoff.id)
+        message =
+            result?.stage == .notesRequested
+            ? "Sent to Claude. The notes appear in the meeting's Google Doc." : result?.lastError
     }
 
     /// Uploads and sends the days still waiting, reads each Doc's status, and deletes the files
@@ -130,8 +211,9 @@ public final class HandoffController {
             if let docID = handoff.docID { await readStatus(handoff, docID: docID) }
         }
         let now = today()
-        for handoff in days where !handoff.purged && handoff.date != openDay {
-            if let closedOn = handoff.closedOn,
+        // Only a day starts a purge; its meetings' handwriting goes with the day's.
+        for handoff in days where handoff.part == nil {
+            if !handoff.purged, handoff.date != openDay, let closedOn = handoff.closedOn,
                 closedOn.adding(days: DayHandoff.purgeDelayDays) <= now
             {
                 // A failure leaves the day for the next refresh.
@@ -141,9 +223,9 @@ public final class HandoffController {
         if let loaded = try? store.handoffs() { days = loaded }
     }
 
-    /// Does what the Review list offers for `date`: sends it again, or approves the next step.
-    public func perform(_ action: HandoffAction, on date: CalendarDay) async {
-        guard !isBusy, let handoff = stored(on: date), handoff.phase.action == action else {
+    /// Does what the Review list offers for `id`: sends it again, or approves the next step.
+    public func perform(_ action: HandoffAction, on id: HandoffID) async {
+        guard !isBusy, let handoff = stored(id), handoff.phase.action == action else {
             return
         }
         isBusy = true
@@ -156,18 +238,23 @@ public final class HandoffController {
         }
     }
 
-    /// Forgets the hand-off of `date` and deletes its stored PDF, so the day can be finished again
-    /// as if it had never been sent. What is already in Drive stays, and finishing again creates
-    /// a new Doc.
-    public func resetHandoff(for date: CalendarDay) {
-        guard !isBusy, stored(on: date) != nil else { return }
-        do {
-            try store.deleteHandoff(for: date)
-        } catch {
-            message = "Couldn't reset this day. Try again."
-            return
+    /// Forgets the hand-offs of `date`, the day's and its meetings', and deletes their stored PDFs,
+    /// so the day can be finished again as if it had never been sent. What is already in Drive
+    /// stays, and finishing again creates a new Doc. When `binder` is for `date`, its pages are
+    /// unlocked too; a date with no record but locked pages only gets that.
+    public func resetHandoff(for date: CalendarDay, unlocking binder: BinderSession? = nil) {
+        let pagesToUnlock = binder.map { $0.date == date && !$0.day.locked.isEmpty } ?? false
+        guard !isBusy, hasHandoff(on: date) || pagesToUnlock else { return }
+        if hasHandoff(on: date) {
+            do {
+                try store.deleteHandoff(for: date)
+            } catch {
+                message = "Couldn't reset this day. Try again."
+                return
+            }
+            days.removeAll { $0.date == date }
         }
-        days.removeAll { $0.date == date }
+        if binder?.date == date { binder?.unlockAll() }
         message = "This day can be finished again."
     }
 
@@ -203,14 +290,21 @@ public final class HandoffController {
 
     // MARK: - Steps
 
-    private func stored(on date: CalendarDay) -> DayHandoff? {
-        days.first { $0.date == date }
+    private static func dayID(_ date: CalendarDay) -> HandoffID {
+        HandoffID(date: date, part: nil)
     }
 
-    /// Keeps `handoff` in `days`, in its place by date, newest first.
+    private func stored(_ id: HandoffID) -> DayHandoff? {
+        days.first { $0.id == id }
+    }
+
+    /// Keeps `handoff` in `days`, in its place in `HandoffID.listOrder`, replacing the record with
+    /// the same ID.
     private func remember(_ handoff: DayHandoff) {
-        days.removeAll { $0.date == handoff.date }
-        days.insert(handoff, at: days.firstIndex { $0.date < handoff.date } ?? days.endIndex)
+        days.removeAll { $0.id == handoff.id }
+        days.insert(
+            handoff,
+            at: days.firstIndex { HandoffID.listOrder(handoff.id, $0.id) } ?? days.endIndex)
     }
 
     private func save(_ handoff: DayHandoff) throws {
@@ -221,32 +315,41 @@ public final class HandoffController {
     /// Writes the binder's pages with their handwriting to a file named for the finished day (not
     /// the preview's), reads it and deletes it.
     private func renderedPDF(of binder: BinderSession) async throws -> Data {
-        let url = try await renderer.render(
-            binder.plan, ink: binder.plan.pages.map { binder.ink[$0.key] },
+        try await renderedPDF(
+            of: binder.plan, ink: binder.plan.pages.map { binder.ink[$0.key] },
             fileName: "\(binder.date.isoString)-finished.pdf")
+    }
+
+    /// Renders `plan` with `ink` to a file named `fileName`, reads it and deletes it.
+    private func renderedPDF(of plan: RenderPlan, ink: [Data?], fileName: String) async throws
+        -> Data
+    {
+        let url = try await renderer.render(plan, ink: ink, fileName: fileName)
         defer { removeFile(url) }
         return try readFile(url)
     }
 
-    /// Uploads a queued day and sends it to the routine; stops at the first error and records it.
+    /// Uploads a queued record and sends it to the routine; stops at the first error, recording it.
     private func runPipeline(_ start: DayHandoff) async {
         var handoff = start
-        let date = start.date
         do {
             if handoff.stage == .queued {
-                guard let pdf = try store.pdf(for: date) else {
-                    handoff.lastError = "This day's PDF is missing. Finish the day again."
+                guard let pdf = try store.pdf(for: handoff.id) else {
+                    handoff.lastError =
+                        handoff.part == nil
+                        ? "This day's PDF is missing. Finish the day again."
+                        : "This meeting's PDF is missing. Reset the hand-off and send it again."
                     try save(handoff)
                     return
                 }
                 let folderID = try await drive.folderID(named: Self.folderName)
                 handoff.driveFileID = try await drive.uploadPDF(
-                    pdf, name: "Magenda \(date.isoString).pdf", folderID: folderID,
+                    pdf, name: handoff.pdfName, folderID: folderID,
                     replacing: handoff.driveFileID)
                 try save(handoff)
                 if handoff.docID == nil {
                     handoff.docID = try await drive.createDoc(
-                        name: "Magenda \(date.isoString) notes", folderID: folderID,
+                        name: handoff.docName, folderID: folderID,
                         text: DocStatus.initialDocText)
                     try save(handoff)
                 }
@@ -295,13 +398,18 @@ public final class HandoffController {
         }
     }
 
-    /// Deletes the binder day and the PDF, and keeps the record marked purged.
-    private func purge(_ handoff: DayHandoff) throws {
-        try binderStore.deleteDay(handoff.date)
-        try store.deletePDF(for: handoff.date)
-        var purged = handoff
-        purged.purged = true
-        try save(purged)
+    /// Deletes the binder day and the PDFs of the day and of its meetings, and keeps the records
+    /// marked purged, the meetings' before the day's, so a failure partway leaves the day unpurged
+    /// and the next refresh repeats it. A record still waiting to upload keeps its PDF.
+    private func purge(_ day: DayHandoff) throws {
+        try binderStore.deleteDay(day.date)
+        let parts = days.filter { $0.date == day.date && $0.part != nil }
+        for record in parts + [day] where record.stage != .queued && record.stage != .uploaded {
+            try store.deletePDF(for: record.id)
+            var purged = record
+            purged.purged = true
+            try save(purged)
+        }
     }
 
     /// Records `error` on `handoff` and saves it; a save that fails too only updates `days`.

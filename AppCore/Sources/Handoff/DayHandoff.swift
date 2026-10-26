@@ -21,11 +21,14 @@ public struct HandoffPage: Equatable, Codable, Sendable {
     public let summarySkill: String?
     /// Added pages: the `storageString` of the page they copy.
     public let source: String?
+    /// Day runs: the part that already sent this page; the routine must not process it again.
+    public let earlierPart: Int?
 
     /// Creates a page entry.
     public init(
         page: Int, key: String, calendarID: String? = nil, eventID: String? = nil,
-        title: String? = nil, summarySkill: String? = nil, source: String? = nil
+        title: String? = nil, summarySkill: String? = nil, source: String? = nil,
+        earlierPart: Int? = nil
     ) {
         self.page = page
         self.key = key
@@ -34,11 +37,22 @@ public struct HandoffPage: Equatable, Codable, Sendable {
         self.title = title
         self.summarySkill = summarySkill
         self.source = source
+        self.earlierPart = earlierPart
     }
 
-    /// The same page without the fields that only describe it.
+    /// The same page without the fields that only describe it; `earlierPart` stays, because a
+    /// routine that loses it would process the page twice.
     fileprivate var bare: HandoffPage {
-        HandoffPage(page: page, key: key, calendarID: calendarID, eventID: eventID)
+        HandoffPage(
+            page: page, key: key, calendarID: calendarID, eventID: eventID,
+            earlierPart: earlierPart)
+    }
+
+    /// The same page, marked as already sent as part `number`.
+    fileprivate func sent(inPart number: Int) -> HandoffPage {
+        HandoffPage(
+            page: page, key: key, calendarID: calendarID, eventID: eventID, title: title,
+            summarySkill: summarySkill, source: source, earlierPart: number)
     }
 }
 
@@ -76,6 +90,44 @@ public struct HandoffDelegated: Equatable, Codable, Sendable {
     }
 }
 
+/// Which hand-off a record is: a finished day, or a meeting sent before the day ended.
+public struct HandoffID: Hashable, Sendable {
+    /// The day.
+    public let date: CalendarDay
+    /// nil for the finished day; the part's number for a meeting sent early.
+    public let part: Int?
+
+    /// Creates an ID.
+    public init(date: CalendarDay, part: Int?) {
+        self.date = date
+        self.part = part
+    }
+
+    /// The Review list's order: newest date first; on one date the day before its parts, and
+    /// parts by number.
+    public static func listOrder(_ lhs: HandoffID, _ rhs: HandoffID) -> Bool {
+        if lhs.date != rhs.date { return lhs.date > rhs.date }
+        return (lhs.part ?? 0) < (rhs.part ?? 0)
+    }
+}
+
+/// A meeting sent to the routine before the day ended.
+public struct HandoffPart: Equatable, Codable, Sendable {
+    /// 1, 2, … in the order the day's meetings were sent.
+    public let number: Int
+    /// `PageKey.storageString` of the meeting page.
+    public let meetingKey: String
+    /// The meeting-page title, when known.
+    public let title: String?
+
+    /// Creates a part.
+    public init(number: Int, meetingKey: String, title: String?) {
+        self.number = number
+        self.meetingKey = meetingKey
+        self.title = title
+    }
+}
+
 /// What the Review list can do with a day.
 public enum HandoffAction: Equatable, Sendable {
     case retry
@@ -92,6 +144,7 @@ public enum HandoffPhase: Equatable, Sendable {
     case summaryReady
     case working
     case closing
+    case meetingClosed
 
     /// The status line of the day's row.
     public var title: String {
@@ -106,6 +159,7 @@ public enum HandoffPhase: Equatable, Sendable {
         case .summaryReady: "Summary ready for review"
         case .working: "Claude is working on the next step"
         case .closing: "Claude is closing the day"
+        case .meetingClosed: "Closed"
         }
     }
 
@@ -115,7 +169,7 @@ public enum HandoffPhase: Equatable, Sendable {
         case .waitingToUpload, .waitingToSend: .retry
         case .notesReady: .approve(.approveNotes)
         case .summaryReady: .approve(.approveSummary)
-        case .closed, .writingNotes, .working, .closing: nil
+        case .closed, .meetingClosed, .writingNotes, .working, .closing: nil
         }
     }
 }
@@ -159,16 +213,44 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     public var lastError: String?
     /// The last routine run started.
     public var sessionURL: URL?
+    /// nil for the finished day; the meeting this record covers when it was sent early.
+    public let part: HandoffPart?
 
     private enum CodingKeys: String, CodingKey {
         case version, date, checksum, pages, tasks, delegated, driveFileID, docID, stage, docStatus
-        case closedOn, purged, lastError, sessionURL
+        case closedOn, purged, lastError, sessionURL, part
+    }
+
+    /// Which hand-off this is.
+    public var id: HandoffID { HandoffID(date: date, part: part?.number) }
+
+    /// The pages this record sent.
+    public var pageKeys: Set<PageKey> {
+        Set(pages.compactMap { PageKey(storageString: $0.key) })
+    }
+
+    /// The headline of the record's Review row.
+    public var displayTitle: String {
+        guard let part else { return date.isoString }
+        return "\(date.isoString) · \(part.title ?? "Meeting")"
+    }
+
+    /// The PDF's name in Drive.
+    public var pdfName: String {
+        guard let part else { return "Magenda \(date.isoString).pdf" }
+        return "Magenda \(date.isoString) part \(part.number).pdf"
+    }
+
+    /// The Google Doc's name in Drive.
+    public var docName: String {
+        guard let part else { return "Magenda \(date.isoString) notes" }
+        return "Magenda \(date.isoString) part \(part.number) notes"
     }
 
     /// Creates a queued hand-off of `date` with nothing uploaded.
     public init(
         date: CalendarDay, checksum: String, pages: [HandoffPage], tasks: [HandoffTask],
-        delegated: [HandoffDelegated]
+        delegated: [HandoffDelegated], part: HandoffPart? = nil
     ) {
         version = Self.formatVersion
         self.date = date
@@ -179,12 +261,18 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         stage = .queued
         docStatus = .waitingForNotes
         purged = false
+        self.part = part
     }
 
-    /// Creates a queued hand-off from the PDF's `checksum`, the binder `day` and its `plan`.
-    public init(date: CalendarDay, checksum: String, day: BinderDay, plan: RenderPlan) {
+    /// Creates a queued hand-off from the PDF's `checksum`, the binder `day` and its `plan`. A
+    /// page whose key is in `earlierParts` was already sent in that part.
+    public init(
+        date: CalendarDay, checksum: String, day: BinderDay, plan: RenderPlan,
+        earlierParts: [PageKey: Int] = [:]
+    ) {
         let pages = plan.pages.enumerated().map { index, page in
-            Self.handoffPage(number: index + 1, page: page, in: day)
+            let entry = Self.handoffPage(number: index + 1, page: page, in: day)
+            return earlierParts[page.key].map(entry.sent(inPart:)) ?? entry
         }
         var printed = day.content.todoItems
         for omitted in plan.omittedTodoItems {
@@ -200,6 +288,22 @@ public struct DayHandoff: Equatable, Codable, Sendable {
             delegated: day.content.delegated.sortedForPage().map {
                 HandoffDelegated(taskID: $0.taskID, text: $0.text, owner: $0.owner)
             })
+    }
+
+    /// Creates a queued hand-off of the meeting page `meeting`, part `number` of `date`, from the
+    /// meeting PDF's `checksum`, the binder `day` and the `plan` of the meeting's pages.
+    public init(
+        date: CalendarDay, part number: Int, meeting: PageKey, checksum: String, day: BinderDay,
+        plan: RenderPlan
+    ) {
+        let pages = plan.pages.enumerated().map { index, page in
+            Self.handoffPage(number: index + 1, page: page, in: day)
+        }
+        self.init(
+            date: date, checksum: checksum, pages: pages, tasks: [], delegated: [],
+            part: HandoffPart(
+                number: number, meetingKey: meeting.storageString,
+                title: pages.first { $0.key == meeting.storageString }?.title))
     }
 
     /// Decodes a hand-off; throws when it was saved with another format version.
@@ -225,12 +329,15 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         purged = try container.decode(Bool.self, forKey: .purged)
         lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
         sessionURL = try container.decodeIfPresent(URL.self, forKey: .sessionURL)
+        part = try container.decodeIfPresent(HandoffPart.self, forKey: .part)
     }
 
     /// What the Review list shows.
     public var phase: HandoffPhase {
         if let closedOn {
-            return .closed(deleteOn: closedOn.adding(days: Self.purgeDelayDays), purged: purged)
+            return part == nil
+                ? .closed(deleteOn: closedOn.adding(days: Self.purgeDelayDays), purged: purged)
+                : .meetingClosed
         }
         switch (stage, docStatus) {
         case (.queued, _): return .waitingToUpload
@@ -246,6 +353,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     /// What the routine receives for `step`: one JSON object with sorted keys. When it would be
     /// over 65,536 characters it leaves out `tasks` and `delegated` and sets `truncated`; when
     /// that is still too long it also leaves out every page's `title`, `summarySkill` and `source`.
+    /// A meeting run has no `tasks` and no `delegated`.
     public func payload(step: RoutineStep) -> String {
         let full = Payload(self, step: step)
         var text = encode(full)
@@ -271,7 +379,9 @@ public struct DayHandoff: Equatable, Codable, Sendable {
 
     /// The JSON the routine receives.
     private struct Payload: Encodable {
-        let schema = "magenda.end-of-day/1"
+        let schema = "magenda.end-of-day/2"
+        let scope: String
+        let part: Int?
         let step: String
         let date: CalendarDay
         let checksum: String
@@ -291,9 +401,27 @@ public struct DayHandoff: Equatable, Codable, Sendable {
             docID = handoff.docID
             pageCount = handoff.pages.count
             pages = handoff.pages
-            tasks = handoff.tasks
-            delegated = handoff.delegated
+            scope = handoff.part == nil ? "day" : "meeting"
+            part = handoff.part?.number
+            tasks = handoff.part == nil ? handoff.tasks : nil
+            delegated = handoff.part == nil ? handoff.delegated : nil
         }
+    }
+
+    /// The meeting that page `key` belongs to and that meeting's pages in `plan`'s order: the
+    /// meeting page and the pages added as copies of it. nil when `key` is not a meeting page with
+    /// an event, or a copy of one, or the meeting page is not in `plan`.
+    public static func meetingPages(
+        containing key: PageKey, day: BinderDay, plan: RenderPlan
+    ) -> (meeting: PageKey, keys: [PageKey])? {
+        func origin(of page: PageKey) -> PageKey? {
+            guard case .extra = page else { return page }
+            return day.extras.first { PageKey.extra($0.id) == page }?.source
+        }
+        guard case .meeting(let id)? = origin(of: key), !id.isEmpty else { return nil }
+        let meeting = PageKey.meeting(id)
+        let keys = plan.pages.map(\.key).filter { origin(of: $0) == meeting }
+        return keys.contains(meeting) ? (meeting, keys) : nil
     }
 
     /// The entry for `page`, which is page `number` of the PDF.

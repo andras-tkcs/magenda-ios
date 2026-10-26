@@ -8,10 +8,15 @@ import Testing
 private let goodURL = "https://api.anthropic.com/v1/claude_code/routines/trig_abc123/fire"
 private let goodToken = "sk-ant-oat01-abc_DEF-123"
 
-private func payload(step: String, skill: String? = nil, date: String = "2026-03-02") -> String {
+private func payload(
+    step: String, skill: String? = nil, date: String = "2026-03-02", part: Int? = nil,
+    earlierPart: Int? = nil
+) -> String {
     let skillField = skill.map { #","summarySkill":"\#($0)""# } ?? ""
-    let page = #"{"page":1,"key":"m"\#(skillField)}"#
-    return #"{"date":"\#(date)","pages":[\#(page)],"step":"\#(step)"}"#
+    let earlierField = earlierPart.map { #","earlierPart":\#($0)"# } ?? ""
+    let partField = part.map { #","part":\#($0)"# } ?? ""
+    let page = #"{"page":1,"key":"m"\#(skillField)\#(earlierField)}"#
+    return #"{"date":"\#(date)","pages":[\#(page)],"step":"\#(step)"\#(partField)}"#
 }
 
 private func rig(configured: Bool = true) -> (FixtureDrive, FixtureRoutineTrigger) {
@@ -26,6 +31,12 @@ private func rig(configured: Bool = true) -> (FixtureDrive, FixtureRoutineTrigge
 
 private func status(_ drive: FixtureDrive, date: String = "2026-03-02") async throws -> DocStatus {
     DocStatus.parse(try await drive.exportText(ofDoc: "doc-" + date))
+}
+
+private func partStatus(
+    _ drive: FixtureDrive, date: String = "2026-03-02", part: Int
+) async throws -> DocStatus {
+    try await status(drive, date: "\(date)-part-\(part)")
 }
 
 @Suite("Handoff fixtures")
@@ -68,6 +79,46 @@ struct HandoffFixturesTests {
         let doc = try await drive.createDoc(
             name: "Magenda 2026-03-02 notes", folderID: "folder-1", text: "x")
         #expect(doc == "doc-2026-03-02")
+    }
+
+    @Test("The drive names a part's file and Doc after the date and the part")
+    func partIDs() async throws {
+        let (drive, _) = rig()
+        let file = try await drive.uploadPDF(
+            Data(), name: "Magenda 2026-03-02 part 12.pdf", folderID: "folder-1", replacing: nil)
+        #expect(file == "file-2026-03-02-part-12")
+        let doc = try await drive.createDoc(
+            name: "Magenda 2026-03-02 part 1 notes", folderID: "folder-1", text: "x")
+        #expect(doc == "doc-2026-03-02-part-1")
+    }
+
+    @Test("A meeting run is tracked apart from the day and from other parts")
+    func perPart() async throws {
+        let (drive, trigger) = rig()
+        _ = try await trigger.fire(text: payload(step: "notes", part: 1))
+        #expect(try await partStatus(drive, part: 1) == .notesReady)
+        #expect(try await partStatus(drive, part: 2) == .waitingForNotes)
+        #expect(try await status(drive) == .waitingForNotes)
+        _ = try await trigger.fire(text: payload(step: "notes"))
+        _ = try await trigger.fire(text: payload(step: "approve-notes", part: 1))
+        #expect(try await partStatus(drive, part: 1) == .closed)
+        #expect(try await status(drive) == .notesReady)
+    }
+
+    @Test("A meeting with a skill goes through summary ready before closed")
+    func partWithSkill() async throws {
+        let (drive, trigger) = rig()
+        _ = try await trigger.fire(
+            text: payload(step: "approve-notes", skill: "weekly-sync", part: 1))
+        #expect(try await partStatus(drive, part: 1) == .summaryReady)
+    }
+
+    @Test("A page that an earlier part sent does not make a day have a summary skill")
+    func earlierPartIgnored() async throws {
+        let (drive, trigger) = rig()
+        _ = try await trigger.fire(
+            text: payload(step: "approve-notes", skill: "weekly-sync", earlierPart: 1))
+        #expect(try await status(drive) == .closed)
     }
 
     @Test("The trigger returns the fixture session URL")

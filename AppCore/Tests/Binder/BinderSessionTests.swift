@@ -46,6 +46,79 @@ struct BinderSessionTests {
         #expect(session.date == date)
     }
 
+    @Test("handwriting on a locked page changes nothing and saves nothing")
+    func setInkIgnoresLocked() throws {
+        let store = InMemoryBinderStore()
+        let session = makeSession(store)
+        session.lock([meeting])
+        session.setInk(Data([1]), on: meeting)
+        #expect(session.ink.isEmpty)
+        #expect(try store.ink(on: date).isEmpty)
+        #expect(!session.canUndo)
+    }
+
+    @Test("locking drops the undo and redo entries of the locked pages only")
+    func lockDropsHistory() {
+        let session = makeSession(InMemoryBinderStore())
+        session.setInk(Data([1]), on: meeting)
+        session.setInk(Data([2]), on: .notes)
+        session.setInk(Data([3]), on: meeting)
+        session.setInk(Data([4]), on: .notes)
+        #expect(session.undo() == .notes)
+        session.lock([meeting])
+        #expect(session.isLocked(meeting))
+        #expect(!session.isLocked(.notes))
+        #expect(session.redo() == .notes)
+        #expect(session.undo() == .notes)
+        #expect(session.undo() == .notes)
+        #expect(session.undo() == nil)
+        #expect(session.ink[meeting] == Data([3]))
+    }
+
+    @Test("a locked added page cannot be deleted, and no page can follow a locked page")
+    func lockedPageRules() throws {
+        let session = makeSession(InMemoryBinderStore())
+        let added = session.addPage(after: meeting)
+        #expect(session.canDelete(added))
+        #expect(session.canAddPage(after: added))
+        session.lock([added])
+        #expect(!session.canDelete(added))
+        #expect(!session.canAddPage(after: added))
+        #expect(session.canAddPage(after: meeting))
+        #expect(session.deletePage(added) == nil)
+    }
+
+    @Test("locking twice keeps one entry; unlock and unlockAll make pages writable and save")
+    func unlockSaves() throws {
+        let store = InMemoryBinderStore()
+        let session = makeSession(store)
+        session.lock([meeting, .notes])
+        session.lock([meeting])
+        #expect(session.day.locked == [meeting, .notes])
+        #expect(try store.day(date)?.locked == [meeting, .notes])
+        session.unlock([meeting])
+        #expect(try store.day(date)?.locked == [.notes])
+        session.unlockAll()
+        #expect(session.day.locked.isEmpty)
+        #expect(try store.day(date)?.locked == [])
+        #expect(session.message == nil)
+    }
+
+    @Test("a failed save while locking or unlocking leaves a message")
+    func lockSaveFailures() {
+        let store = FailingBinderStore(.unwritable, failing: [.saveDay])
+        let expected = "Couldn't save the binder. Free some space on this device."
+        let locking = makeSession(store)
+        locking.lock([meeting])
+        #expect(locking.message == expected)
+        let unlocking = makeSession(store)
+        unlocking.unlock([meeting])
+        #expect(unlocking.message == expected)
+        let all = makeSession(store)
+        all.unlockAll()
+        #expect(all.message == expected)
+    }
+
     @Test("unchanged handwriting is not saved again")
     func setInkIgnoresUnchanged() throws {
         let store = InMemoryBinderStore()
