@@ -5,6 +5,7 @@
 Accepted — 2026-10-23. Implemented.
 Amends [ADR 0021](0021-a-binder-day-is-stored-as-a-content-snapshot-and-ink-per-page-key.md).
 Amends [ADR 0023](0023-binder-undo-uses-a-handwriting-history-kept-by-the-session.md).
+Amended by [ADR 0035](0035-start-over-is-refused-while-a-meeting-is-sent.md): it is refused while a meeting is sent.
 
 ## Context
 

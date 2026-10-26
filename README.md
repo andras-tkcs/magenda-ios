@@ -46,7 +46,8 @@ none is chosen)
   look-ahead (5 days by default; Settings → Binder rules → Look-ahead, 0 to 14), each by due date.
 - A look-ahead task titled "Name – to be discussed" (or "TBD") is kept only when that person is
   invited to an included meeting that day. A name that differs from the attendee's first name is
-  matched under Settings → Binder rules → People. Otherwise it is listed unticked with the reason.
+  matched under Settings → Binder rules → People, where you can type a
+  name and email or choose them from Contacts. Otherwise it is listed unticked with the reason.
 - A task's notes take one line; a task that does not fit the list is left off the PDF and listed in
   a banner under the preview (on iPad, under the binder's toolbar).
 
@@ -65,7 +66,7 @@ shares the day with your handwriting on its pages.
 Handwriting is saved on the device per page. Rendering the day again keeps it on its page, and a
 meeting page you wrote on stays even when the meeting has left the agenda. Start over, in the
 agenda's toolbar, deletes all of the day's handwriting and added pages after asking, and renders
-the day fresh. Once a day is started, it opens without a network connection. The iPhone shows the
+the day fresh; it is refused while a meeting of the day is sent (ADR 0035). Once a day is started, it opens without a network connection. The iPhone shows the
 PDF preview (ADR 0020, ADR 0021, ADR 0024 to ADR 0026). The saved binder and the shared PDFs can't
 be read while the device is locked (ADR 0022).
 
@@ -74,10 +75,12 @@ be read while the device is locked (ADR 0022).
 On an iPad, **Finish Day** in the binder's toolbar sends the day to Google Drive and starts your
 end-of-day Claude routine (ADR 0027, ADR 0028). Magenda renders the day once, with the printed
 text kept as text and your handwriting on top, and uploads it as `Magenda <date>.pdf` to a
-`Magenda` folder in your Drive. Next to it, it creates a Google Doc named `Magenda <date> notes`
+folder in your Drive, `Magenda` unless you rename it in Settings → Google Drive (ADR 0036). Next to it, it creates a Google Doc named `Magenda <date> notes`
 whose first line is the day's status. Magenda sees only the files it created. A day finished
 without a connection waits and is sent the next time the app becomes active; finishing a day again
 before it was sent replaces its PDF. **Reset Hand-off**, after a confirmation, forgets that a day was sent so you can finish it again (ADR 0032); the earlier PDF and Doc stay in Drive.
+
+On a meeting page, **Send Meeting** sends that meeting on its own, with its own PDF and Google Doc and its own row in Review, and locks its pages so they can't be written on afterwards; Finish Day then skips it in the notes (ADR 0033, ADR 0034).
 
 To send days to Claude, open Settings → End-of-day routine and enter the fire URL and token of the
 routine's API trigger (from claude.ai/code/routines). The token stays in the device's Keychain and

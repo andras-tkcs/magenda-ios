@@ -17,6 +17,8 @@ A check stays manual only when automation cannot reliably decide pass or fail:
 - real Google sign-in and real account data, which CI has no account for (ADR 0013): sign in with
   your own client, render a day and share it (on iPad, from the binder), and finish a day to Drive
   and the end-of-day routine (ADR 0027, ADR 0028);
+- the system contact picker behind Choose from Contacts, which runs out of process and is replaced
+  by a fixture in the UI tests (ADR 0037);
 - handwriting with a real Apple Pencil on an iPad (pressure, palm rejection), which the simulator
   does not have;
 - the comparison of the app's agenda with a binder built by the old Claude workflow while that
@@ -61,6 +63,10 @@ supports it):
       notes Doc appear in the Drive folder `Magenda`. In Review, wait for "Notes ready for review",
       open the Doc, tap Approve notes (and Approve if a summary is asked for), and the row ends as
       "Closed. Handwriting is deleted on …" (ADR 0027 to ADR 0030).
+- [ ] With a real routine updated to schema 2, on an iPad: tap Send Meeting on a meeting page and
+      confirm. The page shows "Sent to Claude" and can't be written on, Start Over is disabled, and
+      Review has a row for the meeting that reaches "Closed". Then tap Finish Day, and the day's notes
+      cover the other pages but not that meeting (ADR 0033, ADR 0034).
 - [ ] On an iPad, turn on airplane mode, tap Finish Day, and Review shows "Waiting to upload".
       Turn it off and reopen the app: the day uploads and is sent to Claude once.
 - [ ] On an iPad with an Apple Pencil, double-tap (and, on a Pencil Pro, squeeze) the Pencil: a pen

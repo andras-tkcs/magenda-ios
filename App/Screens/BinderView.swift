@@ -14,6 +14,10 @@ struct BinderView: View {
         static let resetHandoffButton = "resetHandoffButton"
         static let confirmResetHandoffButton = "confirmResetHandoffButton"
         static let cancelResetHandoffButton = "cancelResetHandoffButton"
+        static let sendMeetingButton = "sendMeetingButton"
+        static let confirmSendMeetingButton = "confirmSendMeetingButton"
+        static let cancelSendMeetingButton = "cancelSendMeetingButton"
+        static let sentBadge = "sentBadge"
         static let overviewButton = "binderOverviewButton"
         static let delegatedButton = "binderDelegatedButton"
         static let notesButton = "binderNotesButton"
@@ -41,6 +45,8 @@ struct BinderView: View {
     @State private var lastPen = BinderPen.black
     @State private var confirmsDelete = false
     @State private var confirmsResetHandoff = false
+    @State private var confirmsSendMeeting = false
+    @State private var sendMeetingKey: PageKey?
 
     /// The position of the page on screen; the first page until it moves.
     private var visibleIndex: Int {
@@ -105,8 +111,16 @@ struct BinderView: View {
                 goToNotes: { scroll(to: .notes) },
                 undo: { reveal(binder.undo()) }, redo: { reveal(binder.redo()) },
                 addPage: addPage,
+                canAddPage: visibleKey.map { binder.canAddPage(after: $0) } ?? true,
                 canDeletePage: visibleKey.map { binder.canDelete($0) } ?? false,
-                deletePage: { confirmsDelete = true })
+                deletePage: { confirmsDelete = true },
+                canSendMeeting: !handoff.isBusy
+                    && (visibleKey.map { handoff.canSendMeeting(containing: $0, of: binder) }
+                        ?? false),
+                sendMeeting: {
+                    sendMeetingKey = visibleKey
+                    confirmsSendMeeting = true
+                })
             if !plan.omittedTodoItems.isEmpty {
                 OmittedTasksBanner(tasks: plan.omittedTodoItems.map(\.text))
             }
@@ -140,7 +154,7 @@ struct BinderView: View {
         }
         .background(Color(.secondarySystemBackground))
         .toolbar {
-            if handoff.hasHandoff(on: binder.date) {
+            if handoff.hasHandoff(on: binder.date) || !binder.day.locked.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         confirmsResetHandoff = true
@@ -184,9 +198,23 @@ struct BinderView: View {
         } message: {
             Text("The page and its handwriting will be removed. This can't be undone.")
         }
+        .alert("Send this meeting to Claude now?", isPresented: $confirmsSendMeeting) {
+            Button("Send") {
+                if let key = sendMeetingKey {
+                    Task { await handoff.sendMeeting(containing: key, of: binder) }
+                }
+            }
+            .accessibilityIdentifier(ID.confirmSendMeetingButton)
+            Button("Cancel", role: .cancel) {}
+                .accessibilityIdentifier(ID.cancelSendMeetingButton)
+        } message: {
+            Text(
+                "Its pages are uploaded with their own Google Doc and can't be written on afterwards. Finish Day still sends the rest of the day."
+            )
+        }
         .alert("Reset this day's hand-off?", isPresented: $confirmsResetHandoff) {
             Button("Reset", role: .destructive) {
-                handoff.resetHandoff(for: binder.date)
+                handoff.resetHandoff(for: binder.date, unlocking: binder)
             }
             .accessibilityIdentifier(ID.confirmResetHandoffButton)
             Button("Cancel", role: .cancel) {}
@@ -206,7 +234,7 @@ struct BinderView: View {
                     BinderPageView(
                         page: page, pageWidth: plan.pageWidth, pageHeight: plan.pageHeight,
                         ink: binder.ink[page.key], allowsFingerDrawing: allowsFingerDrawing,
-                        tool: tool,
+                        isLocked: binder.isLocked(page.key), tool: tool,
                         linkTarget: { plan.linkTarget(at: $0, onPage: index) },
                         onLinkTap: { target in
                             if plan.pages.indices.contains(target) {
@@ -219,7 +247,18 @@ struct BinderView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityIdentifier(ID.binderPage(index))
                     .accessibilityLabel(Self.label(for: page.key))
-                    .accessibilityValue(binder.ink[page.key] == nil ? "Blank" : "Handwritten")
+                    .accessibilityValue(value(of: page.key))
+                    .overlay(alignment: .top) {
+                        if binder.isLocked(page.key) {
+                            Label("Sent to Claude", systemImage: "lock.fill")
+                                .font(.footnote)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(.regularMaterial, in: Capsule())
+                                .padding(.top, 24)
+                                .accessibilityIdentifier(ID.sentBadge)
+                        }
+                    }
                     .padding(16)
                     .containerRelativeFrame([.horizontal, .vertical])
                 }
@@ -236,6 +275,14 @@ struct BinderView: View {
             }
         }
         .accessibilityIdentifier(ID.binderView)
+    }
+
+    /// What VoiceOver reads as the value of the page with `key`.
+    private func value(of key: PageKey) -> String {
+        if binder.isLocked(key) {
+            return "Sent to Claude"
+        }
+        return binder.ink[key] == nil ? "Blank" : "Handwritten"
     }
 
     /// What VoiceOver calls the page with `key`.
