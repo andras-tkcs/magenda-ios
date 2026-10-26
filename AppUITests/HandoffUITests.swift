@@ -7,9 +7,14 @@ import XCTest
 
 final class HandoffUITests: XCTestCase {
     @MainActor
-    private func launch(extra: [String] = []) -> XCUIApplication {
+    private func launch(fingerDrawing: Bool = true, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "standard", "-MagendaFingerDrawing"] + extra
+        // With finger drawing on, a swipe on the binder is a stroke and does not turn the page.
+        var arguments = ["-MagendaFixture", "standard"]
+        if fingerDrawing {
+            arguments.append("-MagendaFingerDrawing")
+        }
+        app.launchArguments = arguments + extra
         app.launch()
         return app
     }
@@ -202,7 +207,7 @@ final class HandoffUITests: XCTestCase {
     @MainActor
     func testSendingAMeetingLocksItAndGivesItItsOwnReviewRow() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch()
+        let app = launch(fingerDrawing: false)
         render(app)
         sendFirstMeeting(app)
 
@@ -254,7 +259,7 @@ final class HandoffUITests: XCTestCase {
     @MainActor
     func testResetHandoffUnlocksASentMeeting() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch()
+        let app = launch(fingerDrawing: false)
         render(app)
         sendFirstMeeting(app)
         XCTAssertTrue(
