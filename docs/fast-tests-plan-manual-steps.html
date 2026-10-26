@@ -68,36 +68,29 @@ a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline
 <main>
   <header style="display:grid;gap:10px">
     <h1>Fast tests: your steps</h1>
-    <p class="lede">The plan makes Magenda iPad-only and cuts a pull request's test run to 20 minutes. Most of it runs on its own; these three items need you. Tick each step as you go. The ticks are remembered in this browser only.</p>
+    <p class="lede">The plan makes Magenda iPad-only and cuts a pull request's test run to 20 minutes. Most of it runs on its own; one step needs you. Tick each step as you go. The ticks are remembered in this browser only.</p>
     <p class="progress" id="progress">0 of 0 steps done</p>
   </header>
 
   <h2>Before implementation</h2>
 
-  <section class="item" data-item="mb1">
+  <section class="item" data-item="mb0">
     <div class="item-head">
-      <h3>1. Check that Magenda has no App Store release</h3>
-      <span class="id">mb1-no-app-store-release</span>
+      <h3>Nothing to do</h3>
+      <span class="id">manual_before: none</span>
     </div>
-    <p class="time">About 2 minutes</p>
-    <p class="why">The plan removes iPhone support. Apple refuses an update that drops iPhone once a version supporting iPhone has been on the App Store. TestFlight builds do not count.</p>
-    <ol class="steps">
-      <li><input type="checkbox" id="mb1-s1" aria-label="Step 1 done"><span class="body">Open <a href="https://appstoreconnect.apple.com/apps" target="_blank" rel="noopener">App Store Connect → Apps</a> and sign in with the Apple Developer account.<span class="see">You should see the list of your apps, including Magenda.</span></span></li>
-      <li><input type="checkbox" id="mb1-s2" aria-label="Step 2 done"><span class="body">Click <strong>Magenda</strong>. Under <strong>App Store</strong> in the left column, look at the iOS versions listed.<span class="see">Only TestFlight builds (version 0.1.1 and later) are expected here, with no version shown as "Ready for Distribution" or "Removed from Sale".</span></span></li>
-      <li><input type="checkbox" id="mb1-s3" aria-label="Step 3 done"><span class="body">If a version was ever released on the App Store, stop. Do not run <code>/implement</code>. Tell the planning session instead, because the iPad-only part of the plan has to change.</span></li>
-    </ol>
-    <p class="done-when"><strong>Done when:</strong> the App Store tab for Magenda shows no version with status "Ready for Distribution" or "Removed from Sale", only TestFlight builds. Then run <code>/implement</code>.</p>
+    <p class="why">You confirmed on 26 October 2026 that Magenda has only shipped through TestFlight, with no App Store release and no iPhone users, so the app can drop iPhone. Run <code>/implement</code> whenever you like.</p>
   </section>
 
   <h2>After implementation</h2>
 
   <section class="item" data-item="ma1">
     <div class="item-head">
-      <h3>2. Apply the new required checks</h3>
+      <h3>1. Apply the new required checks</h3>
       <span class="id">ma1-apply-required-checks</span>
     </div>
     <p class="time">About 5 minutes, just before you merge the pull request</p>
-    <p class="why">The pull request replaces the 19 required checks with 7. Until branch protection matches, GitHub waits for <code>app (…)</code> checks that no longer run, and the pull request cannot merge.</p>
+    <p class="why">The pull request replaces the 18 required checks with 7. Until branch protection matches, GitHub waits for <code>app (…)</code> checks that no longer run, and the pull request cannot merge.</p>
     <p class="note">Merge pull requests #16 and #17 first. Once the new list is applied, any open pull request still running the old workflow is blocked.</p>
     <ol class="steps">
       <li><input type="checkbox" id="ma1-s1" aria-label="Step 1 done"><span class="body">Open the <code>feature/fast-tests</code> pull request and check that its latest <strong>Tests</strong> run is green. It should have the jobs <code>core</code>, <code>lint</code>, <code>scripts</code> and <code>ui (ipad, newest, 1)</code> to <code>ui (ipad, newest, 4)</code>.</span></li>
@@ -111,20 +104,6 @@ gh auth status</pre><span class="see"><code>gh auth status</code> should show yo
     <p class="report"><strong>Report back:</strong> tick this item in the pull request, or paste <code>ma1: applied, 7 required checks</code> as a comment.</p>
   </section>
 
-  <section class="item" data-item="ma2">
-    <div class="item-head">
-      <h3>3. Check the iPad build on a real iPad at the next release</h3>
-      <span class="id">ma2-ipad-testflight-smoke</span>
-    </div>
-    <p class="time">About 5 minutes, after the next release tag is uploaded</p>
-    <p class="why">CI cannot check that an iPad-only build installs from TestFlight and opens the binder on real hardware. This is owed at the next release, not before the merge.</p>
-    <ol class="steps">
-      <li><input type="checkbox" id="ma2-s1" aria-label="Step 1 done"><span class="body">After the next release, open <a href="https://apps.apple.com/app/testflight/id899247664" target="_blank" rel="noopener">TestFlight</a> on a real iPad and install the new Magenda build.</span></li>
-      <li><input type="checkbox" id="ma2-s2" aria-label="Step 2 done"><span class="body">Open Magenda, sign in, tap <strong>Render</strong>, and write a line on the first binder page with Apple Pencil.<span class="see">The binder opens with its page indicator, and your ink stays after you swipe to the next page and back.</span></span></li>
-      <li><input type="checkbox" id="ma2-s3" aria-label="Step 3 done"><span class="body">Follow the rest of the iPad section of the <a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/fast-tests/docs/release-testing.md" target="_blank" rel="noopener">release testing checklist</a> as usual.</span></li>
-    </ol>
-    <p class="report"><strong>Report back:</strong> add <code>iPad-only build: installs and renders the binder — pass/fail</code> to the release's testing notes.</p>
-  </section>
 </main>
 
 <script>
