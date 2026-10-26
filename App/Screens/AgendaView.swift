@@ -113,7 +113,9 @@ struct AgendaView: View {
         case .event(let id):
             if let event = controller.draft?.events.first(where: { $0.id == id }) {
                 EditTextSheet(
-                    target: target, text: event.title, originalTitle: event.originalTitle)
+                    target: target, text: event.title, originalTitle: event.originalTitle,
+                    summaryRoutines: controller.settings.summaryRoutines,
+                    selectedRoutineIDs: event.summaryRoutineIDs)
             }
         case .task(let id):
             if let task = controller.draft?.tasks.first(where: { $0.id == id }) {
