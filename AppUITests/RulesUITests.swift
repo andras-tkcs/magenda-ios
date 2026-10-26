@@ -279,8 +279,16 @@ final class RulesUITests: XCTestCase {
         let reset = app.buttons["resetRulesButton"].firstMatch
         reset.reveal(in: rulesForm(app))
         reset.tap()
-        app.element("rulesRow.personalBlocks.1").reveal(in: rulesForm(app))
-        XCTAssertTrue(app.element("rulesRow.personalBlocks.1").exists)
+        // The first rows are at the top, and the form is lazy, so they are gone from the tree down
+        // here; `reveal` would look further down first. Scroll back up until they are there.
+        let second = app.element("rulesRow.personalBlocks.1")
+        var scrolls = 0
+        while !second.exists && scrolls < 12 {
+            rulesForm(app).scrollContent(by: -300)
+            scrolls += 1
+        }
+        second.reveal(in: rulesForm(app))
+        XCTAssertTrue(second.exists)
         first.reveal(in: rulesForm(app))
         XCTAssertTrue(first.waitUntil(\.label, is: "Lunch"), "\(first) never said Lunch")
     }
