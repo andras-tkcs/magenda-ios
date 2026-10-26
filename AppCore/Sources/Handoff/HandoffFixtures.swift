@@ -9,15 +9,35 @@ public actor FixtureEndOfDay {
         let hadSummarySkill: Bool
     }
 
+    private struct SummaryRecord: Equatable {
+        let routineID: String
+        let page: Int
+    }
+
     private var fired: [String: Fired] = [:]
+    private var summaries: [String: [SummaryRecord]] = [:]
 
     /// Creates a routine that has been asked for nothing.
     public init() {}
 
-    /// Records the step in `payload` for its date, or its date and part. A payload that does not
-    /// decode is recorded as nothing.
+    /// Records the step in `payload` for its date, or its date and part; a summary payload
+    /// (schema `magenda.summary/1`) records its routine and meeting pages instead. A payload that
+    /// does not decode is recorded as nothing.
     public func record(payload: String) {
-        guard let decoded = try? JSONDecoder().decode(Payload.self, from: Data(payload.utf8)) else {
+        let data = Data(payload.utf8)
+        if let summary = try? JSONDecoder().decode(SummaryPayloadShape.self, from: data),
+            summary.schema == "magenda.summary/1"
+        {
+            let key = summary.part.map { "\(summary.date)-part-\($0)" } ?? summary.date
+            for meeting in summary.meetings {
+                let record = SummaryRecord(routineID: summary.routineID, page: meeting.page)
+                if !(summaries[key] ?? []).contains(record) {
+                    summaries[key, default: []].append(record)
+                }
+            }
+            return
+        }
+        guard let decoded = try? JSONDecoder().decode(Payload.self, from: data) else {
             return
         }
         let key = decoded.part.map { "\(decoded.date)-part-\($0)" } ?? decoded.date
@@ -29,8 +49,16 @@ public actor FixtureEndOfDay {
     }
 
     /// The text of a Doc as the routine would have left it; `key` is the date, or the date,
-    /// "-part-" and the part's number.
+    /// "-part-" and the part's number. After the first line come two lines for every summary
+    /// recorded: its marker and a made-up summary.
     public func docText(forKey key: String) -> String {
+        statusLine(forKey: key)
+            + (summaries[key] ?? []).map {
+                "Summary ready: \($0.routineID) \($0.page)\nFixture summary.\n"
+            }.joined()
+    }
+
+    private func statusLine(forKey key: String) -> String {
         guard let last = fired[key] else { return "Status: Waiting for notes\n" }
         switch last.step {
         case "notes": return "Status: Notes ready for review\n"
@@ -40,6 +68,18 @@ public actor FixtureEndOfDay {
         case "approve-summary": return "Status: Closed\n"
         default: return "Status: Waiting for notes\n"
         }
+    }
+
+    private struct SummaryPayloadShape: Decodable {
+        struct Meeting: Decodable {
+            let page: Int
+        }
+
+        let schema: String
+        let routineID: String
+        let date: String
+        let part: Int?
+        let meetings: [Meeting]
     }
 
     private struct Payload: Decodable {
@@ -125,5 +165,27 @@ public struct FixtureRoutineTrigger: RoutineFiring {
     // Read on every call so saving or forgetting the routine takes effect at once.
     private func stored() -> Bool {
         (try? credentials.load()) != nil
+    }
+}
+
+/// A summary routine trigger that records what it is asked into a `FixtureEndOfDay`.
+public struct FixtureSummaryTrigger: SummaryRoutineFiring {
+    private let state: FixtureEndOfDay
+    private let credentials: any SummaryRoutineCredentialsStore
+
+    /// Creates a trigger that records into `state` while `credentials` holds the routine asked for.
+    public init(state: FixtureEndOfDay, credentials: any SummaryRoutineCredentialsStore) {
+        self.state = state
+        self.credentials = credentials
+    }
+
+    /// Records `text` and returns a made-up session URL; throws `summaryNotConfigured` without
+    /// credentials for `routineID`.
+    public func fire(text: String, routineID: String) async throws -> URL {
+        guard (try? credentials.load(id: routineID)) != nil else {
+            throw RoutineTriggerError.summaryNotConfigured
+        }
+        await state.record(payload: text)
+        return GoogleAPI.url(host: "claude.ai", path: "/code/session_fixture")
     }
 }

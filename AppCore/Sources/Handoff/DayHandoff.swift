@@ -217,11 +217,15 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     public var sessionURL: URL?
     /// nil for the finished day; the meeting this record covers when it was sent early.
     public let part: HandoffPart?
+    /// The IDs of the summary routines already started for this record.
+    public var firedSummaries: [String]
+    /// The summary markers read from the Doc, each `"<routine ID> <page>"`.
+    public var summaryMarkers: [String]
 
     private enum CodingKeys: String, CodingKey {
         case version, date, checksum, pages, tasks, delegated, driveFileID, docID, folderID, stage
         case docStatus
-        case closedOn, purged, lastError, sessionURL, part
+        case closedOn, purged, lastError, sessionURL, part, firedSummaries, summaryMarkers
     }
 
     /// Which hand-off this is.
@@ -265,6 +269,8 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         docStatus = .waitingForNotes
         purged = false
         self.part = part
+        firedSummaries = []
+        summaryMarkers = []
     }
 
     /// Creates a queued hand-off from the PDF's `checksum`, the binder `day` and its `plan`. A
@@ -334,6 +340,37 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
         sessionURL = try container.decodeIfPresent(URL.self, forKey: .sessionURL)
         part = try container.decodeIfPresent(HandoffPart.self, forKey: .part)
+        firedSummaries =
+            try container.decodeIfPresent([String].self, forKey: .firedSummaries) ?? []
+        summaryMarkers =
+            try container.decodeIfPresent([String].self, forKey: .summaryMarkers) ?? []
+    }
+
+    // The summary routines of the pages this record sent itself, each once, in page order; a
+    // page already sent in a part is summarized in that part's record.
+    private var distinctSummaryRoutines: [SummaryRoutine] {
+        var seen = Set<String>()
+        return pages.filter { $0.earlierPart == nil }.flatMap { $0.summaryRoutines ?? [] }
+            .filter { seen.insert($0.id).inserted }
+    }
+
+    /// The distinct summary routine IDs of the pages this record sent itself, in page order.
+    public var summaryRoutineIDs: [String] {
+        distinctSummaryRoutines.map(\.id)
+    }
+
+    /// The summary routines among `summaryRoutineIDs` not yet started, in that order.
+    public var unsentSummaryRoutines: [SummaryRoutine] {
+        distinctSummaryRoutines.filter { !firedSummaries.contains($0.id) }
+    }
+
+    /// Whether every summary routine asked for by a page this record sent itself has written
+    /// its marker for that page; true when none was asked for.
+    public var summariesWritten: Bool {
+        let written = Set(summaryMarkers)
+        return pages.filter { $0.earlierPart == nil }.allSatisfy { page in
+            (page.summaryRoutines ?? []).allSatisfy { written.contains("\($0.id) \(page.page)") }
+        }
     }
 
     /// What the Review list shows.
@@ -372,7 +409,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         return encode(shortened)
     }
 
-    private func encode(_ payload: Payload) -> String {
+    private func encode(_ payload: some Encodable) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
         // Encoding plain strings, numbers and arrays cannot fail; `compactMap` keeps that
@@ -411,6 +448,59 @@ public struct DayHandoff: Equatable, Codable, Sendable {
             part = handoff.part?.number
             tasks = handoff.part == nil ? handoff.tasks : nil
             delegated = handoff.part == nil ? handoff.delegated : nil
+        }
+    }
+
+    /// What summary routine `routine` receives: one JSON object with sorted keys, naming the
+    /// meetings of this record that ask for it. Titles are cut to 200 characters.
+    public func summaryPayload(for routine: SummaryRoutine) -> String {
+        encode(SummaryPayload(self, routine: routine))
+    }
+
+    /// The JSON a summary routine receives.
+    private struct SummaryPayload: Encodable {
+        struct Meeting: Encodable {
+            let page: Int
+            let key: String
+            let calendarID: String?
+            let eventID: String?
+            let title: String?
+            let extraPages: [Int]?
+        }
+
+        let schema = "magenda.summary/1"
+        let scope: String
+        let part: Int?
+        let routineID: String
+        let routineName: String
+        let date: CalendarDay
+        let checksum: String
+        let driveFileID: String?
+        let folderID: String?
+        let docID: String?
+        let pageCount: Int
+        let meetings: [Meeting]
+
+        init(_ handoff: DayHandoff, routine: SummaryRoutine) {
+            routineID = routine.id
+            routineName = routine.name
+            date = handoff.date
+            checksum = handoff.checksum
+            driveFileID = handoff.driveFileID
+            folderID = handoff.folderID
+            docID = handoff.docID
+            pageCount = handoff.pages.count
+            scope = handoff.part == nil ? "day" : "meeting"
+            part = handoff.part?.number
+            meetings = handoff.pages.filter {
+                $0.earlierPart == nil && ($0.summaryRoutines ?? []).contains { $0.id == routine.id }
+            }.map { page in
+                let extras = handoff.pages.filter { $0.source == page.key }.map(\.page)
+                return Meeting(
+                    page: page.page, key: page.key, calendarID: page.calendarID,
+                    eventID: page.eventID, title: page.title.map { String($0.prefix(200)) },
+                    extraPages: extras.isEmpty ? nil : extras)
+            }
         }
     }
 
