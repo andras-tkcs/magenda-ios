@@ -111,7 +111,7 @@ struct SettingsView: View {
                 lookSection
                 Section {
                     NavigationLink("Binder rules", value: Route.rules)
-                    .accessibilityIdentifier(ID.rulesLink)
+                        .accessibilityIdentifier(ID.rulesLink)
                 }
                 clientSection
                 driveSection
