@@ -4,6 +4,7 @@
 
 Accepted — 2026-10-24. Implemented.
 Amends [ADR 0021](0021-a-binder-day-is-stored-as-a-content-snapshot-and-ink-per-page-key.md): "nothing deletes a stored day".
+Amended by [ADR 0033](0033-a-meeting-can-be-sent-before-the-day-ends.md): only a finished day starts the deletion.
 
 ## Context
 

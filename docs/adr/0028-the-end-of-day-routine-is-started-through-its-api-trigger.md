@@ -3,6 +3,7 @@
 ## Status
 
 Accepted — 2026-10-24. Implemented.
+Amended by [ADR 0034](0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md): the payload schema.
 
 ## Context
 
