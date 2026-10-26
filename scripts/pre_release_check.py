@@ -107,7 +107,7 @@ def main() -> int:
         return 1
     if "SKIP" in results.values():
         print(
-            "\nNot the whole gate: the SKIP rows need macOS. Take their result from tests.yml's `app` "
+            "\nNot the whole gate: the SKIP rows need macOS. Take their result from tests.yml's `ui` "
             "jobs for this commit (dispatch it against the branch if no PR is open yet)."
         )
         return 0

@@ -22,7 +22,7 @@ back.
 | You need | Dispatch | Notes |
 |---|---|---|
 | `swift test`, the coverage floor or `swift format`, with no toolchain here | `tests.yml` | Read the `core` and `lint` jobs. With a toolchain, run them here instead (`docs/testing-policy.md`, "Fast checks"). |
-| The app built, its hosted tests and its UI tests on simulators | `tests.yml` | Read the three `app (...)` jobs (build and hosted tests) and the thirteen `ui (...)` jobs (UI tests, four shards per device plus an iPad-only `binder` shard that runs the binder, Start over and hand-off UI tests). Re-run a failed `ui` job on its own. On a failure, download the job's `xcresult-*` artifact or read the log; never guess. |
+| The app built, its hosted tests and its UI tests on simulators | `tests.yml` | Read the four `ui (ipad, newest, N)` jobs (each builds once, then runs its share of the hosted and UI tests). Re-run a failed `ui` job on its own. `simulators: false` is allowed only for a branch whose diff touches nothing but `docs/`, `CHANGELOG.md`, `.claude/`, or `scripts/` files other than `ui_shards.py`, `simulator.py` and `pre_release_check.py`; any change under `App/`, `AppCore/`, `AppTests/`, `AppUITests/`, `project.yml` or `.github/` runs the simulators, and `/dod`'s simulator row always needs a run with simulators. On a failure, download the job's `xcresult-*` artifact or read the log; never guess. |
 | A Release archive with a version stamped in | `build.yml` | No inputs. Archives unsigned and uploads nothing off a tag. |
 | To cut a release tag | `release.yml` | Inputs `version` and `dry_run`. **`dry_run` defaults to true** — dispatch it that way first. Only cut for real when the maintainer has seen the dry run and said to. See `/cut-release`. |
 | A signed build in TestFlight | — | Only a tag does this (ADR 0009). Never try to sign or upload from a session. |
@@ -33,7 +33,7 @@ Things about dispatching, so they are not rediscovered at runtime:
   present on the default branch; the `ref` you pass selects which checkout runs. A workflow added
   on a feature branch is not dispatchable until that branch merges.
 - **Push before you dispatch.** The run checks out the remote branch, not your working tree.
-- **macOS jobs are slow and queue.** Ten to twenty minutes for the `app` and `ui` jobs is normal. Arm a
+- **macOS jobs are slow and queue.** Up to twenty minutes for the `ui` jobs is normal. Arm a
   check-in rather than polling.
 - **Pushing a release tag directly is not possible here** — the container can push branches but
   not `refs/tags/*`. Don't try; a failed push can leave a local tag behind that makes
