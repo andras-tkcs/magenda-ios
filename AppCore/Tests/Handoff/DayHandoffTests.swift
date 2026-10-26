@@ -283,7 +283,9 @@ struct DayHandoffTests {
         let pages = try #require(object["pages"] as? [[String: Any]])
         #expect(Set(pages[0].keys) == ["page", "key"])
         #expect(
-            Set(pages[1].keys) == ["page", "key", "calendarID", "eventID", "title", "summaryRoutines"])
+            Set(pages[1].keys) == [
+                "page", "key", "calendarID", "eventID", "title", "summaryRoutines",
+            ])
         let tasks = try #require(object["tasks"] as? [[String: Any]])
         #expect(Set(tasks[0].keys) == ["text", "due"])
         #expect(text.hasPrefix(#"{"checksum":"#))
@@ -435,7 +437,8 @@ struct DayHandoffTests {
     @Test("The day initializer marks the pages of earlier parts")
     func earlierParts() throws {
         let binder = BinderDay(
-            content: try Self.content(meetings: ["Sync"], ids: ["c|e"], routines: [[Self.routine("s")]]),
+            content: try Self.content(
+                meetings: ["Sync"], ids: ["c|e"], routines: [[Self.routine("s")]]),
             theme: Theme(),
             extras: [ExtraPage(id: "x", after: .meeting("c|e"), source: .meeting("c|e"))])
         let handoff = DayHandoff(

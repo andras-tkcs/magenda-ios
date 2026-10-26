@@ -118,7 +118,9 @@ struct AgendaLayoutTests {
             date: try day(), todoItems: [], schedule: [], meetings: ["Team sync"],
             delegated: [],
             meetingSummaryRoutines: [
-                routines.enumerated().map { SummaryRoutine(id: "id-\($0.offset)", name: $0.element) }
+                routines.enumerated().map {
+                    SummaryRoutine(id: "id-\($0.offset)", name: $0.element)
+                }
             ])
     }
 
