@@ -91,13 +91,15 @@ public struct AgendaContent: Equatable, Codable, Sendable {
     public var meetingIDs: [String]
     /// The delegated-tasks rows.
     public var delegated: [DelegatedItem]
-    /// The summary skill of each meeting page, in the order of `meetings`; "" means none.
-    public var meetingSummarySkills: [String]
+    /// The summary routines of each meeting page, in the order of `meetings`, with the names they
+    /// had when the day was rendered; an empty array means none.
+    public var meetingSummaryRoutines: [[SummaryRoutine]]
 
     /// Creates agenda content.
     public init(
         date: CalendarDay, todoItems: [TodoItem], schedule: [ScheduleEntry], meetings: [String],
-        meetingIDs: [String] = [], delegated: [DelegatedItem], meetingSummarySkills: [String] = []
+        meetingIDs: [String] = [], delegated: [DelegatedItem],
+        meetingSummaryRoutines: [[SummaryRoutine]] = []
     ) {
         self.date = date
         self.todoItems = todoItems
@@ -105,14 +107,15 @@ public struct AgendaContent: Equatable, Codable, Sendable {
         self.meetings = meetings
         self.meetingIDs = meetingIDs
         self.delegated = delegated
-        self.meetingSummarySkills = meetingSummarySkills
+        self.meetingSummaryRoutines = meetingSummaryRoutines
     }
 
     private enum CodingKeys: String, CodingKey {
-        case date, todoItems, schedule, meetings, meetingIDs, delegated, meetingSummarySkills
+        case date, todoItems, schedule, meetings, meetingIDs, delegated, meetingSummaryRoutines
     }
 
-    /// Decodes content written by any build; a missing `meetingSummarySkills` is empty.
+    /// Decodes content written by any build; a missing `meetingSummaryRoutines`, as in a day stored
+    /// by a build that still named a skill per meeting, is empty.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         date = try container.decode(CalendarDay.self, forKey: .date)
@@ -121,8 +124,9 @@ public struct AgendaContent: Equatable, Codable, Sendable {
         meetings = try container.decode([String].self, forKey: .meetings)
         meetingIDs = try container.decode([String].self, forKey: .meetingIDs)
         delegated = try container.decode([DelegatedItem].self, forKey: .delegated)
-        meetingSummarySkills =
-            try container.decodeIfPresent([String].self, forKey: .meetingSummarySkills) ?? []
+        meetingSummaryRoutines =
+            try container.decodeIfPresent([[SummaryRoutine]].self, forKey: .meetingSummaryRoutines)
+            ?? []
     }
 }
 

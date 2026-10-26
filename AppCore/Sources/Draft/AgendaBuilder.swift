@@ -4,11 +4,14 @@ import Foundation
 public struct AgendaBuilder: Sendable {
     private let timeZone: TimeZone
     private let rules: BinderRules
+    private let summaryRoutines: [SummaryRoutine]
 
-    /// Creates a builder that reads local times in `timeZone` and applies `rules`.
-    public init(timeZone: TimeZone, rules: BinderRules) {
+    /// Creates a builder that reads local times in `timeZone`, applies `rules` and offers
+    /// `summaryRoutines` to the meetings.
+    public init(timeZone: TimeZone, rules: BinderRules, summaryRoutines: [SummaryRoutine] = []) {
         self.timeZone = timeZone
         self.rules = rules
+        self.summaryRoutines = summaryRoutines
     }
 
     /// The draft for `day` from its events, its personal tasks and its delegated tasks.
@@ -26,6 +29,6 @@ public struct AgendaBuilder: Sendable {
             tasks: TaskSelection.draftTasks(
                 for: day, tasks: tasks, events: draftEvents, rules: rules),
             delegated: TaskSelection.draftDelegated(for: day, tasks: delegated),
-            summarySkills: rules.summarySkills)
+            summaryRules: rules.summaryRoutines, summaryRoutines: summaryRoutines)
     }
 }

@@ -22,13 +22,17 @@ struct DayHandoffTests {
             pageWidth: 612, pageHeight: 792, pages: keys.map(page), omittedTodoItems: omitted)
     }
 
+    private static func routine(_ name: String) -> SummaryRoutine {
+        SummaryRoutine(id: "id-" + name, name: name)
+    }
+
     private static func content(
         todo: [TodoItem] = [], meetings: [String] = [], ids: [String] = [],
-        skills: [String] = [], delegated: [DelegatedItem] = []
+        routines: [[SummaryRoutine]] = [], delegated: [DelegatedItem] = []
     ) throws -> AgendaContent {
         AgendaContent(
             date: try day(), todoItems: todo, schedule: [], meetings: meetings, meetingIDs: ids,
-            delegated: delegated, meetingSummarySkills: skills)
+            delegated: delegated, meetingSummaryRoutines: routines)
     }
 
     private static func handoff(
@@ -58,7 +62,7 @@ struct DayHandoffTests {
     @Test("The builder describes meeting pages, added pages and the printed rows")
     func builder() throws {
         let retainedContent = try Self.content(
-            meetings: ["Old"], ids: ["cal|old"], skills: ["old-skill"])
+            meetings: ["Old"], ids: ["cal|old"], routines: [[Self.routine("old")]])
         var binder = BinderDay(
             content: try Self.content(
                 todo: [
@@ -68,7 +72,7 @@ struct DayHandoffTests {
                 ],
                 meetings: ["Sync", "Plain", "Lone", "Odd"],
                 ids: ["work@x.com|ev1|part", "bare", "cal|ev3"],
-                skills: ["notes-skill", ""],
+                routines: [[Self.routine("notes")], []],
                 delegated: [
                     DelegatedItem(
                         text: "Weekly", owner: "Sam", cadence: .weekly, marked: false,
@@ -94,12 +98,14 @@ struct DayHandoffTests {
                 HandoffPage(page: 1, key: "overview"),
                 HandoffPage(
                     page: 2, key: "meeting:work@x.com|ev1|part", calendarID: "work@x.com",
-                    eventID: "ev1|part", title: "Sync", summarySkill: "notes-skill"),
+                    eventID: "ev1|part", title: "Sync",
+                    summaryRoutines: [Self.routine("notes")]),
                 HandoffPage(page: 3, key: "meeting:bare", title: "Plain"),
                 HandoffPage(page: 4, key: "extra:x", source: "meeting:bare"),
                 HandoffPage(
                     page: 5, key: "meeting:cal|old", calendarID: "cal", eventID: "old",
-                    title: "Old", summarySkill: "old-skill"),
+                    title: "Old",
+                    summaryRoutines: [Self.routine("old")]),
                 HandoffPage(page: 6, key: "meeting:#\(3)", title: "Odd"),
                 HandoffPage(page: 7, key: "meeting:cal|gone", calendarID: "cal", eventID: "gone"),
                 HandoffPage(page: 8, key: "notes"),
@@ -115,6 +121,26 @@ struct DayHandoffTests {
                 HandoffDelegated(taskID: "d1", text: "Weekly", owner: "Sam"),
             ])
         #expect(handoff.stage == .queued)
+    }
+
+    @Test("A page entry's summary routines round-trip, and a meeting without them has nil")
+    func summaryRoutinesRoundTrip() throws {
+        let routines = [Self.routine("a"), Self.routine("b")]
+        let page = HandoffPage(
+            page: 2, key: "meeting:c|e", calendarID: "c", eventID: "e", title: "T",
+            summaryRoutines: routines)
+        let decoded = try JSONDecoder().decode(
+            HandoffPage.self, from: JSONEncoder().encode(page))
+        #expect(decoded == page)
+        #expect(decoded.summaryRoutines == routines)
+        let binder = BinderDay(
+            content: try Self.content(
+                meetings: ["Sync", "Plain"], ids: ["c|e", "c|f"], routines: [routines, []]),
+            theme: Theme())
+        let handoff = DayHandoff(
+            date: try Self.day(), checksum: Self.checksum, day: binder,
+            plan: Self.plan([.meeting("c|e"), .meeting("c|f")]))
+        #expect(handoff.pages.map(\.summaryRoutines) == [routines, nil])
     }
 
     @Test("A day without meetings has one blank meeting page without a title")
@@ -232,7 +258,7 @@ struct DayHandoffTests {
             HandoffPage(page: 1, key: "overview"),
             HandoffPage(
                 page: 2, key: "meeting:c|e", calendarID: "c", eventID: "e", title: "T",
-                summarySkill: "s"),
+                summaryRoutines: [Self.routine("s")]),
         ]
         handoff.tasks = [HandoffTask(taskID: nil, text: "Do", due: "10/27")]
         handoff.delegated = [HandoffDelegated(taskID: "d", text: "Ask", owner: "Sam")]
@@ -257,7 +283,9 @@ struct DayHandoffTests {
         let pages = try #require(object["pages"] as? [[String: Any]])
         #expect(Set(pages[0].keys) == ["page", "key"])
         #expect(
-            Set(pages[1].keys) == ["page", "key", "calendarID", "eventID", "title", "summarySkill"])
+            Set(pages[1].keys) == [
+                "page", "key", "calendarID", "eventID", "title", "summaryRoutines",
+            ])
         let tasks = try #require(object["tasks"] as? [[String: Any]])
         #expect(Set(tasks[0].keys) == ["text", "due"])
         #expect(text.hasPrefix(#"{"checksum":"#))
@@ -282,7 +310,8 @@ struct DayHandoffTests {
         handoff.pages = (1...400).map {
             HandoffPage(
                 page: $0, key: "meeting:c|e\($0)", calendarID: "c", eventID: "e\($0)",
-                title: String(repeating: "t", count: 200), summarySkill: "s", source: "notes")
+                title: String(repeating: "t", count: 200), summaryRoutines: [Self.routine("s")],
+                source: "notes")
         }
         text = handoff.payload(step: .notes)
         #expect(text.count <= 65_536)
@@ -331,7 +360,8 @@ struct DayHandoffTests {
             pages: [
                 HandoffPage(
                     page: 1, key: "meeting:c|e", calendarID: "c", eventID: "e",
-                    title: "Weekly sync", summarySkill: "s"),
+                    title: "Weekly sync",
+                    summaryRoutines: [Self.routine("s")]),
                 HandoffPage(page: 2, key: "extra:x", source: "meeting:c|e"),
             ],
             tasks: [HandoffTask(taskID: nil, text: "Do", due: "")],
@@ -390,8 +420,8 @@ struct DayHandoffTests {
         handoff.pages = (1...400).map {
             HandoffPage(
                 page: $0, key: "meeting:c|e\($0)", calendarID: "c", eventID: "e\($0)",
-                title: String(repeating: "t", count: 200), summarySkill: "s", source: "notes",
-                earlierPart: $0 % 2 == 0 ? 3 : nil)
+                title: String(repeating: "t", count: 200), summaryRoutines: [Self.routine("s")],
+                source: "notes", earlierPart: $0 % 2 == 0 ? 3 : nil)
         }
         let text = handoff.payload(step: .notes)
         #expect(text.count <= 65_536)
@@ -407,7 +437,8 @@ struct DayHandoffTests {
     @Test("The day initializer marks the pages of earlier parts")
     func earlierParts() throws {
         let binder = BinderDay(
-            content: try Self.content(meetings: ["Sync"], ids: ["c|e"], skills: ["s"]),
+            content: try Self.content(
+                meetings: ["Sync"], ids: ["c|e"], routines: [[Self.routine("s")]]),
             theme: Theme(),
             extras: [ExtraPage(id: "x", after: .meeting("c|e"), source: .meeting("c|e"))])
         let handoff = DayHandoff(
@@ -420,7 +451,7 @@ struct DayHandoffTests {
             handoff.pages[1]
                 == HandoffPage(
                     page: 2, key: "meeting:c|e", calendarID: "c", eventID: "e", title: "Sync",
-                    summarySkill: "s", earlierPart: 1))
+                    summaryRoutines: [Self.routine("s")], earlierPart: 1))
         #expect(handoff.pages[2].source == "meeting:c|e")
     }
 
@@ -429,7 +460,7 @@ struct DayHandoffTests {
         let binder = BinderDay(
             content: try Self.content(
                 todo: [TodoItem(text: "A", notes: "", due: "", taskID: "t1")],
-                meetings: ["Weekly sync"], ids: ["c|e"], skills: ["s"],
+                meetings: ["Weekly sync"], ids: ["c|e"], routines: [[Self.routine("s")]],
                 delegated: [
                     DelegatedItem(
                         text: "W", owner: "Sam", cadence: .weekly, marked: false, status: [])

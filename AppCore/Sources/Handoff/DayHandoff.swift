@@ -17,8 +17,8 @@ public struct HandoffPage: Equatable, Codable, Sendable {
     public let eventID: String?
     /// Meeting pages: the meeting-page title.
     public let title: String?
-    /// Meeting pages with a mapped skill: the skill.
-    public let summarySkill: String?
+    /// Meeting pages that ask for summaries: the summary routines; nil when none.
+    public let summaryRoutines: [SummaryRoutine]?
     /// Added pages: the `storageString` of the page they copy.
     public let source: String?
     /// Day runs: the part that already sent this page; the routine must not process it again.
@@ -27,7 +27,7 @@ public struct HandoffPage: Equatable, Codable, Sendable {
     /// Creates a page entry.
     public init(
         page: Int, key: String, calendarID: String? = nil, eventID: String? = nil,
-        title: String? = nil, summarySkill: String? = nil, source: String? = nil,
+        title: String? = nil, summaryRoutines: [SummaryRoutine]? = nil, source: String? = nil,
         earlierPart: Int? = nil
     ) {
         self.page = page
@@ -35,7 +35,7 @@ public struct HandoffPage: Equatable, Codable, Sendable {
         self.calendarID = calendarID
         self.eventID = eventID
         self.title = title
-        self.summarySkill = summarySkill
+        self.summaryRoutines = summaryRoutines
         self.source = source
         self.earlierPart = earlierPart
     }
@@ -52,7 +52,7 @@ public struct HandoffPage: Equatable, Codable, Sendable {
     fileprivate func sent(inPart number: Int) -> HandoffPage {
         HandoffPage(
             page: page, key: key, calendarID: calendarID, eventID: eventID, title: title,
-            summarySkill: summarySkill, source: source, earlierPart: number)
+            summaryRoutines: summaryRoutines, source: source, earlierPart: number)
     }
 }
 
@@ -356,7 +356,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
 
     /// What the routine receives for `step`: one JSON object with sorted keys. When it would be
     /// over 65,536 characters it leaves out `tasks` and `delegated` and sets `truncated`; when
-    /// that is still too long it also leaves out every page's `title`, `summarySkill` and `source`.
+    /// that is still too long it also leaves out every page's `title`, `summaryRoutines` and `source`.
     /// A meeting run has no `tasks` and no `delegated`.
     public func payload(step: RoutineStep) -> String {
         let full = Payload(self, step: step)
@@ -440,7 +440,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
             let found = meeting(id, for: page.key, in: day)
             return HandoffPage(
                 page: number, key: key, calendarID: parts?.0, eventID: parts?.1,
-                title: found?.title, summarySkill: found?.skill)
+                title: found?.title, summaryRoutines: found?.routines)
         case .extra:
             let source = day.extras.first { PageKey.extra($0.id) == page.key }?.source
             return HandoffPage(page: number, key: key, source: source?.storageString)
@@ -449,11 +449,11 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         }
     }
 
-    /// The title and summary skill of the meeting page `id`, from the content the page was laid
+    /// The title and summary routines of the meeting page `id`, from the content the page was laid
     /// out from: the day's, else the one retained with the page.
     private static func meeting(
         _ id: String, for key: PageKey, in day: BinderDay
-    ) -> (title: String, skill: String?)? {
+    ) -> (title: String, routines: [SummaryRoutine]?)? {
         let contents = [day.content] + day.retained.filter { $0.key == key }.map(\.content)
         for content in contents {
             guard
@@ -461,10 +461,10 @@ public struct DayHandoff: Equatable, Codable, Sendable {
                     $0 < content.meetingIDs.count ? content.meetingIDs[$0] == id : id == "#\($0)"
                 })
             else { continue }
-            let skill =
-                content.meetingSummarySkills.indices.contains(index)
-                ? content.meetingSummarySkills[index] : ""
-            return (content.meetings[index], skill.isEmpty ? nil : skill)
+            let routines =
+                content.meetingSummaryRoutines.indices.contains(index)
+                ? content.meetingSummaryRoutines[index] : []
+            return (content.meetings[index], routines.isEmpty ? nil : routines)
         }
         return nil
     }
