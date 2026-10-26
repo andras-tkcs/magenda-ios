@@ -7,6 +7,7 @@ struct AppServices {
     let handoff: HandoffController
     let pageDrawer: PageDrawer
     let allowsFingerDrawing: Bool
+    let contactPicker: any ContactPicking
 }
 
 /// Builds the app's services: live Google services, or fixtures when the launch arguments ask for
@@ -92,10 +93,11 @@ enum AppEnvironment {
                     state: endOfDay, credentials: summaryCredentials),
                 summaryCredentials: summaryCredentials, renderer: renderer,
                 hasher: CryptoKitHasher(),
-                today: { fixtureDay }, readFile: readFile, removeFile: removeFile)
+                today: { fixtureDay }, readFile: readFile, removeFile: removeFile,
+                folderName: { controller.settings.driveFolderName })
             return AppServices(
                 controller: controller, handoff: handoff, pageDrawer: drawer,
-                allowsFingerDrawing: allowsFingerDrawing)
+                allowsFingerDrawing: allowsFingerDrawing, contactPicker: FixtureContactPicker())
         }
 
         let session = GoogleSession(
@@ -129,10 +131,11 @@ enum AppEnvironment {
             summaryCredentials: summaryCredentials, renderer: renderer,
             hasher: CryptoKitHasher(),
             today: { CalendarDay.today(in: timeZone, now: Date()) },
-            readFile: readFile, removeFile: removeFile)
+            readFile: readFile, removeFile: removeFile,
+            folderName: { controller.settings.driveFolderName })
         return AppServices(
             controller: controller, handoff: handoff, pageDrawer: drawer,
-            allowsFingerDrawing: allowsFingerDrawing)
+            allowsFingerDrawing: allowsFingerDrawing, contactPicker: SystemContactPicker())
     }
 
     /// The binder store of a fixture launch: in memory, or with `-MagendaBinderStoreFile <name>`

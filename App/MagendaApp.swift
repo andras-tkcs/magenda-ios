@@ -24,6 +24,7 @@ struct MagendaApp: App {
                     .environment(services.handoff)
                     .environment(\.pageDrawer, services.pageDrawer)
                     .environment(\.allowsFingerDrawing, services.allowsFingerDrawing)
+                    .environment(\.contactPicker, services.contactPicker)
                     .task {
                         await services.controller.start()
                         services.handoff.start()

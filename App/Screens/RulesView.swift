@@ -41,12 +41,15 @@ struct RulesView: View {
         static let peopleName = "peopleName"
         static let peopleEmail = "peopleEmail"
         static let peopleAdd = "peopleAdd"
+        static let peopleFromContacts = "peopleFromContacts"
         static let summaryTitleField = "summaryTitleField"
         static let summaryAdd = "summaryAdd"
         static let summaryError = "summaryError"
         static let summaryNoRoutines = "summaryNoRoutines"
         static let lookAheadStepper = "lookAheadStepper"
         static let resetRulesButton = "resetRulesButton"
+        static let editButton = "rulesEditButton"
+        static let deleteAction = "rulesDeleteAction"
 
         static func row(_ section: String, _ n: Int) -> String { "rulesRow.\(section).\(n)" }
         static func summaryChoice(_ n: Int) -> String { "summaryChoice.\(n)" }
@@ -54,6 +57,7 @@ struct RulesView: View {
     }
 
     @Environment(AgendaController.self) private var controller
+    @Environment(\.contactPicker) private var contactPicker
 
     @State private var drafts: [ListSection: String] = [:]
     @State private var personName = ""
@@ -96,6 +100,11 @@ struct RulesView: View {
         }
         .navigationTitle("Binder rules")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                EditButton().accessibilityIdentifier(ID.editButton)
+            }
+        }
     }
 
     // MARK: String lists
@@ -105,15 +114,12 @@ struct RulesView: View {
             let items = rules[keyPath: section.keyPath]
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 Text(item)
+                    .contextMenu {
+                        deleteMenu { delete(IndexSet(integer: index), from: section) }
+                    }
                     .accessibilityIdentifier(ID.row(section.rawValue, index))
             }
-            .onDelete { offsets in
-                Task {
-                    await controller.updateSettings {
-                        $0.rules[keyPath: section.keyPath].remove(atOffsets: offsets)
-                    }
-                }
-            }
+            .onDelete { delete($0, from: section) }
             TextField("Add…", text: draft(section))
                 .submitLabel(.done)
                 .onSubmit { add(section) }
@@ -123,6 +129,20 @@ struct RulesView: View {
         } footer: {
             Text(section.footnote)
         }
+    }
+
+    private func delete(_ offsets: IndexSet, from section: ListSection) {
+        Task {
+            await controller.updateSettings {
+                $0.rules[keyPath: section.keyPath].remove(atOffsets: offsets)
+            }
+        }
+    }
+
+    /// A long-press menu with Delete, the same as swiping the row away.
+    private func deleteMenu(_ delete: @escaping () -> Void) -> some View {
+        Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+            .accessibilityIdentifier(ID.deleteAction)
     }
 
     private func draft(_ section: ListSection) -> Binding<String> {
@@ -166,20 +186,25 @@ struct RulesView: View {
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
+                .contextMenu {
+                    deleteMenu { deleteShortNames(IndexSet(integer: index), in: entries) }
+                }
                 .accessibilityIdentifier(ID.row("shortNames", index))
             }
-            .onDelete { offsets in
-                let keys = offsets.map { entries[$0].key }
-                Task {
-                    await controller.updateSettings { settings in
-                        for key in keys { settings.rules.shortNames[key] = nil }
-                    }
-                }
-            }
+            .onDelete { deleteShortNames($0, in: entries) }
         } header: {
             Text("Short meeting names")
         } footer: {
             Text("Set from a meeting's Edit sheet.")
+        }
+    }
+
+    private func deleteShortNames(_ offsets: IndexSet, in entries: [(key: String, name: String)]) {
+        let keys = offsets.map { entries[$0].key }
+        Task {
+            await controller.updateSettings { settings in
+                for key in keys { settings.rules.shortNames[key] = nil }
+            }
         }
     }
 
@@ -208,16 +233,12 @@ struct RulesView: View {
         return Section {
             ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                 Text("\(entry.title) → \(routineNames(entry.ids))")
+                    .contextMenu {
+                        deleteMenu { deleteSummaries(IndexSet(integer: index), in: entries) }
+                    }
                     .accessibilityIdentifier(ID.row("summaries", index))
             }
-            .onDelete { offsets in
-                let titles = offsets.map { entries[$0].title }
-                Task {
-                    await controller.updateSettings { settings in
-                        for title in titles { settings.rules.summaryRoutines[title] = nil }
-                    }
-                }
-            }
+            .onDelete { deleteSummaries($0, in: entries) }
             TextField("Meeting title", text: $summaryTitle)
                 .accessibilityIdentifier(ID.summaryTitleField)
             if routines.isEmpty {
@@ -255,6 +276,17 @@ struct RulesView: View {
             })
     }
 
+    private func deleteSummaries(
+        _ offsets: IndexSet, in entries: [(title: String, ids: [String])]
+    ) {
+        let titles = offsets.map { entries[$0].title }
+        Task {
+            await controller.updateSettings { settings in
+                for title in titles { settings.rules.summaryRoutines[title] = nil }
+            }
+        }
+    }
+
     private func addSummary() {
         let routines = controller.settings.summaryRoutines
         guard !routines.isEmpty else { return }
@@ -288,16 +320,12 @@ struct RulesView: View {
         return Section {
             ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                 Text("\(entry.key) → \(entry.email)")
+                    .contextMenu {
+                        deleteMenu { deletePeople(IndexSet(integer: index), in: entries) }
+                    }
                     .accessibilityIdentifier(ID.row("people", index))
             }
-            .onDelete { offsets in
-                let keys = offsets.map { entries[$0].key }
-                Task {
-                    await controller.updateSettings { settings in
-                        for key in keys { settings.rules.personAliases[key] = nil }
-                    }
-                }
-            }
+            .onDelete { deletePeople($0, in: entries) }
             TextField("Name in tasks", text: $personName)
                 .accessibilityIdentifier(ID.peopleName)
             TextField("Email", text: $personEmail)
@@ -305,24 +333,41 @@ struct RulesView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .accessibilityIdentifier(ID.peopleEmail)
+            if let contactPicker {
+                Button("Choose from Contacts…") {
+                    Task {
+                        guard let picked = await contactPicker.pickContact() else { return }
+                        personName = picked.suggestedName
+                        personEmail = picked.email
+                    }
+                }
+                .accessibilityIdentifier(ID.peopleFromContacts)
+            }
             Button("Add", action: addPerson)
                 .accessibilityIdentifier(ID.peopleAdd)
         } header: {
             Text("People")
         } footer: {
             Text(
-                "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs."
+                "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs. Choose from Contacts fills in a name and email you can still change."
             )
         }
     }
 
+    private func deletePeople(_ offsets: IndexSet, in entries: [(key: String, email: String)]) {
+        let keys = offsets.map { entries[$0].key }
+        Task {
+            await controller.updateSettings { settings in
+                for key in keys { settings.rules.personAliases[key] = nil }
+            }
+        }
+    }
+
     private func addPerson() {
-        let key = BinderText.fold(personName.trimmingCharacters(in: .whitespacesAndNewlines))
-        let email = personEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !key.isEmpty, !email.isEmpty else { return }
+        guard let alias = PersonAlias(name: personName, email: personEmail) else { return }
         personName = ""
         personEmail = ""
-        Task { await controller.updateSettings { $0.rules.personAliases[key] = email } }
+        Task { await controller.updateSettings { $0.rules.personAliases[alias.key] = alias.email } }
     }
 
     // MARK: Look-ahead
@@ -340,6 +385,7 @@ struct RulesView: View {
     if let controller = AppEnvironment.previewController() {
         NavigationStack { RulesView() }
             .environment(controller)
+            .environment(\.contactPicker, FixtureContactPicker())
             .task { await controller.start() }
     }
 }

@@ -140,3 +140,8 @@ until a later ADR supersedes it.
 | [0030](0030-a-closed-days-handwriting-is-deleted-five-days-later.md) | A closed day's handwriting is deleted from the device five days after Magenda first reads Closed | Accepted |
 | [0031](0031-meeting-summaries-are-requested-by-skill.md) | A meeting's summary is requested with a title-to-skill map in the rules, or by writing a skill on its page | Accepted |
 | [0032](0032-a-sent-days-hand-off-can-be-reset-after-asking.md) | A day's hand-off can be reset after asking, so a day can be finished and sent again | Accepted |
+| [0033](0033-a-meeting-can-be-sent-before-the-day-ends.md) | A meeting can be sent to the routine before the day ends, as its own PDF and Doc, and its pages are locked afterwards | Accepted |
+| [0034](0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md) | The routine payload moves to `magenda.end-of-day/2` and marks the pages of meetings sent earlier | Accepted |
+| [0035](0035-start-over-is-refused-while-a-meeting-is-sent.md) | Start Over is refused while a meeting of the day is sent, and Reset Hand-off unlocks the pages | Accepted |
+| [0036](0036-finished-days-upload-to-a-drive-folder-named-in-settings.md) | Finished days and meetings sent early upload to a Drive folder named in Settings, and each date stays in the folder its first upload used | Accepted |
+| [0037](0037-people-rules-are-filled-from-the-system-contact-picker.md) | People rules are filled from the system contact picker, which needs no Contacts permission | Accepted |

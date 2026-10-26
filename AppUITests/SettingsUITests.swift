@@ -159,6 +159,34 @@ final class SettingsUITests: XCTestCase {
         XCTAssertEqual(gone, .completed, "the error stayed after a valid hex")
     }
 
+    /// Naming the Drive folder: a name with a slash shows the error, a valid one clears it and the
+    /// footer names the new folder.
+    @MainActor
+    func testAFolderNameIsSavedAndAnInvalidOneShowsAnError() {
+        let app = launch()
+        openSettings(app)
+
+        let footer = element(app, "driveFolderFooter")
+        reveal(app, footer)
+        XCTAssertTrue(footer.label.contains("“Magenda”"), "the footer did not name the default")
+
+        let field = element(app, "driveFolderField")
+        enterHex(app, field, "a/b")
+        let error = element(app, "driveFolderError")
+        XCTAssertTrue(error.waitForExistence(timeout: 30), "no error for a name with a slash")
+
+        enterHex(app, field, "Work notes")
+        let saved = XCTWaiter().wait(
+            for: [
+                XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "exists == false"), object: error),
+                XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "label CONTAINS %@", "“Work notes”"),
+                    object: footer),
+            ], timeout: 30)
+        XCTAssertEqual(saved, .completed, "the folder name was not saved")
+    }
+
     @MainActor
     func testResetColorsRestoresTheDefaults() {
         let app = launch()

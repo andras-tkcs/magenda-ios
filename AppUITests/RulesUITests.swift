@@ -1,8 +1,8 @@
 // The binder-rules editor, driven through the accessibility tree against fixtures.
 //
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `RulesView.ID`,
-// `SettingsView.ID` and `RowID`, never by their visible text, except for the swipe action and the
-// navigation back button, which have none.
+// `SettingsView.ID` and `RowID`, never by their visible text, except for the swipe action, the
+// context-menu Delete and the navigation back button, which have none.
 
 import XCTest
 
@@ -191,6 +191,65 @@ final class RulesUITests: XCTestCase {
         waitUntil(reason, "NOT (label CONTAINS %@)", "Personal block")
     }
 
+    /// Guards the long-press Delete on a rules row, which lets a default be removed without
+    /// discovering the swipe. Each attempt presses, waits for the Delete button to be hittable and
+    /// taps it, and repeats (at most 3 times) while the row is still there, because a tap that
+    /// lands mid-animation is swallowed.
+    @MainActor
+    func testLongPressDeletesADefaultOutOfOfficeWord() {
+        let app = launch()
+        openRules(app)
+
+        let row = element(app, "rulesRow.outOfOfficeWords.3")
+        reveal(app, row)
+        XCTAssertEqual(row.label, "PTO")
+        let delete = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ OR label == %@", "rulesDeleteAction", "Delete")
+        ).firstMatch
+        var attempts = 0
+        while row.exists && attempts < 3 {
+            row.press(forDuration: 1.2)
+            attempts += 1
+            guard delete.waitForExistence(timeout: 10) else { continue }
+            // The menu animates in; a tap before it settles is swallowed on the oldest runtime.
+            let settled = XCTWaiter().wait(
+                for: [
+                    XCTNSPredicateExpectation(
+                        predicate: NSPredicate(format: "isHittable == true"), object: delete)
+                ], timeout: 10)
+            if settled == .completed {
+                delete.tap()
+            }
+            _ = XCTWaiter().wait(
+                for: [
+                    XCTNSPredicateExpectation(
+                        predicate: NSPredicate(format: "exists == false"), object: row)
+                ], timeout: 10)
+        }
+
+        let gone = XCTWaiter().wait(
+            for: [
+                XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "exists == false"), object: row)
+            ], timeout: 30)
+        XCTAssertEqual(gone, .completed, "PTO was never deleted")
+        XCTAssertEqual(element(app, "rulesRow.outOfOfficeWords.2").label, "Vacation")
+    }
+
+    /// Guards the Edit button on the rules screen, which shows the delete controls without a swipe.
+    @MainActor
+    func testEditTogglesTheRulesIntoEditing() {
+        let app = launch()
+        openRules(app)
+
+        let button = app.buttons["rulesEditButton"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30), "the Edit button never appeared")
+        button.tap()
+        waitUntil(button, "label == %@", "Done")
+        button.tap()
+        waitUntil(button, "label == %@", "Edit")
+    }
+
     @MainActor
     func testAddingAPersonShowsTheAlias() {
         let app = launch()
@@ -208,6 +267,29 @@ final class RulesUITests: XCTestCase {
             _ = row.waitForExistence(timeout: 10)
         }
         XCTAssertTrue(row.exists, "the person never appeared after \(taps) taps")
+    }
+
+    @MainActor
+    func testChoosingAContactFillsThePerson() {
+        let app = launch()
+        openRules(app)
+
+        let choose = app.buttons["peopleFromContacts"].firstMatch
+        reveal(app, choose)
+        choose.tap()
+        waitUntil(element(app, "peopleName"), "value == %@", "Nora")
+        waitUntil(element(app, "peopleEmail"), "value == %@", "nora.kim@example.com")
+
+        let add = app.buttons["peopleAdd"].firstMatch
+        reveal(app, add)
+        var taps = 0
+        let row = element(app, "rulesRow.people.0")
+        while !row.exists && taps < 5 {
+            add.tap()
+            taps += 1
+            _ = row.waitForExistence(timeout: 10)
+        }
+        waitUntil(row, "label == %@", "nora → nora.kim@example.com")
     }
 
     @MainActor

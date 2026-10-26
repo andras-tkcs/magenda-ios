@@ -57,11 +57,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Reset Hand-off, in the binder of a finished day, forgets that the day was sent after asking, so
   Finish Day works again. The PDF and Doc already in Drive stay, and the next finish creates a new
   Doc.
+- Send Meeting, on a meeting page in the binder, sends that meeting before the day ends with its
+  own PDF and Google Doc and its own row in Review, and locks its pages. Finish Day skips it in
+  the notes.
 - The Review list, from the agenda's toolbar, shows each finished day's state, opens its Doc with
   Open Doc, and has the Try again, Approve notes or Approve button the state calls for.
 - Summary skills: map a meeting title to a skill under Settings → Binder rules → Meeting
   summaries. Every meeting page prints a Summary line, with the skill on it, or ruled so you can
   write one.
+- Settings → Binder rules has an Edit button, and a long press on a rule offers Delete, for the
+  built-in entries such as PTO as well as the ones you added.
+- Settings → Binder rules → People can fill in a name and email from your contacts with Choose from
+  Contacts….
+- Settings → Google Drive shows and lets you rename the folder finished days are uploaded to. Days
+  already uploaded stay in their folder.
 
 ### Changed
 
@@ -72,6 +81,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Magenda now asks for access to the files it creates in Google Drive, so sign in again after
   updating. Enable the Google Drive API and add the `drive.file` scope in your Google Cloud
   project.
+- The end-of-day routine must be updated to payload schema `magenda.end-of-day/2`
+  (docs/end-of-day-handoff.md); until it is, it stops on every payload.
 
 ## [0.1.1] — 2026-10-15
 
