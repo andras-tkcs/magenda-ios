@@ -256,6 +256,29 @@ final class RulesUITests: XCTestCase {
     }
 
     @MainActor
+    func testChoosingAContactFillsThePerson() {
+        let app = launch()
+        openRules(app)
+
+        let choose = app.buttons["peopleFromContacts"].firstMatch
+        reveal(app, choose)
+        choose.tap()
+        waitUntil(element(app, "peopleName"), "value == %@", "Nora")
+        waitUntil(element(app, "peopleEmail"), "value == %@", "nora.kim@example.com")
+
+        let add = app.buttons["peopleAdd"].firstMatch
+        reveal(app, add)
+        var taps = 0
+        let row = element(app, "rulesRow.people.0")
+        while !row.exists && taps < 5 {
+            add.tap()
+            taps += 1
+            _ = row.waitForExistence(timeout: 10)
+        }
+        waitUntil(row, "label == %@", "nora → nora.kim@example.com")
+    }
+
+    @MainActor
     private func addSummary(_ app: XCUIApplication, title: String, skill: String) {
         enter(app, element(app, "summaryTitleField"), title)
         enter(app, element(app, "summarySkillField"), skill)

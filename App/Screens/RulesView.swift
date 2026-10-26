@@ -41,6 +41,7 @@ struct RulesView: View {
         static let peopleName = "peopleName"
         static let peopleEmail = "peopleEmail"
         static let peopleAdd = "peopleAdd"
+        static let peopleFromContacts = "peopleFromContacts"
         static let summaryTitleField = "summaryTitleField"
         static let summarySkillField = "summarySkillField"
         static let summaryAdd = "summaryAdd"
@@ -55,6 +56,7 @@ struct RulesView: View {
     }
 
     @Environment(AgendaController.self) private var controller
+    @Environment(\.contactPicker) private var contactPicker
 
     @State private var drafts: [ListSection: String] = [:]
     @State private var personName = ""
@@ -306,13 +308,23 @@ struct RulesView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .accessibilityIdentifier(ID.peopleEmail)
+            if let contactPicker {
+                Button("Choose from Contacts…") {
+                    Task {
+                        guard let picked = await contactPicker.pickContact() else { return }
+                        personName = picked.suggestedName
+                        personEmail = picked.email
+                    }
+                }
+                .accessibilityIdentifier(ID.peopleFromContacts)
+            }
             Button("Add", action: addPerson)
                 .accessibilityIdentifier(ID.peopleAdd)
         } header: {
             Text("People")
         } footer: {
             Text(
-                "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs."
+                "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs. Choose from Contacts fills in a name and email you can still change."
             )
         }
     }
@@ -327,12 +339,10 @@ struct RulesView: View {
     }
 
     private func addPerson() {
-        let key = BinderText.fold(personName.trimmingCharacters(in: .whitespacesAndNewlines))
-        let email = personEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !key.isEmpty, !email.isEmpty else { return }
+        guard let alias = PersonAlias(name: personName, email: personEmail) else { return }
         personName = ""
         personEmail = ""
-        Task { await controller.updateSettings { $0.rules.personAliases[key] = email } }
+        Task { await controller.updateSettings { $0.rules.personAliases[alias.key] = alias.email } }
     }
 
     // MARK: Look-ahead
@@ -350,6 +360,7 @@ struct RulesView: View {
     if let controller = AppEnvironment.previewController() {
         NavigationStack { RulesView() }
             .environment(controller)
+            .environment(\.contactPicker, FixtureContactPicker())
             .task { await controller.start() }
     }
 }
