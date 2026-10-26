@@ -1,0 +1,152 @@
+<title>Fast Tests Checklist</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: one reading column; each manual item is a numbered block of tickable steps. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1c2230;
+  --muted: #5b6475;
+  --line: #dde1e8;
+  --accent: #2f5fd0;
+  --accent-soft: #e6edfb;
+  --done: #2e7d4f;
+  --warn: #9a5b00;
+  --warn-soft: #fbf1e1;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151c; --surface: #1a1f29; --fg: #e5e8ef; --muted: #9aa3b5; --line: #2c3341;
+    --accent: #7fa2f0; --accent-soft: #1f2a42; --done: #6cc292; --warn: #e3a64a; --warn-soft: #2e2416;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151c; --surface: #1a1f29; --fg: #e5e8ef; --muted: #9aa3b5; --line: #2c3341;
+  --accent: #7fa2f0; --accent-soft: #1f2a42; --done: #6cc292; --warn: #e3a64a; --warn-soft: #2e2416;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 720px; margin: 0 auto; display: grid; gap: 28px; }
+h1 { font-family: var(--font-display); font-size: 30px; line-height: 1.15; margin: 0; text-wrap: balance; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 8px 0 0; font-weight: 600; }
+h3 { font-size: 18px; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 62ch; }
+.progress { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.item-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; justify-content: space-between; }
+.id { font-family: var(--font-mono); font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 4px; }
+.time { font-size: 13px; color: var(--muted); }
+.why { color: var(--muted); font-size: 14px; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: step; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: 22px 1.6em 1fr; gap: 8px; align-items: start; min-width: 0; }
+ol.steps li::before { content: counter(step) "."; grid-column: 2; grid-row: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+ol.steps input { grid-column: 1; grid-row: 1; margin-top: 4px; width: 16px; height: 16px; accent-color: var(--done); }
+ol.steps .body { grid-column: 3; min-width: 0; }
+ol.steps li.checked .body { color: var(--muted); }
+.see { display: block; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+code, pre { font-family: var(--font-mono); font-size: 13px; }
+code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin: 6px 0 0; overflow-x: auto; }
+a { color: var(--accent); }
+a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.done-when, .report { border-left: 3px solid var(--done); padding: 8px 12px; background: var(--accent-soft); border-radius: 0 6px 6px 0; font-size: 14px; }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 14px; }
+</style>
+
+<main>
+  <header style="display:grid;gap:10px">
+    <h1>Fast tests: your steps</h1>
+    <p class="lede">The plan makes Magenda iPad-only and cuts a pull request's test run to 20 minutes. Most of it runs on its own; these three items need you. Tick each step as you go. The ticks are remembered in this browser only.</p>
+    <p class="progress" id="progress">0 of 0 steps done</p>
+  </header>
+
+  <h2>Before implementation</h2>
+
+  <section class="item" data-item="mb1">
+    <div class="item-head">
+      <h3>1. Check that Magenda has no App Store release</h3>
+      <span class="id">mb1-no-app-store-release</span>
+    </div>
+    <p class="time">About 2 minutes</p>
+    <p class="why">The plan removes iPhone support. Apple refuses an update that drops iPhone once a version supporting iPhone has been on the App Store. TestFlight builds do not count.</p>
+    <ol class="steps">
+      <li><input type="checkbox" id="mb1-s1" aria-label="Step 1 done"><span class="body">Open <a href="https://appstoreconnect.apple.com/apps" target="_blank" rel="noopener">App Store Connect → Apps</a> and sign in with the Apple Developer account.<span class="see">You should see the list of your apps, including Magenda.</span></span></li>
+      <li><input type="checkbox" id="mb1-s2" aria-label="Step 2 done"><span class="body">Click <strong>Magenda</strong>. Under <strong>App Store</strong> in the left column, look at the iOS versions listed.<span class="see">Only TestFlight builds (version 0.1.1 and later) are expected here, with no version shown as "Ready for Distribution" or "Removed from Sale".</span></span></li>
+      <li><input type="checkbox" id="mb1-s3" aria-label="Step 3 done"><span class="body">If a version was ever released on the App Store, stop. Do not run <code>/implement</code>. Tell the planning session instead, because the iPad-only part of the plan has to change.</span></li>
+    </ol>
+    <p class="done-when"><strong>Done when:</strong> the App Store tab for Magenda shows no version with status "Ready for Distribution" or "Removed from Sale", only TestFlight builds. Then run <code>/implement</code>.</p>
+  </section>
+
+  <h2>After implementation</h2>
+
+  <section class="item" data-item="ma1">
+    <div class="item-head">
+      <h3>2. Apply the new required checks</h3>
+      <span class="id">ma1-apply-required-checks</span>
+    </div>
+    <p class="time">About 5 minutes, just before you merge the pull request</p>
+    <p class="why">The pull request replaces the 19 required checks with 7. Until branch protection matches, GitHub waits for <code>app (…)</code> checks that no longer run, and the pull request cannot merge.</p>
+    <p class="note">Merge pull requests #16 and #17 first. Once the new list is applied, any open pull request still running the old workflow is blocked.</p>
+    <ol class="steps">
+      <li><input type="checkbox" id="ma1-s1" aria-label="Step 1 done"><span class="body">Open the <code>feature/fast-tests</code> pull request and check that its latest <strong>Tests</strong> run is green. It should have the jobs <code>core</code>, <code>lint</code>, <code>scripts</code> and <code>ui (ipad, newest, 1)</code> to <code>ui (ipad, newest, 4)</code>.</span></li>
+      <li><input type="checkbox" id="ma1-s2" aria-label="Step 2 done"><span class="body">On a computer where the GitHub CLI is signed in as a repository admin, check out the branch:<pre>git fetch origin feature/fast-tests
+git checkout feature/fast-tests
+gh auth status</pre><span class="see"><code>gh auth status</code> should show you as logged in to github.com.</span></span></li>
+      <li><input type="checkbox" id="ma1-s3" aria-label="Step 3 done"><span class="body">Compare the live rules with the new list (<a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/fast-tests/scripts/update_branch_protection.py" target="_blank" rel="noopener">what the script does</a>):<pre>python3 scripts/update_branch_protection.py show</pre><span class="see">It should list the old <code>app (…)</code> and iPhone <code>ui (…)</code> checks as live, and the seven new checks as wanted.</span></span></li>
+      <li><input type="checkbox" id="ma1-s4" aria-label="Step 4 done"><span class="body">Apply the new list:<pre>python3 scripts/update_branch_protection.py apply</pre></span></li>
+      <li><input type="checkbox" id="ma1-s5" aria-label="Step 5 done"><span class="body">Reload the pull request. Under its checks, only the seven new ones should be marked <strong>Required</strong>. You can also see them in <a href="https://github.com/andras-tkcs/magenda-ios/settings/branches" target="_blank" rel="noopener">Settings → Branches</a>.</span></li>
+    </ol>
+    <p class="report"><strong>Report back:</strong> tick this item in the pull request, or paste <code>ma1: applied, 7 required checks</code> as a comment.</p>
+  </section>
+
+  <section class="item" data-item="ma2">
+    <div class="item-head">
+      <h3>3. Check the iPad build on a real iPad at the next release</h3>
+      <span class="id">ma2-ipad-testflight-smoke</span>
+    </div>
+    <p class="time">About 5 minutes, after the next release tag is uploaded</p>
+    <p class="why">CI cannot check that an iPad-only build installs from TestFlight and opens the binder on real hardware. This is owed at the next release, not before the merge.</p>
+    <ol class="steps">
+      <li><input type="checkbox" id="ma2-s1" aria-label="Step 1 done"><span class="body">After the next release, open <a href="https://apps.apple.com/app/testflight/id899247664" target="_blank" rel="noopener">TestFlight</a> on a real iPad and install the new Magenda build.</span></li>
+      <li><input type="checkbox" id="ma2-s2" aria-label="Step 2 done"><span class="body">Open Magenda, sign in, tap <strong>Render</strong>, and write a line on the first binder page with Apple Pencil.<span class="see">The binder opens with its page indicator, and your ink stays after you swipe to the next page and back.</span></span></li>
+      <li><input type="checkbox" id="ma2-s3" aria-label="Step 3 done"><span class="body">Follow the rest of the iPad section of the <a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/fast-tests/docs/release-testing.md" target="_blank" rel="noopener">release testing checklist</a> as usual.</span></li>
+    </ol>
+    <p class="report"><strong>Report back:</strong> add <code>iPad-only build: installs and renders the binder — pass/fail</code> to the release's testing notes.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('ol.steps input[type="checkbox"]'));
+  var progress = document.getElementById('progress');
+  function key(id) { return 'fast-tests-steps:' + id; }
+  function update() {
+    var done = 0;
+    boxes.forEach(function (b) {
+      b.closest('li').classList.toggle('checked', b.checked);
+      if (b.checked) done++;
+    });
+    progress.textContent = done + ' of ' + boxes.length + ' steps done';
+  }
+  boxes.forEach(function (b) {
+    try { b.checked = localStorage.getItem(key(b.id)) === '1'; } catch (e) {}
+    b.addEventListener('change', function () {
+      try { localStorage.setItem(key(b.id), b.checked ? '1' : '0'); } catch (e) {}
+      update();
+    });
+  });
+  update();
+})();
+</script>
