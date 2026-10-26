@@ -14,6 +14,9 @@ struct SettingsView: View {
         static let clientIDLabel = "clientIDLabel"
         static let changeClientButton = "changeClientButton"
         static let forgetClientButton = "forgetClientButton"
+        static let driveFolderField = "driveFolderField"
+        static let driveFolderError = "driveFolderError"
+        static let driveFolderFooter = "driveFolderFooter"
         static let routineURLField = "routineURLField"
         static let routineTokenField = "routineTokenField"
         static let saveRoutineButton = "saveRoutineButton"
@@ -66,6 +69,8 @@ struct SettingsView: View {
     @State private var invalidRoles: Set<ColorRole> = []
     @State private var showsClientSheet = false
     @State private var confirmsForget = false
+    @State private var folderDraft = ""
+    @State private var folderInvalid = false
     @State private var routineURL = ""
     @State private var routineToken = ""
     @State private var routineSaveFailed = false
@@ -83,6 +88,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier(ID.rulesLink)
                 }
                 clientSection
+                driveSection
                 routineSection
                 accountSection
                 aboutSection
@@ -95,7 +101,10 @@ struct SettingsView: View {
                         .accessibilityIdentifier(ID.settingsDone)
                 }
             }
-            .onAppear(perform: resetHexDrafts)
+            .onAppear {
+                resetHexDrafts()
+                folderDraft = controller.settings.driveFolderName
+            }
             .sheet(isPresented: $showsClientSheet) {
                 SetupView(isSheet: true)
             }
@@ -316,6 +325,40 @@ struct SettingsView: View {
         }
     }
 
+    private var driveSection: some View {
+        Section {
+            TextField("Folder name", text: $folderDraft)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .onSubmit(commitFolder)
+                .onChange(of: folderDraft) { folderInvalid = false }
+                .accessibilityIdentifier(ID.driveFolderField)
+            if folderInvalid {
+                Text(DriveFolderName.invalidMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier(ID.driveFolderError)
+            }
+        } header: {
+            Text("Google Drive")
+        } footer: {
+            Text(
+                "Finished days upload to the “\(controller.settings.driveFolderName)” folder in your Google Drive, which Magenda creates. A new name makes a new folder; days already uploaded stay where they are."
+            )
+            .accessibilityIdentifier(ID.driveFolderFooter)
+        }
+    }
+
+    private func commitFolder() {
+        guard let name = DriveFolderName.validated(folderDraft) else {
+            folderInvalid = true
+            return
+        }
+        folderInvalid = false
+        folderDraft = name
+        Task { await controller.updateSettings { $0.driveFolderName = name } }
+    }
+
     @ViewBuilder
     private var routineSection: some View {
         if let triggerID = handoff.routineTriggerID {
@@ -350,7 +393,7 @@ struct SettingsView: View {
                 Text("End-of-day routine")
             } footer: {
                 Text(
-                    "Finished days upload to Google Drive. To send them to Claude, add the API trigger of your end-of-day routine from claude.ai/code/routines."
+                    "Finished days upload to Google Drive (see above). To send them to Claude, add the API trigger of your end-of-day routine from claude.ai/code/routines."
                 )
             }
         }

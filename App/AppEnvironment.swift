@@ -66,7 +66,8 @@ enum AppEnvironment {
                 drive: FixtureDrive(state: endOfDay),
                 trigger: FixtureRoutineTrigger(state: endOfDay, credentials: routine),
                 routineCredentials: routine, renderer: renderer, hasher: CryptoKitHasher(),
-                today: { fixtureDay }, readFile: readFile, removeFile: removeFile)
+                today: { fixtureDay }, readFile: readFile, removeFile: removeFile,
+                folderName: { controller.settings.driveFolderName })
             return AppServices(
                 controller: controller, handoff: handoff, pageDrawer: drawer,
                 allowsFingerDrawing: allowsFingerDrawing, contactPicker: FixtureContactPicker())
@@ -98,7 +99,8 @@ enum AppEnvironment {
             trigger: RoutineTriggerClient(http: URLSessionHTTPClient(), credentials: routine),
             routineCredentials: routine, renderer: renderer, hasher: CryptoKitHasher(),
             today: { CalendarDay.today(in: timeZone, now: Date()) },
-            readFile: readFile, removeFile: removeFile)
+            readFile: readFile, removeFile: removeFile,
+            folderName: { controller.settings.driveFolderName })
         return AppServices(
             controller: controller, handoff: handoff, pageDrawer: drawer,
             allowsFingerDrawing: allowsFingerDrawing, contactPicker: SystemContactPicker())
