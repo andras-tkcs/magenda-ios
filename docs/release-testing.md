@@ -61,8 +61,9 @@ supports it):
 - [ ] With a real Google account and a real routine, on an iPad: sign in again if asked, enter the
       routine's fire URL and token in Settings, write on a day, tap Finish Day, and the PDF and the
       notes Doc appear in the Drive folder `Magenda`. In Review, wait for "Notes ready for review",
-      open the Doc, tap Approve notes (and Approve if a summary is asked for), and the row ends as
-      "Closed. Handwriting is deleted on …" (ADR 0027 to ADR 0030).
+      open the Doc, tap Approve notes, then Approve summaries when a summary routine was ticked for a
+      meeting (check that the Doc holds a `Summary ready:` marker section first), and the row ends
+      as "Closed. Handwriting is deleted on …" (ADR 0027 to ADR 0030, ADR 0038 to ADR 0040).
 - [ ] With a real routine updated to schema 2, on an iPad: tap Send Meeting on a meeting page and
       confirm. The page shows "Sent to Claude" and can't be written on, Start Over is disabled, and
       Review has a row for the meeting that reaches "Closed". Then tap Finish Day, and the day's notes

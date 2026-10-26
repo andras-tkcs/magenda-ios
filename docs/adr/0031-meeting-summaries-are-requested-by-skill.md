@@ -3,6 +3,7 @@
 ## Status
 
 Accepted — 2026-10-24. Implemented.
+Amended by [ADR 0038](0038-summaries-are-written-by-dedicated-summary-routines-that-magenda-starts.md): summaries are requested from summary routines, not skills; the task IDs in decision 5 stay.
 
 ## Context
 

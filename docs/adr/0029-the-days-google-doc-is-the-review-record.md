@@ -4,6 +4,7 @@
 
 Accepted — 2026-10-24. Implemented.
 Amended by [ADR 0033](0033-a-meeting-can-be-sent-before-the-day-ends.md): a Doc per day and per sent meeting.
+Amended by [ADR 0039](0039-a-summary-announces-itself-in-the-doc-with-a-marker-line.md): summaries are announced by markers.
 
 ## Context
 
