@@ -43,9 +43,9 @@ and on dispatch. A 100% pass rate is required to merge.
 | `lint` (Ubuntu) | `swift format lint --strict` |
 | `scripts` (Ubuntu) | `python3 -m unittest discover -s scripts/tests`, including the no-project-history guard |
 | `app (iphone, newest)`, `app (iphone, oldest)`, `app (ipad, newest)` (macOS) | `xcodegen generate`, then the hosted app tests on a simulator `scripts/simulator.py` picks |
-| `ui (<family>, <runtime>, <shard>)` (macOS), ten jobs | The same build, then one shard of the UI tests on the same three simulators: `edit-screen`, `settings`, and `rest` (every UI test class not in another shard, so a new class runs there), plus a `binder` shard on the iPad only, because the binder, Start over and hand-off UI tests are iPad-only |
+| `ui (<family>, <runtime>, <shard>)` (macOS), thirteen jobs | The same build, then one shard of the UI tests on the same three simulators: `edit-screen`, `settings`, `rules`, and `rest` (every UI test class not in another shard, so a new class runs there), plus a `binder` shard on the iPad only, because the binder, Start over and hand-off UI tests are iPad-only |
 
-The UI tests run as parallel shards per device (four on the iPad, three on each iPhone), so a
+The UI tests run as parallel shards per device (five on the iPad, four on each iPhone), so a
 failed shard is re-run on its own ("Re-run failed jobs") instead of repeating every UI test. Each
 shard boots its simulator before the build and waits for the boot to finish before the first test: a device's first boot keeps the
 runner busy for minutes, and a UI test launched during it times out before its body runs.
