@@ -89,17 +89,17 @@ a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline
       <h3>1. Apply the new required checks</h3>
       <span class="id">ma1-apply-required-checks</span>
     </div>
-    <p class="time">About 5 minutes, just before you merge the pull request</p>
-    <p class="why">The pull request replaces the 18 required checks with 7. Until branch protection matches, GitHub waits for <code>app (…)</code> checks that no longer run, and the pull request cannot merge.</p>
-    <p class="note">Merge pull requests #16 and #17 first. Once the new list is applied, any open pull request still running the old workflow is blocked.</p>
+    <p class="time">About 10 minutes, at the end, just before you merge #16 into <code>main</code></p>
+    <p class="why">The speed-up replaces the 18 required checks with 7. Once it has reached #16, GitHub waits for <code>app (…)</code> checks that no longer run, and #16 cannot merge until branch protection matches.</p>
+    <p class="note">The speed-up lands through the stack, not straight into <code>main</code>: when <code>/implement</code> opens its pull request, change its base to <code>feature/summary-routines</code> and merge it there, then merge #17 into <code>feature/settings-improvements</code>. #16 then carries everything to <code>main</code>. Apply the new list only after that, because it blocks any open pull request still on the old workflow.</p>
     <ol class="steps">
-      <li><input type="checkbox" id="ma1-s1" aria-label="Step 1 done"><span class="body">Open the <code>feature/fast-tests</code> pull request and check that its latest <strong>Tests</strong> run is green. It should have the jobs <code>core</code>, <code>lint</code>, <code>scripts</code> and <code>ui (ipad, newest, 1)</code> to <code>ui (ipad, newest, 4)</code>.</span></li>
-      <li><input type="checkbox" id="ma1-s2" aria-label="Step 2 done"><span class="body">On a computer where the GitHub CLI is signed in as a repository admin, check out the branch:<pre>git fetch origin feature/fast-tests
-git checkout feature/fast-tests
+      <li><input type="checkbox" id="ma1-s1" aria-label="Step 1 done"><span class="body">Open pull request #16 and check that its latest <strong>Tests</strong> run, after the speed-up and #17 are merged into it, is green. It should have the jobs <code>core</code>, <code>lint</code>, <code>scripts</code> and <code>ui (ipad, newest, 1)</code> to <code>ui (ipad, newest, 4)</code>.</span></li>
+      <li><input type="checkbox" id="ma1-s2" aria-label="Step 2 done"><span class="body">On a computer where the GitHub CLI is signed in as a repository admin, check out the branch:<pre>git fetch origin feature/settings-improvements
+git checkout feature/settings-improvements
 gh auth status</pre><span class="see"><code>gh auth status</code> should show you as logged in to github.com.</span></span></li>
       <li><input type="checkbox" id="ma1-s3" aria-label="Step 3 done"><span class="body">Compare the live rules with the new list (<a href="https://github.com/andras-tkcs/magenda-ios/blob/plan/fast-tests/scripts/update_branch_protection.py" target="_blank" rel="noopener">what the script does</a>):<pre>python3 scripts/update_branch_protection.py show</pre><span class="see">It should list the old <code>app (…)</code> and iPhone <code>ui (…)</code> checks as live, and the seven new checks as wanted.</span></span></li>
       <li><input type="checkbox" id="ma1-s4" aria-label="Step 4 done"><span class="body">Apply the new list:<pre>python3 scripts/update_branch_protection.py apply</pre></span></li>
-      <li><input type="checkbox" id="ma1-s5" aria-label="Step 5 done"><span class="body">Reload the pull request. Under its checks, only the seven new ones should be marked <strong>Required</strong>. You can also see them in <a href="https://github.com/andras-tkcs/magenda-ios/settings/branches" target="_blank" rel="noopener">Settings → Branches</a>.</span></li>
+      <li><input type="checkbox" id="ma1-s5" aria-label="Step 5 done"><span class="body">Reload #16. Under its checks, only the seven new ones should be marked <strong>Required</strong>. You can also see them in <a href="https://github.com/andras-tkcs/magenda-ios/settings/branches" target="_blank" rel="noopener">Settings → Branches</a>.</span></li>
     </ol>
     <p class="report"><strong>Report back:</strong> tick this item in the pull request, or paste <code>ma1: applied, 7 required checks</code> as a comment.</p>
   </section>
