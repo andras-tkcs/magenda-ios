@@ -401,7 +401,15 @@ final class SettingsUITests: XCTestCase {
 
         let forget = app.buttons["forgetSummaryRoutineButton.2"].firstMatch
         reveal(app, forget)
-        forget.tap()
+        let confirm = app.buttons["Forget summary routine"].firstMatch
+        var taps = 0
+        while !confirm.exists && taps < 5 {
+            forget.tap()
+            taps += 1
+            _ = confirm.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(confirm.exists, "no confirmation appeared after \(taps) taps")
+        confirm.tap()
         let gone = XCTWaiter().wait(
             for: [
                 XCTNSPredicateExpectation(

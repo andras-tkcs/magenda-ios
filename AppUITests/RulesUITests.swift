@@ -298,7 +298,13 @@ final class RulesUITests: XCTestCase {
         if tickFirst {
             let choice = element(app, "summaryChoice.0")
             reveal(app, choice)
-            choice.tap()
+            let toggle = choice.switches.firstMatch.exists ? choice.switches.firstMatch : choice
+            var taps = 0
+            while (toggle.value as? String) != "1" && taps < 5 {
+                toggle.tap()
+                taps += 1
+            }
+            XCTAssertEqual(toggle.value as? String, "1", "the summary choice did not turn on")
         }
         let add = app.buttons["summaryAdd"].firstMatch
         reveal(app, add)
@@ -314,6 +320,20 @@ final class RulesUITests: XCTestCase {
         let row = element(app, "rulesRow.summaries.0")
         XCTAssertTrue(row.waitForExistence(timeout: 30), "the summary never appeared")
         XCTAssertTrue(row.label.contains("Client memo"), "the row named no routine: \(row.label)")
+    }
+
+    @MainActor
+    func testADuplicateSummaryTitleShowsAnError() {
+        let app = launch()
+        openRules(app)
+
+        addSummary(app, title: "Board meeting", tickFirst: true)
+        XCTAssertTrue(
+            element(app, "rulesRow.summaries.0").waitForExistence(timeout: 30),
+            "the first summary never appeared")
+        addSummary(app, title: "Board meeting", tickFirst: true)
+        let error = element(app, "summaryError")
+        XCTAssertTrue(error.waitForExistence(timeout: 30), "summaryError never appeared")
     }
 
     @MainActor
