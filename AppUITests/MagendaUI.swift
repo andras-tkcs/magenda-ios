@@ -56,8 +56,9 @@ extension XCUIElement {
         in container: XCUIElement, top: CGFloat? = nil, bottom: CGFloat? = nil,
         file: StaticString = #filePath, line: UInt = #line
     ) {
-        let topLimit = top ?? container.frame.minY + 60
-        let bottomLimit = bottom ?? container.frame.maxY - 20
+        let containerFrame = container.frame
+        let topLimit = top ?? containerFrame.minY + 60
+        let bottomLimit = bottom ?? containerFrame.maxY - 20
         var lastMid: CGFloat?
         var stalled = 0
         for attempt in 0..<24 {

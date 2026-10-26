@@ -92,6 +92,18 @@ final class SettingsUITests: XCTestCase {
         XCTAssertEqual(result, .completed, "the field never showed \(expected): \(shown)")
     }
 
+    /// Waits until a text field is empty again. An empty field reports its placeholder, or nothing,
+    /// as its value, depending on the runtime, so both count as cleared.
+    @MainActor
+    private func waitForClearedField(_ field: XCUIElement, placeholder: String) {
+        let predicate = NSPredicate(
+            format: "value == nil OR value == %@ OR value == %@", "", placeholder)
+        let result = XCTWaiter().wait(
+            for: [XCTNSPredicateExpectation(predicate: predicate, object: field)], timeout: 30)
+        let shown = field.value as? String ?? ""
+        XCTAssertEqual(result, .completed, "the field never cleared: \(shown)")
+    }
+
     /// Replaces the text of a color field and presses return. The keys go to whatever has focus
     /// rather than to the field, which an iPad's form sheet may briefly drop from the accessibility
     /// tree while it makes room for the keyboard.
@@ -392,7 +404,7 @@ final class SettingsUITests: XCTestCase {
         // The saved form clears its fields: wait for that, then look for a duplicate.
         let name = app.element("summaryRoutineNameField")
         name.reveal(in: settingsForm(app))
-        waitForValue(name, "Name")
+        waitForClearedField(name, placeholder: "Name")
         XCTAssertTrue(
             app.element("summaryRoutineRow.1").exists, "the fixture's second routine is gone")
         XCTAssertFalse(app.element("summaryRoutineRow.2").exists, "the routine was duplicated")
