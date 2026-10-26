@@ -1,5 +1,6 @@
 // AppCore's `DocStatus`: reading the Doc's first line, and the line a new Doc starts with.
 
+import Foundation
 import Testing
 
 @testable import AppCore
@@ -43,5 +44,76 @@ struct DocStatusTests {
         #expect(RoutineStep.notes.rawValue == "notes")
         #expect(RoutineStep.approveNotes.rawValue == "approve-notes")
         #expect(RoutineStep.approveSummary.rawValue == "approve-summary")
+    }
+
+    @Test("The close step uses the name the routine knows")
+    func closeStepName() {
+        #expect(RoutineStep.close.rawValue == "close")
+    }
+
+    @Test("An unknown raw status decodes to unknown, a known one to itself")
+    func decodesUnknownRaw() throws {
+        func decode(_ raw: String) throws -> DocStatus {
+            try JSONDecoder().decode(DocStatus.self, from: Data(#""\#(raw)""#.utf8))
+        }
+        #expect(try decode("somethingNew") == .unknown)
+        #expect(try decode("summaryReady") == .summaryReady)
+        #expect(try decode("closed") == .closed)
+        let encoded = try JSONEncoder().encode(DocStatus.notesReady)
+        #expect(String(decoding: encoded, as: UTF8.self) == #""notesReady""#)
+    }
+
+    private static let idA = "11111111-1111-4111-8111-111111111111"
+    private static let idB = "22222222-2222-4222-8222-222222222222"
+    private static let status = "Status: Notes ready for review\n"
+
+    @Test(
+        "Summary markers follow the grammar",
+        arguments: [
+            ("Status: Closed\nSummary ready: \(idA) 2", ["\(idA) 2"]),
+            ("Status: Closed\nsummary READY: \(idA.uppercased()) 12", ["\(idA) 12"]),
+            ("Status: Closed\n\t Summary ready: \(idA) 3 \t\n", ["\(idA) 3"]),
+            ("Status: Closed\r\nSummary ready: \(idA) 3\r\n", ["\(idA) 3"]),
+            ("Status: Closed\nSummary ready:  \(idA) 2", []),
+            ("Status: Closed\nSummary ready: \(idA)  2", []),
+            ("Status: Closed\nSummary ready:\(idA) 2", []),
+            ("Status: Closed\nSummary ready: \(idA)\t2", []),
+            ("Status: Closed\nSummary ready: \(idA) 0", []),
+            ("Status: Closed\nSummary ready: \(idA) 01", []),
+            ("Status: Closed\nSummary ready: \(idA) 10000", []),
+            ("Status: Closed\nSummary ready: \(idA) 9999", ["\(idA) 9999"]),
+            ("Status: Closed\nSummary ready: \(idA) 1000", ["\(idA) 1000"]),
+            ("Status: Closed\nSummary ready: \(idA) ", []),
+            ("Status: Closed\nSummary ready: \(idA)", []),
+            ("Status: Closed\nSummary ready: \(idA) 1x", []),
+            ("Status: Closed\nSummary ready: \(idA) -1", []),
+            ("Status: Closed\nSummary ready: \(idA) 1 2", []),
+            ("Status: Closed\nSummary ready: not-an-id 2", []),
+            ("Status: Closed\nSummary ready: 11111111-1111-4111-8111-11111111111g 2", []),
+            ("Status: Closed\nSummary ready: \(idA)x 2", []),
+            ("Status: Closed\nSummary ready \(idA) 2", []),
+            ("Status: Closed\nSummary ready: \(idA) 2 done", []),
+            ("Status: Closed\n- Summary ready: \(idA) 2", []),
+            ("Status: Closed\nSummary ready: \(idA) 2\nSummary ready: \(idA) 2", ["\(idA) 2"]),
+            (
+                "Status: Closed\nSummary ready: \(idB) 4\nText\nSummary ready: \(idA) 2\n"
+                    + "Summary ready: \(idA) 4\nSummary ready: \(idB) 4",
+                ["\(idB) 4", "\(idA) 2", "\(idA) 4"]
+            ),
+            ("\u{FEFF}Status: Closed\nSummary ready: \(idA) 2", ["\(idA) 2"]),
+            ("\n \n\u{FEFF}Summary ready: \(idA) 1\nSummary ready: \(idB) 1", ["\(idB) 1"]),
+            ("Summary ready: \(idA) 2", []),
+            ("", []),
+            ("\n \n", []),
+        ])
+    func markers(text: String, expected: [String]) {
+        #expect(DocStatus.summaryMarkers(in: text) == expected)
+    }
+
+    @Test("A marker does not change the status read from the first line")
+    func markerBelowStatus() {
+        let text = Self.status + "Summary ready: \(Self.idA) 2\nFixture summary.\n"
+        #expect(DocStatus.parse(text) == .notesReady)
+        #expect(DocStatus.summaryMarkers(in: text) == ["\(Self.idA) 2"])
     }
 }

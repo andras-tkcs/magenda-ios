@@ -618,4 +618,130 @@ struct DayHandoffTests {
         #expect(decoded.id == HandoffID(date: try Self.day(), part: nil))
         #expect(decoded.pages == [HandoffPage(page: 1, key: "overview")])
     }
+
+    private static func summaryHandoff(part: HandoffPart? = nil) throws -> DayHandoff {
+        let memo = routine("memo")
+        let log = routine("log")
+        var handoff = DayHandoff(
+            date: try day(), checksum: checksum,
+            pages: [
+                HandoffPage(page: 1, key: "overview"),
+                HandoffPage(
+                    page: 2, key: "meeting:c|e1", calendarID: "c", eventID: "e1",
+                    title: "Weekly sync", summaryRoutines: [memo, log]),
+                HandoffPage(page: 3, key: "extra:x", source: "meeting:c|e1"),
+                HandoffPage(
+                    page: 4, key: "meeting:c|e2", calendarID: "c", eventID: "e2",
+                    title: "Review", summaryRoutines: [log], earlierPart: 1),
+                HandoffPage(
+                    page: 5, key: "meeting:c|e3", calendarID: "c", eventID: "e3",
+                    title: "Planning", summaryRoutines: [log, memo]),
+                HandoffPage(page: 6, key: "extra:y", source: "meeting:c|e1"),
+            ],
+            tasks: [HandoffTask(taskID: nil, text: "Do", due: "")], delegated: [], part: part)
+        handoff.driveFileID = "file"
+        handoff.docID = "doc"
+        handoff.folderID = "folder"
+        return handoff
+    }
+
+    @Test("The summary routine IDs are distinct, in page order, and skip earlierPart pages")
+    func summaryRoutineIDs() throws {
+        var handoff = try Self.summaryHandoff()
+        #expect(handoff.summaryRoutineIDs == ["id-memo", "id-log"])
+        handoff.pages = handoff.pages.filter { $0.earlierPart != nil || $0.summaryRoutines == nil }
+        #expect(handoff.summaryRoutineIDs.isEmpty)
+        #expect(handoff.unsentSummaryRoutines.isEmpty)
+        #expect(handoff.summariesWritten)
+    }
+
+    @Test("The unsent summary routines are those not fired yet, in order")
+    func unsentSummaryRoutines() throws {
+        var handoff = try Self.summaryHandoff()
+        #expect(handoff.unsentSummaryRoutines == [Self.routine("memo"), Self.routine("log")])
+        handoff.firedSummaries = ["id-memo"]
+        #expect(handoff.unsentSummaryRoutines == [Self.routine("log")])
+        handoff.firedSummaries = ["id-log", "id-memo", "id-gone"]
+        #expect(handoff.unsentSummaryRoutines.isEmpty)
+    }
+
+    @Test("Summaries are written once every page's every routine has its marker")
+    func summariesWritten() throws {
+        var handoff = try Self.summaryHandoff()
+        #expect(!handoff.summariesWritten)
+        handoff.summaryMarkers = ["id-memo 2", "id-log 2", "id-log 5"]
+        #expect(!handoff.summariesWritten)
+        handoff.summaryMarkers.append("id-memo 5")
+        #expect(handoff.summariesWritten)
+        handoff.summaryMarkers = ["id-memo 5", "id-log 5", "id-memo 2", "id-log 2", "id-log 4"]
+        #expect(handoff.summariesWritten)
+        handoff.summaryMarkers = ["id-memo 2", "id-log 2", "id-memo 5", "id-log 3"]
+        #expect(!handoff.summariesWritten)
+    }
+
+    @Test("A record without the summary keys decodes with them empty, and they round-trip")
+    func summaryFieldsCodable() throws {
+        var handoff = try Self.summaryHandoff()
+        let plain = try JSONEncoder().encode(handoff)
+        var object = try #require(JSONSerialization.jsonObject(with: plain) as? [String: Any])
+        object["firedSummaries"] = nil
+        object["summaryMarkers"] = nil
+        let legacy = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(DayHandoff.self, from: legacy)
+        #expect(decoded.firedSummaries.isEmpty && decoded.summaryMarkers.isEmpty)
+
+        handoff.firedSummaries = ["id-memo"]
+        handoff.summaryMarkers = ["id-memo 2"]
+        let data = try JSONEncoder().encode(handoff)
+        let back = try JSONDecoder().decode(DayHandoff.self, from: data)
+        #expect(back == handoff)
+        #expect(back.firedSummaries == ["id-memo"] && back.summaryMarkers == ["id-memo 2"])
+    }
+
+    @Test("The summary payload of a meeting record names part, extra pages and its own meetings")
+    func summaryPayloadMeeting() throws {
+        let handoff = try Self.summaryHandoff(
+            part: HandoffPart(number: 2, meetingKey: "meeting:c|e1", title: "Weekly sync"))
+        let expected =
+            #"{"checksum":"\#(Self.checksum)","date":"2026-10-26","docID":"doc","#
+            + #""driveFileID":"file","folderID":"folder","meetings":[{"calendarID":"c","#
+            + #""eventID":"e1","extraPages":[3,6],"#
+            + #""key":"meeting:c|e1","page":2,"title":"Weekly sync"},{"calendarID":"c","#
+            + #""eventID":"e3","key":"meeting:c|e3","page":5,"title":"Planning"}],"pageCount":6,"#
+            + #""part":2,"routineID":"id-memo","routineName":"memo","schema":"magenda.summary\/1","#
+            + #""scope":"meeting"}"#
+        #expect(handoff.summaryPayload(for: Self.routine("memo")) == expected)
+    }
+
+    @Test("The summary payload of a day record has scope day and leaves out what is nil")
+    func summaryPayloadDay() throws {
+        var handoff = try Self.summaryHandoff()
+        handoff.driveFileID = nil
+        handoff.docID = nil
+        handoff.folderID = nil
+        handoff.pages = [
+            HandoffPage(page: 1, key: "meeting:#0", summaryRoutines: [Self.routine("log")])
+        ]
+        let expected =
+            #"{"checksum":"\#(Self.checksum)","date":"2026-10-26","meetings":[{"key":"meeting:#0","#
+            + #""page":1}],"pageCount":1,"routineID":"id-log","routineName":"log","#
+            + #""schema":"magenda.summary\/1","scope":"day"}"#
+        #expect(handoff.summaryPayload(for: Self.routine("log")) == expected)
+        #expect(handoff.summaryPayload(for: Self.routine("other")).contains(#""meetings":[]"#))
+    }
+
+    @Test("A summary payload cuts a title to 200 characters")
+    func summaryPayloadTitle() throws {
+        var handoff = try Self.summaryHandoff()
+        handoff.pages = [
+            HandoffPage(
+                page: 1, key: "meeting:c|e", calendarID: "c", eventID: "e",
+                title: String(repeating: "é", count: 300), summaryRoutines: [Self.routine("memo")])
+        ]
+        let text = handoff.summaryPayload(for: Self.routine("memo"))
+        let object = try #require(
+            JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        let meetings = try #require(object["meetings"] as? [[String: Any]])
+        #expect(meetings[0]["title"] as? String == String(repeating: "é", count: 200))
+    }
 }
