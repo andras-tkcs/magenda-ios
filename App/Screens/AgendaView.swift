@@ -240,7 +240,7 @@ struct AgendaView: View {
                 Button("Start Over", systemImage: "arrow.counterclockwise") {
                     confirmsStartOver = true
                 }
-                .disabled(!canRender)
+                .disabled(!canRender || !controller.canStartOver)
                 .accessibilityLabel("Start this day over")
                 .accessibilityIdentifier(ID.startOverButton)
             }

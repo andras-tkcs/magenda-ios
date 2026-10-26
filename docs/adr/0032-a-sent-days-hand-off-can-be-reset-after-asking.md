@@ -5,6 +5,7 @@
 Accepted — 2026-10-25. Implemented.
 Amends [ADR 0028](0028-the-end-of-day-routine-is-started-through-its-api-trigger.md): a sent day can be sent again.
 Amends [ADR 0030](0030-a-closed-days-handwriting-is-deleted-five-days-later.md): the record that keeps Finish Day disabled can be deleted.
+Amended by [ADR 0035](0035-start-over-is-refused-while-a-meeting-is-sent.md): a reset also forgets the date's sent meetings and unlocks their pages.
 
 ## Context
 

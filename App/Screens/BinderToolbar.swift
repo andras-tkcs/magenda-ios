@@ -2,7 +2,7 @@ import AppCore
 import SwiftUI
 
 /// The binder's controls in one scrolling row: go to a page, pick a pen or the eraser, undo and
-/// redo, and add or delete a page.
+/// redo, add or delete a page, and send the meeting on screen.
 struct BinderToolbar: View {
     @Binding var tool: BinderTool
     /// Whether the plan has a delegated-tasks page to go to.
@@ -15,8 +15,11 @@ struct BinderToolbar: View {
     let undo: () -> Void
     let redo: () -> Void
     let addPage: () -> Void
+    let canAddPage: Bool
     let canDeletePage: Bool
     let deletePage: () -> Void
+    let canSendMeeting: Bool
+    let sendMeeting: () -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -50,13 +53,19 @@ struct BinderToolbar: View {
                     "arrow.uturn.forward", "Redo", BinderView.ID.redoButton, isEnabled: canRedo
                 ) { redo() }
                 Divider().frame(height: 24)
-                button("doc.badge.plus", "Add page after this one", BinderView.ID.addPageButton) {
-                    addPage()
-                }
+                button(
+                    "doc.badge.plus", "Add page after this one", BinderView.ID.addPageButton,
+                    isEnabled: canAddPage
+                ) { addPage() }
                 button(
                     "trash", "Delete this page", BinderView.ID.deletePageButton,
                     isEnabled: canDeletePage
                 ) { deletePage() }
+                Divider().frame(height: 24)
+                button(
+                    "paperplane", "Send this meeting to Claude now",
+                    BinderView.ID.sendMeetingButton, isEnabled: canSendMeeting
+                ) { sendMeeting() }
             }
             .padding(.horizontal)
             .padding(.vertical, 6)

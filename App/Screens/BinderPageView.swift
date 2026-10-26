@@ -12,6 +12,8 @@ struct BinderPageView: UIViewRepresentable {
     /// The page's handwriting as PencilKit data, or nil when it has none.
     let ink: Data?
     let allowsFingerDrawing: Bool
+    /// Whether the page was sent to Claude and can no longer be written on.
+    let isLocked: Bool
     /// What a touch on the canvas does.
     let tool: BinderTool
     /// The page a tap at a point of this page jumps to, if the point is on a link.
@@ -45,6 +47,7 @@ struct BinderPageView: UIViewRepresentable {
         view.background.page = page
         view.background.drawer = drawer
         view.canvas.drawingPolicy = allowsFingerDrawing ? .anyInput : .pencilOnly
+        view.canvas.drawingGestureRecognizer.isEnabled = !isLocked
         context.coordinator.apply(tool, to: view.canvas)
         context.coordinator.apply(ink, to: view.canvas)
     }
