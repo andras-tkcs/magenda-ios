@@ -65,6 +65,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Summary skills: map a meeting title to a skill under Settings → Binder rules → Meeting
   summaries. Every meeting page prints a Summary line, with the skill on it, or ruled so you can
   write one.
+- Settings → Binder rules has an Edit button, and a long press on a rule offers Delete, for the
+  built-in entries such as PTO as well as the ones you added.
+- Settings → Binder rules → People can fill in a name and email from your contacts with Choose from
+  Contacts….
+- Settings → Google Drive shows and lets you rename the folder finished days are uploaded to. Days
+  already uploaded stay in their folder.
 
 ### Changed
 

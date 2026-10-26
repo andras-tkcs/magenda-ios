@@ -17,6 +17,8 @@ A check stays manual only when automation cannot reliably decide pass or fail:
 - real Google sign-in and real account data, which CI has no account for (ADR 0013): sign in with
   your own client, render a day and share it (on iPad, from the binder), and finish a day to Drive
   and the end-of-day routine (ADR 0027, ADR 0028);
+- the system contact picker behind Choose from Contacts, which runs out of process and is replaced
+  by a fixture in the UI tests (ADR 0037);
 - handwriting with a real Apple Pencil on an iPad (pressure, palm rejection), which the simulator
   does not have;
 - the comparison of the app's agenda with a binder built by the old Claude workflow while that
