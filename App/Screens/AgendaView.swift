@@ -27,14 +27,20 @@ struct AgendaView: View {
         static func notice(_ n: Int) -> String { "notice.\(n)" }
     }
 
+    /// What the settings sheet opens on.
+    private enum SettingsSheet: Identifiable {
+        case settings, rules
+
+        var id: Self { self }
+    }
+
     let appInfo: AppInfo
 
     @Environment(AgendaController.self) private var controller
 
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var preferredColumn = NavigationSplitViewColumn.sidebar
-    @State private var showsSettings = false
-    @State private var settingsOpensRules = false
+    @State private var settingsSheet: SettingsSheet?
     @Environment(\.launchRequest) private var launchRequest
     @State private var showsReview = false
     @State private var editing: EditTarget?
@@ -72,11 +78,12 @@ struct AgendaView: View {
         .navigationSplitViewStyle(.balanced)
         .task {
             guard let screen = launchRequest?.take() else { return }
-            settingsOpensRules = screen == .rules
-            showsSettings = true
+            settingsSheet = screen == .rules ? .rules : .settings
         }
-        .sheet(isPresented: $showsSettings, onDismiss: { settingsOpensRules = false }) {
-            SettingsView(appInfo: appInfo, opensRules: settingsOpensRules)
+        // The sheet is an item, not a flag beside a second state, so its content gets the screen
+        // to open on as an argument instead of reading state the body never read.
+        .sheet(item: $settingsSheet) { sheet in
+            SettingsView(appInfo: appInfo, opensRules: sheet == .rules)
         }
         .sheet(isPresented: $showsReview) {
             ReviewView()
@@ -263,7 +270,7 @@ struct AgendaView: View {
         }
         ToolbarItem(placement: .topBarLeading) {
             Button {
-                showsSettings = true
+                settingsSheet = .settings
             } label: {
                 Image(systemName: "gearshape")
             }
