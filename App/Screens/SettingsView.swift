@@ -1,5 +1,6 @@
 import AppCore
 import SwiftUI
+import UIKit
 
 /// The settings sheet: which calendars and task lists feed the agenda, how the PDF looks, the
 /// Google client and account, and the app's version.
@@ -400,6 +401,11 @@ struct SettingsView: View {
     }
 
     private func saveRoutine() {
+        // A saved routine swaps these fields for its status row. The keyboard goes first, so the
+        // focused field is never removed from under it and the form does not shrink while the
+        // keyboard's inset is still changing.
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         if handoff.saveRoutine(fireURL: routineURL, token: routineToken) {
             routineURL = ""
             routineToken = ""
