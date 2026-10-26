@@ -115,7 +115,7 @@ public struct AgendaContent: Equatable, Codable, Sendable {
     }
 
     /// Decodes content written by any build; a missing `meetingSummaryRoutines`, as in a day stored
-    /// with the old `meetingSummarySkills`, is empty.
+    /// by a build that still named a skill per meeting, is empty.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         date = try container.decode(CalendarDay.self, forKey: .date)
