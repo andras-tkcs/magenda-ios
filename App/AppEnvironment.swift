@@ -8,6 +8,8 @@ struct AppServices {
     let pageDrawer: PageDrawer
     let allowsFingerDrawing: Bool
     let contactPicker: any ContactPicking
+    let animates: Bool
+    let launchRequest: LaunchRequest
 }
 
 /// Builds the app's services: live Google services, or fixtures when the launch arguments ask for
@@ -59,6 +61,7 @@ enum AppEnvironment {
         let allowsFingerDrawing = arguments.contains("-MagendaFingerDrawing")
 
         if let fixture = GoogleFixture(launchArguments: arguments) {
+            let launch = LaunchOptions(launchArguments: arguments)
             let credentials: GoogleClientCredentials? =
                 arguments.contains("-MagendaNeedsSetup")
                 ? nil
@@ -97,7 +100,8 @@ enum AppEnvironment {
                 folderName: { controller.settings.driveFolderName })
             return AppServices(
                 controller: controller, handoff: handoff, pageDrawer: drawer,
-                allowsFingerDrawing: allowsFingerDrawing, contactPicker: FixtureContactPicker())
+                allowsFingerDrawing: allowsFingerDrawing, contactPicker: FixtureContactPicker(),
+                animates: launch.animates, launchRequest: LaunchRequest(launch))
         }
 
         let session = GoogleSession(
@@ -135,7 +139,8 @@ enum AppEnvironment {
             folderName: { controller.settings.driveFolderName })
         return AppServices(
             controller: controller, handoff: handoff, pageDrawer: drawer,
-            allowsFingerDrawing: allowsFingerDrawing, contactPicker: SystemContactPicker())
+            allowsFingerDrawing: allowsFingerDrawing, contactPicker: SystemContactPicker(),
+            animates: true, launchRequest: LaunchRequest(.standard))
     }
 
     /// The binder store of a fixture launch: in memory, or with `-MagendaBinderStoreFile <name>`

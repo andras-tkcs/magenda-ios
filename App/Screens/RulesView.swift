@@ -47,6 +47,7 @@ struct RulesView: View {
         static let summaryError = "summaryError"
         static let summaryNoRoutines = "summaryNoRoutines"
         static let lookAheadStepper = "lookAheadStepper"
+        static let form = "rulesForm"
         static let resetRulesButton = "resetRulesButton"
         static let editButton = "rulesEditButton"
         static let deleteAction = "rulesDeleteAction"
@@ -98,6 +99,7 @@ struct RulesView: View {
                 .accessibilityIdentifier(ID.resetRulesButton)
             }
         }
+        .accessibilityIdentifier(ID.form)
         .navigationTitle("Binder rules")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

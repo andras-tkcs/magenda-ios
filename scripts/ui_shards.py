@@ -29,6 +29,7 @@ CLASS_SECONDS: dict[str, int] = {
     "MagendaUITests/AgendaScreenUITests": 120,
     "MagendaUITests/BinderUITests": 390,
     "MagendaUITests/HandoffUITests": 300,
+    "MagendaUITests/LaunchOptionsUITests": 60,
     "MagendaUITests/LongTextUITests": 80,
     "MagendaUITests/PreviewUITests": 160,
     "MagendaUITests/RulesUITests": 1980,

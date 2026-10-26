@@ -32,6 +32,7 @@ struct SettingsView: View {
         static let signOutButton = "signOutButton"
         static let version = "version"
         static let settingsDone = "settingsDone"
+        static let form = "settingsForm"
 
         static func summaryRoutineRow(_ n: Int) -> String { "summaryRoutineRow.\(n)" }
         static func forgetSummaryRoutineButton(_ n: Int) -> String {
@@ -69,6 +70,11 @@ struct SettingsView: View {
         }
     }
 
+    /// A screen pushed inside the settings sheet.
+    enum Route: Hashable {
+        case rules
+    }
+
     let appInfo: AppInfo
 
     @Environment(AgendaController.self) private var controller
@@ -89,17 +95,22 @@ struct SettingsView: View {
     @State private var summaryRoutineURL = ""
     @State private var summaryRoutineToken = ""
     @State private var summaryRoutineError: String?
+    @State private var path: [Route]
+
+    /// Settings, optionally opened with the binder rules already pushed.
+    init(appInfo: AppInfo, opensRules: Bool = false) {
+        self.appInfo = appInfo
+        _path = State(initialValue: opensRules ? [.rules] : [])
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Form {
                 calendarsSection
                 taskListsSection
                 lookSection
                 Section {
-                    NavigationLink("Binder rules") {
-                        RulesView()
-                    }
+                    NavigationLink("Binder rules", value: Route.rules)
                     .accessibilityIdentifier(ID.rulesLink)
                 }
                 clientSection
@@ -109,6 +120,8 @@ struct SettingsView: View {
                 accountSection
                 aboutSection
             }
+            .accessibilityIdentifier(ID.form)
+            .navigationDestination(for: Route.self) { _ in RulesView() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

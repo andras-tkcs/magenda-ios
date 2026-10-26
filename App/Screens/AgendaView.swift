@@ -34,6 +34,8 @@ struct AgendaView: View {
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var preferredColumn = NavigationSplitViewColumn.sidebar
     @State private var showsSettings = false
+    @State private var settingsOpensRules = false
+    @Environment(\.launchRequest) private var launchRequest
     @State private var showsReview = false
     @State private var editing: EditTarget?
     @State private var confirmsStartOver = false
@@ -68,8 +70,13 @@ struct AgendaView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
-        .sheet(isPresented: $showsSettings) {
-            SettingsView(appInfo: appInfo)
+        .task {
+            guard let screen = launchRequest?.take() else { return }
+            settingsOpensRules = screen == .rules
+            showsSettings = true
+        }
+        .sheet(isPresented: $showsSettings, onDismiss: { settingsOpensRules = false }) {
+            SettingsView(appInfo: appInfo, opensRules: settingsOpensRules)
         }
         .sheet(isPresented: $showsReview) {
             ReviewView()
