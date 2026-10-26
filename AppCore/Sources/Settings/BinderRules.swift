@@ -14,8 +14,6 @@ public struct BinderRules: Equatable, Codable, Sendable {
     public var personAliases: [String: String]
     /// How many days ahead tasks are looked at; the builder clamps it to 0…14.
     public var lookAheadDays: Int
-    /// A summary skill name per meeting title as entered, see ``SummarySkill``.
-    public var summarySkills: [String: String]
     /// The summary routine IDs per meeting title as entered, see ``SummaryRoutines``.
     public var summaryRoutines: [String: [String]]
 
@@ -23,7 +21,7 @@ public struct BinderRules: Equatable, Codable, Sendable {
     public init(
         personalBlocks: [String], titlePrefixes: [String], outOfOfficeWords: [String],
         shortNames: [String: String], personAliases: [String: String], lookAheadDays: Int,
-        summarySkills: [String: String] = [:], summaryRoutines: [String: [String]] = [:]
+        summaryRoutines: [String: [String]] = [:]
     ) {
         self.personalBlocks = personalBlocks
         self.titlePrefixes = titlePrefixes
@@ -31,7 +29,6 @@ public struct BinderRules: Equatable, Codable, Sendable {
         self.shortNames = shortNames
         self.personAliases = personAliases
         self.lookAheadDays = lookAheadDays
-        self.summarySkills = summarySkills
         self.summaryRoutines = summaryRoutines
     }
 
@@ -45,11 +42,11 @@ public struct BinderRules: Equatable, Codable, Sendable {
         shortNames: [:],
         personAliases: [:],
         lookAheadDays: 5,
-        summarySkills: [:], summaryRoutines: [:])
+        summaryRoutines: [:])
 
     private enum CodingKeys: String, CodingKey {
         case personalBlocks, titlePrefixes, outOfOfficeWords, shortNames, personAliases
-        case lookAheadDays, summarySkills, summaryRoutines
+        case lookAheadDays, summaryRoutines
     }
 
     /// Decodes rules written by any build; a missing field keeps its default.
@@ -66,7 +63,6 @@ public struct BinderRules: Equatable, Codable, Sendable {
             shortNames: try value(.shortNames, defaults.shortNames),
             personAliases: try value(.personAliases, defaults.personAliases),
             lookAheadDays: try value(.lookAheadDays, defaults.lookAheadDays),
-            summarySkills: try value(.summarySkills, defaults.summarySkills),
             summaryRoutines: try value(.summaryRoutines, defaults.summaryRoutines))
     }
 }

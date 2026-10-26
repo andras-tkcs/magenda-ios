@@ -101,11 +101,13 @@ struct AgendaSettingsTests {
         #expect(InMemorySettingsStore(changed).load() == changed)
     }
 
-    @Test("Rules without summary skills decode with none")
-    func rulesWithoutSummarySkills() throws {
-        #expect(try decode(#"{"rules":{"lookAheadDays":3}}"#).rules.summarySkills == [:])
-        let settings = try decode(#"{"rules":{"summarySkills":{"Sync":"s"}}}"#)
-        #expect(settings.rules.summarySkills == ["Sync": "s"])
+    @Test("An old summarySkills key is ignored and summaryRoutines decodes")
+    func oldSummarySkillsIgnored() throws {
+        let old = try decode(#"{"rules":{"summarySkills":{"Sync":"s"}}}"#)
+        #expect(old.rules.summaryRoutines == [:])
+        let settings = try decode(
+            #"{"rules":{"summarySkills":{"Sync":"s"},"summaryRoutines":{"Sync":["a"]}}}"#)
+        #expect(settings.rules.summaryRoutines == ["Sync": ["a"]])
     }
 
     @Test("A fresh install has no summary routines and no routine rules")
