@@ -66,6 +66,39 @@ final class HandoffUITests: XCTestCase {
         return XCTWaiter().wait(for: [matches], timeout: 30) == .completed
     }
 
+    /// Drags the list up until `row` can be tapped, at most 40 times.
+    @MainActor
+    private func scrollToHittable(_ row: XCUIElement, in list: XCUIElement) {
+        let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+        let end = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        var attempts = 0
+        while !(row.exists && row.isHittable) && attempts < 40 {
+            start.press(forDuration: 0.05, thenDragTo: end)
+            attempts += 1
+        }
+    }
+
+    /// Opens the edit sheet for `row`. A synthesized tap in the split view's sidebar is sometimes
+    /// dropped, so the row is tapped again while the sheet has not appeared.
+    @MainActor
+    private func openEditor(_ app: XCUIApplication, row identifier: String) {
+        let list = element(app, "agendaScreen")
+        XCTAssertTrue(list.waitForExistence(timeout: 30), "the list never appeared")
+        let row = app.buttons[identifier]
+        XCTAssertTrue(
+            app.buttons["eventRow.0"].waitForExistence(timeout: 30), "the first row never appeared")
+        scrollToHittable(row, in: list)
+        XCTAssertTrue(row.exists && row.isHittable, "\(identifier) was never scrolled into view")
+        let field = element(app, "editField")
+        var taps = 0
+        while !field.exists && taps < 5 {
+            row.tap()
+            taps += 1
+            _ = field.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(field.exists, "the edit sheet never opened after \(taps) taps")
+    }
+
     @MainActor
     func testFinishedDayIsReadyForReview() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
@@ -94,6 +127,39 @@ final class HandoffUITests: XCTestCase {
         tapButton(app, "reviewAction.0")
         XCTAssertTrue(
             waitForLabel(status, beginningWith: "Closed. Handwriting is deleted on"),
+            "the day never closed; the status is \"\(status.label)\"")
+    }
+
+    @MainActor
+    func testSummariesAreRequestedAfterTheNotesAreApproved() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
+        let app = launch()
+        openEditor(app, row: "eventRow.1")
+        let toggle = element(app, "editSummary.0")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 30), "editSummary.0 never appeared")
+        let target = toggle.switches.firstMatch.exists ? toggle.switches.firstMatch : toggle
+        var taps = 0
+        while (target.value as? String) != "1" && taps < 5 {
+            target.tap()
+            taps += 1
+        }
+        XCTAssertEqual(target.value as? String, "1", "the summary did not turn on")
+        app.buttons["editDone"].firstMatch.tap()
+        XCTAssertTrue(
+            element(app, "editField").waitForNonExistence(timeout: 30), "the sheet stayed open")
+
+        finishDay(app)
+        let status = openReview(app)
+        XCTAssertTrue(
+            waitForLabel(status, beginningWith: "Notes ready for review"),
+            "Notes never became ready for review")
+        tapButton(app, "reviewAction.0")
+        XCTAssertTrue(
+            waitForLabel(status, beginningWith: "Summaries ready for review"),
+            "the summaries never became ready; the status is \"\(status.label)\"")
+        tapButton(app, "reviewAction.0")
+        XCTAssertTrue(
+            waitForLabel(status, beginningWith: "Closed"),
             "the day never closed; the status is \"\(status.label)\"")
     }
 

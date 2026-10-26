@@ -25,22 +25,32 @@ struct EditTextSheet: View {
         static let remember = "editRemember"
         static let done = "editDone"
         static let cancel = "editCancel"
+
+        static func summaryToggle(_ n: Int) -> String { "editSummary.\(n)" }
     }
 
     let target: EditTarget
     /// The calendar title, for an event.
     let originalTitle: String?
+    /// The summary routines the person set up, offered as checkboxes for an event.
+    let summaryRoutines: [SummaryRoutine]
 
     @Environment(AgendaController.self) private var controller
     @Environment(\.dismiss) private var dismiss
 
     @State private var text: String
     @State private var remember = false
+    @State private var chosen: Set<String>
 
-    init(target: EditTarget, text: String, originalTitle: String?) {
+    init(
+        target: EditTarget, text: String, originalTitle: String?,
+        summaryRoutines: [SummaryRoutine] = [], selectedRoutineIDs: [String] = []
+    ) {
         self.target = target
         self.originalTitle = originalTitle
+        self.summaryRoutines = summaryRoutines
         _text = State(initialValue: text)
+        _chosen = State(initialValue: Set(selectedRoutineIDs))
     }
 
     private var footer: String {
@@ -66,6 +76,21 @@ struct EditTextSheet: View {
                 } footer: {
                     Text(footer)
                 }
+                if originalTitle != nil, !summaryRoutines.isEmpty {
+                    Section {
+                        ForEach(Array(summaryRoutines.enumerated()), id: \.element.id) {
+                            index, routine in
+                            Toggle(routine.name, isOn: binding(for: routine.id))
+                                .accessibilityIdentifier(ID.summaryToggle(index))
+                        }
+                    } header: {
+                        Text("Summaries")
+                    } footer: {
+                        Text(
+                            "Asked for this meeting only. To set them for every meeting with this title, use Settings → Binder rules."
+                        )
+                    }
+                }
             }
             .navigationTitle("Edit text")
             .navigationBarTitleDisplayMode(.inline)
@@ -84,6 +109,14 @@ struct EditTextSheet: View {
         }
     }
 
+    private func binding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { chosen.contains(id) },
+            set: { isOn in
+                if isOn { chosen.insert(id) } else { chosen.remove(id) }
+            })
+    }
+
     private func save() {
         switch target {
         case .event(let id):
@@ -91,6 +124,10 @@ struct EditTextSheet: View {
                 controller.saveShortName(text, forEvent: id)
             } else {
                 controller.updateDraft { $0.setTitle(text, forEvent: id) }
+            }
+            if !summaryRoutines.isEmpty {
+                let ids = summaryRoutines.map(\.id).filter { chosen.contains($0) }
+                controller.updateDraft { $0.setSummaryRoutineIDs(ids, forEvent: id) }
             }
         case .task(let id):
             controller.updateDraft { $0.setText(text, forTask: id) }

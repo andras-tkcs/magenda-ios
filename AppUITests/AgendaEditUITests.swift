@@ -133,6 +133,52 @@ final class AgendaEditUITests: XCTestCase {
             "the reason says \(reason.label)")
     }
 
+    /// The switch inside the toggle `identifier`, once the sheet is scrolled to it.
+    @MainActor
+    private func summarySwitch(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        let toggle = element(app, identifier)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 30), "\(identifier) never appeared")
+        let form = app.collectionViews.firstMatch
+        var swipes = 0
+        while !toggle.isHittable && swipes < 5 {
+            form.swipeUp()
+            swipes += 1
+        }
+        return toggle.switches.firstMatch.exists ? toggle.switches.firstMatch : toggle
+    }
+
+    @MainActor
+    func testTickingASummaryRoutineIsKeptWhenTheSheetIsReopened() {
+        let app = launch()
+        _ = openEditor(app, row: "eventRow.1")
+        XCTAssertTrue(element(app, "editSummary.1").waitForExistence(timeout: 30))
+        let first = summarySwitch(app, "editSummary.0")
+        var taps = 0
+        while (first.value as? String) != "1" && taps < 5 {
+            first.tap()
+            taps += 1
+        }
+        XCTAssertEqual(first.value as? String, "1", "the first summary did not turn on")
+        app.buttons["editDone"].firstMatch.tap()
+        XCTAssertTrue(
+            element(app, "editField").waitForNonExistence(timeout: 30), "the sheet stayed open")
+
+        _ = openEditor(app, row: "eventRow.1")
+        XCTAssertEqual(
+            summarySwitch(app, "editSummary.0").value as? String, "1",
+            "the ticked summary was not kept")
+        XCTAssertNotEqual(summarySwitch(app, "editSummary.1").value as? String, "1")
+    }
+
+    @MainActor
+    func testWithoutSummaryRoutinesTheSheetHasNoSummaries() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-MagendaFixture", "standard", "-MagendaNoSummaryRoutines"]
+        app.launch()
+        _ = openEditor(app, row: "eventRow.1")
+        XCTAssertFalse(element(app, "editSummary.0").exists, "a summary toggle was offered")
+    }
+
     @MainActor
     func testCommandRShowsThePreviewOnIPad() throws {
         try XCTSkipUnless(
