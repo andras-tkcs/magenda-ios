@@ -132,8 +132,11 @@ final class AgendaScreenUITests: XCTestCase {
             app.element(Self.previewID).waitForExistence(timeout: 30),
             "the preview never appeared")
         // The list's first row stands for the list: XCUITest never reports a List itself as
-        // hittable once the centre of its frame lands on one of its rows, on any device.
+        // hittable once the centre of its frame lands on one of its rows, on any device. While the
+        // binder lays out its first pages a query can time out, so hittability is waited for.
         let row = app.element("eventRow.0")
-        XCTAssertTrue(row.isHittable, "the list is hidden beside the preview on iPad")
+        XCTAssertTrue(
+            row.waitUntil(\.isHittable, is: true, timeout: 30),
+            "the list is hidden beside the preview on iPad")
     }
 }
