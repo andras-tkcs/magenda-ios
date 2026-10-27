@@ -36,6 +36,13 @@ final class SettingsUITests: XCTestCase {
         app.windows.firstMatch.frame.height / 2
     }
 
+    /// The top limit for a field about to be typed into: 60 pt below the sheet's navigation bar.
+    /// The form reaches up under the bar, and a field revealed right below it does not take a tap.
+    @MainActor
+    private func belowNavigationBar(_ app: XCUIApplication) -> CGFloat {
+        app.buttons["settingsDone"].firstMatch.frame.maxY + 60
+    }
+
     /// Waits for the list, then opens the settings sheet, retrying a dropped tap.
     @MainActor
     private func openSettings(_ app: XCUIApplication, listIsScrolled: Bool = false) {
@@ -107,7 +114,7 @@ final class SettingsUITests: XCTestCase {
     /// tree while it makes room for the keyboard.
     @MainActor
     private func enterHex(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
-        field.reveal(in: settingsForm(app), bottom: upperHalf(app))
+        field.reveal(in: settingsForm(app), top: belowNavigationBar(app), bottom: upperHalf(app))
         let current = field.value as? String ?? ""
         // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
         field.focusForTyping(in: app)
@@ -283,11 +290,11 @@ final class SettingsUITests: XCTestCase {
             "the sign-in button never appeared")
     }
 
-    /// Types into a text field of the settings form: scrolls it clear of the keyboard, taps it
-    /// until it has focus, and types.
+    /// Types into a text field of the settings form: scrolls it clear of the navigation bar and the
+    /// keyboard, taps it until it has focus, and types.
     @MainActor
     private func enterText(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
-        field.reveal(in: settingsForm(app), bottom: upperHalf(app))
+        field.reveal(in: settingsForm(app), top: belowNavigationBar(app), bottom: upperHalf(app))
         field.focusForTyping(in: app)
         app.typeText(text)
     }
