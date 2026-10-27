@@ -198,7 +198,7 @@ final class RulesUITests: XCTestCase {
             let toggle = choice.switches.firstMatch.exists ? choice.switches.firstMatch : choice
             var taps = 0
             while (toggle.value as? String) != "1" && taps < 5 {
-                toggle.tap()
+                toggle.tapSwitch(attempt: taps)
                 taps += 1
             }
             XCTAssertEqual(toggle.value as? String, "1", "the summary choice did not turn on")

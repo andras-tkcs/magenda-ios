@@ -69,12 +69,13 @@ final class AgendaScreenUITests: XCTestCase {
         XCTAssertFalse(app.element("eventPageToggle.0").exists)
 
         // The tap goes to the system switch inside the toggle. On an iPad simulator a synthesized
-        // tap in the split view's sidebar is sometimes dropped, so the switch is tapped again
-        // while the event is still included (the notes-page switch only exists then).
+        // tap in the split view's sidebar is sometimes dropped, so the switch is touched again, a
+        // different way each time, while the event is still included (the notes-page switch only
+        // exists then).
         let page = app.element("eventPageToggle.1")
         var taps = 0
         while page.exists && taps < 5 {
-            app.element("eventToggle.1").switches.firstMatch.tap()
+            app.element("eventToggle.1").switches.firstMatch.tapSwitch(attempt: taps)
             taps += 1
             _ = page.waitForNonExistence(timeout: 3)
         }

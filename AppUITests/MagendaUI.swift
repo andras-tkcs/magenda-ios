@@ -72,6 +72,21 @@ extension XCUIElement {
         XCTFail("\(self) never took keyboard focus", file: file, line: line)
     }
 
+    /// Touches this switch in the way `attempt` picks: a tap at its middle, a tap on its right
+    /// half, or a short press. A retry loop passes its count, so that a kind of synthesized touch
+    /// the iPad's split view or a sheet keeps dropping is not the only one tried.
+    @MainActor
+    func tapSwitch(attempt: Int) {
+        switch attempt % 3 {
+        case 0:
+            tap()
+        case 1:
+            coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)).tap()
+        default:
+            coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
+        }
+    }
+
     /// Scrolls the content of this container (positive `distance` shows what is further down) with
     /// one held drag that does not fling.
     @MainActor

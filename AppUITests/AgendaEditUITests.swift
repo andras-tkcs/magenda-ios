@@ -106,7 +106,7 @@ final class AgendaEditUITests: XCTestCase {
         let target = toggle.switches.firstMatch.exists ? toggle.switches.firstMatch : toggle
         var taps = 0
         while (target.value as? String) != "1" && taps < 5 {
-            target.tap()
+            target.tapSwitch(attempt: taps)
             taps += 1
         }
         XCTAssertEqual(target.value as? String, "1", "the remember switch did not turn on")
@@ -141,7 +141,7 @@ final class AgendaEditUITests: XCTestCase {
         let first = summarySwitch(app, "editSummary.0")
         var taps = 0
         while (first.value as? String) != "1" && taps < 5 {
-            first.tap()
+            first.tapSwitch(attempt: taps)
             taps += 1
         }
         XCTAssertEqual(first.value as? String, "1", "the first summary did not turn on")
