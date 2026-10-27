@@ -10,10 +10,8 @@ import XCTest
 final class SettingsUITests: XCTestCase {
     private static let fixtureClientID = "123456789012-fixture.apps.googleusercontent.com"
 
-    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
-    @MainActor private static var previewID: String {
-        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
-    }
+    /// What a render shows: the binder.
+    private static let previewID = "binderView"
 
     /// Launches straight into the settings sheet and waits for its Done button.
     @MainActor
