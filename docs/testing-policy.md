@@ -53,10 +53,13 @@ a UI test launched into a half-booted device times out before its body runs. A f
 re-run on its own ("Re-run failed jobs"). A new push to a PR, or a new dispatch on the same branch,
 cancels the stale run.
 
-`scripts/ui_shards.py` balances the shards from `CLASS_SECONDS`, the seconds each test class took
-in a measured run. A new UI test class needs an entry there: the `scripts` job fails without one.
-Refresh the numbers from a green run when a shard's job passes 18 minutes, and split a class over
-630 s into per-method entries. `python3 scripts/ui_shards.py --table` shows the split.
+`scripts/ui_shards.py` balances the shards from `CLASS_SECONDS`, the median seconds each test class
+took over a few measured runs. A new UI test class needs an entry there: the `scripts` job fails
+without one. A shard's job takes about 21 minutes on a typical runner: some 7 minutes of build, boot
+and `xcodebuild` start-up, then about 14 minutes of tests. Runners vary, so a slow one takes up to
+about 27, under the job's 30-minute limit. Refresh the numbers from green runs when the shards'
+jobs drift more than a few minutes apart or one nears that limit, and split a class over 630 s into
+per-method entries. `python3 scripts/ui_shards.py --table` shows the split.
 
 `scripts/simulator.py` chooses devices by family and runtime rather than by name, because names
 change with every Xcode. `oldest` means the oldest installed runtime at or above the deployment

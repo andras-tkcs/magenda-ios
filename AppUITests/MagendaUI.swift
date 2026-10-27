@@ -4,7 +4,14 @@
 import XCTest
 
 extension XCUIApplication {
+    /// Whether this test run has launched Magenda yet.
+    @MainActor private static var hasLaunched = false
+
     /// Launches Magenda on `fixture` with animations off, plus `extra` arguments.
+    ///
+    /// The first launch on a freshly booted simulator can take a minute or more before the app
+    /// answers accessibility queries, which would use up a test's own waits. So that launch first
+    /// waits, for up to three minutes, until the app's window can be found.
     @MainActor
     static func launchMagenda(fixture: String = "standard", _ extra: [String] = [])
         -> XCUIApplication
@@ -12,6 +19,10 @@ extension XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-MagendaFixture", fixture, "-MagendaNoAnimations"] + extra
         app.launch()
+        if !hasLaunched {
+            hasLaunched = true
+            _ = app.windows.firstMatch.waitForExistence(timeout: 180)
+        }
         return app
     }
 

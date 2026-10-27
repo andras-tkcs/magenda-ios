@@ -71,7 +71,9 @@ jobs:
     name: ui (ipad, ${{ matrix.runtime }}, ${{ matrix.shard }})
     if: github.event_name != 'workflow_dispatch' || inputs.simulators
     runs-on: macos-latest
-    timeout-minutes: 45
+    # A shard's job takes about 21 minutes on a typical runner and up to about 27 on a slow one:
+    # some 7 minutes of build, boot and xcodebuild start-up, then its share of the tests.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -113,7 +115,7 @@ jobs:
           xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
             -destination "$DESTINATION" -derivedDataPath build/DerivedData \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 600 \
-            -maximum-test-execution-time-allowance 600 \
+            -maximum-test-execution-time-allowance 1200 \
             $SHARD_ARGS -resultBundlePath "build/tests-$SHARD.xcresult"
       - name: Upload test results
         if: failure()

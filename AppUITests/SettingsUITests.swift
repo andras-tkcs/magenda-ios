@@ -10,10 +10,8 @@ import XCTest
 final class SettingsUITests: XCTestCase {
     private static let fixtureClientID = "123456789012-fixture.apps.googleusercontent.com"
 
-    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
-    @MainActor private static var previewID: String {
-        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
-    }
+    /// What a render shows: the binder.
+    private static let previewID = "binderView"
 
     /// Launches straight into the settings sheet and waits for its Done button.
     @MainActor
@@ -214,8 +212,14 @@ final class SettingsUITests: XCTestCase {
         let forget = app.buttons["forgetClientButton"].firstMatch
         forget.reveal(in: settingsForm(app))
         // A tap that lands while the form is still settling from the drag is dropped, so the
-        // button is tapped again while the confirmation has not appeared.
-        let confirm = app.buttons["Forget"].firstMatch
+        // button is tapped again while the confirmation has not appeared. Each summary routine row
+        // has a "Forget" button of its own, so the confirmation's is the one without that
+        // identifier.
+        let confirm = app.buttons.matching(
+            NSPredicate(
+                format: "label == %@ AND NOT (identifier BEGINSWITH %@)", "Forget",
+                "forgetSummaryRoutineButton")
+        ).firstMatch
         var taps = 0
         while !confirm.exists && taps < 5 {
             forget.tap()
