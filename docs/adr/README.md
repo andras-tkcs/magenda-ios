@@ -154,3 +154,4 @@ until a later ADR supersedes it.
 | [0044](0044-ui-tests-start-in-the-screen-they-test.md) | UI tests start in the screen they test, with animations off, through launch arguments that only a fixture launch reads | Accepted |
 | [0045](0045-simulator-shards-get-a-warm-up-launch-one-retry-and-a-40-minute-limit.md) | Each simulator shard warms the app up before its tests, retries a lost simulator once, and has a 40-minute limit | Accepted |
 | [0046](0046-ui-tests-turn-an-event-off-through-its-context-menu.md) | UI tests turn an event off through its context menu, not its switch in the sidebar | Accepted |
+| [0047](0047-every-ui-test-launch-waits-for-the-app-window.md) | Every UI test launch waits for the app's window, not only the first | Accepted |
