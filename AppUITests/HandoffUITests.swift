@@ -13,16 +13,23 @@ final class HandoffUITests: XCTestCase {
         button.tap()
     }
 
-    /// Taps Render once the first row is there, and waits for the binder.
+    /// Taps Render once the first row is there, and waits for the binder. A tap on the sidebar's
+    /// toolbar is sometimes not taken (ADR 0046), so Render is tapped again, at most three times,
+    /// while there is no binder; it is disabled while a render runs.
     @MainActor
     private func render(_ app: XCUIApplication) {
         let button = app.buttons["renderButton"].firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30), "the Render button never appeared")
         XCTAssertTrue(
             app.element("eventRow.0").waitForExistence(timeout: 30), "the list never appeared")
-        button.tap()
-        XCTAssertTrue(
-            app.element("binderView").waitForExistence(timeout: 30), "the binder never appeared")
+        let binder = app.element("binderView")
+        var taps = 0
+        while !binder.exists && taps < 3 {
+            button.tap()
+            taps += 1
+            _ = binder.waitForExistence(timeout: 30)
+        }
+        XCTAssertTrue(binder.exists, "the binder never appeared after \(taps) taps")
     }
 
     /// Renders, finishes the day, and waits until the hand-off notice shows.
