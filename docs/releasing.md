@@ -49,9 +49,12 @@ start no `build.yml`, and report success. Use a fine-grained personal access tok
 after pushing it waits for a `build.yml` run on the tagged commit and fails loudly if none appears
 (ADR 0006).
 
-**Pre-flight `build.yml` before tagging.** `release.yml` builds nothing. Dispatch `build.yml` (no
-inputs) against the exact commit to tag and confirm the `archive` job succeeds. It is safe on an
-untagged commit: signing and upload are gated on a tag ref.
+**Pre-flight `build.yml` and `tests.yml` before tagging.** `release.yml` builds nothing. Dispatch
+`build.yml` (no inputs) against the exact commit to tag and confirm the `archive` job succeeds. It
+is safe on an untagged commit: signing and upload are gated on a tag ref. Also dispatch `tests.yml`
+with `runtimes=both` against the same commit, so the oldest supported runtime is tested too, and
+wait for both runs to be green. A pull request tests only the newest runtime, so this is the only
+place the oldest one gates a release (ADR 0042).
 
 **One release tag per commit.** A second tag on a released commit would upload a build number App
 Store Connect has already accepted, and fail. Move the release forward onto a new commit instead;

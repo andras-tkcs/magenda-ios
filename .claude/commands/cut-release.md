@@ -29,16 +29,18 @@ behind that makes later checks lie.
 - For a **stable** version only: whether a release candidate of this version was tagged and
   tested (`docs/release-testing.md`). If not, say so; I may want one first.
 
-**Then pre-flight `build.yml` against that same commit — do not skip this** (ADR 0006).
-`release.yml` builds nothing. Dispatch `.github/workflows/build.yml` (`workflow_dispatch`, no
-inputs) against `origin/main`'s exact commit and wait for `version` and `archive` to finish. The
-signing and upload jobs are gated on a tag ref, so this run uploads nothing. Report the run URL and
-its outcome.
+**Then pre-flight `build.yml` and `tests.yml` against that same commit — do not skip this**
+(ADR 0006, ADR 0042). `release.yml` builds nothing. Dispatch `.github/workflows/build.yml`
+(`workflow_dispatch`, no inputs) against `origin/main`'s exact commit and wait for `version` and
+`archive` to finish. The signing and upload jobs are gated on a tag ref, so this run uploads
+nothing. Also dispatch `.github/workflows/tests.yml` with `runtimes=both` against the same commit,
+which tests the oldest supported runtime as well as the newest, and wait for it to be green. Report
+both run URLs and their outcomes.
 
-If it fails: stop. Treat it as an ordinary CI failure on `main` — diagnose, fix, push, and re-run
+If either fails: stop. Treat it as an ordinary CI failure on `main` — diagnose, fix, push, and re-run
 this pre-flight against the fixed commit — before touching `release.yml`.
 
-**Only once the pre-flight is green, dispatch `release.yml` against `main` with
+**Only once both pre-flight runs are green, dispatch `release.yml` against `main` with
 `dry_run: true`** and report the result. The dry run performs every check and creates the tag on
 the runner without pushing it.
 
