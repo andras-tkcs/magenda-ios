@@ -2,32 +2,13 @@
 // docs/testing-policy.md; elements are found by identifier, and the fixtures answer for Drive and
 // the routine.
 
-import UIKit
 import XCTest
 
 final class HandoffUITests: XCTestCase {
-    @MainActor
-    private func launch(fingerDrawing: Bool = true, extra: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
-        // With finger drawing on, a swipe on the binder is a stroke and does not turn the page.
-        var arguments = ["-MagendaFixture", "standard"]
-        if fingerDrawing {
-            arguments.append("-MagendaFingerDrawing")
-        }
-        app.launchArguments = arguments + extra
-        app.launch()
-        return app
-    }
-
-    @MainActor
-    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier].firstMatch
-    }
-
     /// Taps the button `identifier` once it exists.
     @MainActor
     private func tapButton(_ app: XCUIApplication, _ identifier: String) {
-        let button = element(app, identifier)
+        let button = app.element(identifier)
         XCTAssertTrue(button.waitForExistence(timeout: 30), "\(identifier) never appeared")
         button.tap()
     }
@@ -38,10 +19,10 @@ final class HandoffUITests: XCTestCase {
         let button = app.buttons["renderButton"].firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30), "the Render button never appeared")
         XCTAssertTrue(
-            element(app, "eventRow.0").waitForExistence(timeout: 30), "the list never appeared")
+            app.element("eventRow.0").waitForExistence(timeout: 30), "the list never appeared")
         button.tap()
         XCTAssertTrue(
-            element(app, "binderView").waitForExistence(timeout: 30), "the binder never appeared")
+            app.element("binderView").waitForExistence(timeout: 30), "the binder never appeared")
     }
 
     /// Renders, finishes the day, and waits until the hand-off notice shows.
@@ -50,7 +31,7 @@ final class HandoffUITests: XCTestCase {
         render(app)
         tapButton(app, "finishDayButton")
         XCTAssertTrue(
-            element(app, "handoffMessage").waitForExistence(timeout: 30),
+            app.element("handoffMessage").waitForExistence(timeout: 30),
             "no hand-off notice appeared")
     }
 
@@ -58,7 +39,7 @@ final class HandoffUITests: XCTestCase {
     @MainActor
     private func openReview(_ app: XCUIApplication) -> XCUIElement {
         tapButton(app, "reviewButton")
-        let status = element(app, "reviewStatus.0")
+        let status = app.element("reviewStatus.0")
         XCTAssertTrue(status.waitForExistence(timeout: 30), "the first finished day never showed")
         return status
     }
@@ -87,14 +68,14 @@ final class HandoffUITests: XCTestCase {
     /// dropped, so the row is tapped again while the sheet has not appeared.
     @MainActor
     private func openEditor(_ app: XCUIApplication, row identifier: String) {
-        let list = element(app, "agendaScreen")
+        let list = app.element("agendaScreen")
         XCTAssertTrue(list.waitForExistence(timeout: 30), "the list never appeared")
         let row = app.buttons[identifier]
         XCTAssertTrue(
             app.buttons["eventRow.0"].waitForExistence(timeout: 30), "the first row never appeared")
         scrollToHittable(row, in: list)
         XCTAssertTrue(row.exists && row.isHittable, "\(identifier) was never scrolled into view")
-        let field = element(app, "editField")
+        let field = app.element("editField")
         var taps = 0
         while !field.exists && taps < 5 {
             row.tap()
@@ -109,9 +90,9 @@ final class HandoffUITests: XCTestCase {
     /// was.
     @MainActor
     private func sendFirstMeeting(_ app: XCUIApplication) {
-        let binder = element(app, "binderView")
-        let indicator = element(app, "binderPageIndicator")
-        let send = element(app, "sendMeetingButton")
+        let binder = app.element("binderView")
+        let indicator = app.element("binderPageIndicator")
+        let send = app.element("sendMeetingButton")
         XCTAssertTrue(indicator.waitForExistence(timeout: 30), "the page indicator never appeared")
         XCTAssertTrue(send.waitForExistence(timeout: 30), "the Send Meeting button never appeared")
         var seen: [String] = []
@@ -124,7 +105,7 @@ final class HandoffUITests: XCTestCase {
                 predicate: NSPredicate(format: "label != %@", before), object: indicator)
             _ = XCTWaiter().wait(for: [moved], timeout: 10)
             for index in 0..<8 {
-                let page = element(app, "binderPage.\(index)")
+                let page = app.element("binderPage.\(index)")
                 if page.exists { seen.append("\(index): \(page.label)") }
             }
         }
@@ -138,23 +119,19 @@ final class HandoffUITests: XCTestCase {
         send.tap()
         tapButton(app, "confirmSendMeetingButton")
         XCTAssertTrue(
-            element(app, "handoffMessage").waitForExistence(timeout: 30),
+            app.element("handoffMessage").waitForExistence(timeout: 30),
             "no hand-off notice appeared")
     }
 
     /// Waits up to 30 seconds for `element` to become (not) enabled.
     @MainActor
     private func waitForEnabled(_ element: XCUIElement, _ enabled: Bool) -> Bool {
-        let matches = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "isEnabled == %@", NSNumber(value: enabled)),
-            object: element)
-        return XCTWaiter().wait(for: [matches], timeout: 30) == .completed
+        element.waitUntil(\.isEnabled, is: enabled)
     }
 
     @MainActor
-    func testFinishedDayIsReadyForReview() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch()
+    func testFinishedDayIsReadyForReview() {
+        let app = XCUIApplication.launchMagenda(["-MagendaFingerDrawing"])
         finishDay(app)
 
         let status = openReview(app)
@@ -162,14 +139,13 @@ final class HandoffUITests: XCTestCase {
             waitForLabel(status, beginningWith: "Notes ready for review"),
             "Notes never became ready for review")
         XCTAssertTrue(
-            element(app, "reviewOpenDoc.0").waitForExistence(timeout: 30),
+            app.element("reviewOpenDoc.0").waitForExistence(timeout: 30),
             "Open Doc never appeared")
     }
 
     @MainActor
-    func testApprovingTheNotesClosesTheDay() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch()
+    func testApprovingTheNotesClosesTheDay() {
+        let app = XCUIApplication.launchMagenda(["-MagendaFingerDrawing"])
         finishDay(app)
 
         let status = openReview(app)
@@ -183,11 +159,10 @@ final class HandoffUITests: XCTestCase {
     }
 
     @MainActor
-    func testSummariesAreRequestedAfterTheNotesAreApproved() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch()
+    func testSummariesAreRequestedAfterTheNotesAreApproved() {
+        let app = XCUIApplication.launchMagenda(["-MagendaFingerDrawing"])
         openEditor(app, row: "eventRow.1")
-        let toggle = element(app, "editSummary.0")
+        let toggle = app.element("editSummary.0")
         XCTAssertTrue(toggle.waitForExistence(timeout: 30), "editSummary.0 never appeared")
         let target = toggle.switches.firstMatch.exists ? toggle.switches.firstMatch : toggle
         var taps = 0
@@ -198,7 +173,7 @@ final class HandoffUITests: XCTestCase {
         XCTAssertEqual(target.value as? String, "1", "the summary did not turn on")
         app.buttons["editDone"].firstMatch.tap()
         XCTAssertTrue(
-            element(app, "editField").waitForNonExistence(timeout: 30), "the sheet stayed open")
+            app.element("editField").waitForNonExistence(timeout: 30), "the sheet stayed open")
 
         finishDay(app)
         let status = openReview(app)
@@ -216,46 +191,39 @@ final class HandoffUITests: XCTestCase {
     }
 
     @MainActor
-    func testWithoutARoutineTheDayWaitsToBeSent() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch(extra: ["-MagendaNoRoutine"])
+    func testWithoutARoutineTheDayWaitsToBeSent() {
+        let app = XCUIApplication.launchMagenda(["-MagendaFingerDrawing", "-MagendaNoRoutine"])
         finishDay(app)
 
         let status = openReview(app)
         XCTAssertEqual(status.label, "Uploaded, not yet sent to Claude")
         XCTAssertTrue(
-            element(app, "reviewError.0").waitForExistence(timeout: 30),
+            app.element("reviewError.0").waitForExistence(timeout: 30),
             "the not-configured error never showed")
-        let action = element(app, "reviewAction.0")
+        let action = app.element("reviewAction.0")
         XCTAssertTrue(action.waitForExistence(timeout: 30), "Try again never appeared")
         XCTAssertTrue(action.label.hasPrefix("Try again"), "the button is \"\(action.label)\"")
     }
 
     @MainActor
-    func testFinishDayIsDisabledOnceTheDayWasSent() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch()
+    func testFinishDayIsDisabledOnceTheDayWasSent() {
+        let app = XCUIApplication.launchMagenda(["-MagendaFingerDrawing"])
         finishDay(app)
 
-        let finish = element(app, "finishDayButton")
-        let disabled = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "isEnabled == false"), object: finish)
-        XCTAssertEqual(
-            XCTWaiter().wait(for: [disabled], timeout: 30), .completed,
+        let finish = app.element("finishDayButton")
+        XCTAssertTrue(
+            finish.waitUntil(\.isEnabled, is: false),
             "Finish Day stayed enabled after the day was sent")
     }
 
     @MainActor
-    func testResetHandoffAsksAndThenLetsTheDayBeFinishedAgain() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch()
+    func testResetHandoffAsksAndThenLetsTheDayBeFinishedAgain() {
+        let app = XCUIApplication.launchMagenda(["-MagendaFingerDrawing"])
         render(app)
-        XCTAssertFalse(element(app, "resetHandoffButton").exists)
+        XCTAssertFalse(app.element("resetHandoffButton").exists)
         tapButton(app, "finishDayButton")
-        let finish = element(app, "finishDayButton")
-        let disabled = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "isEnabled == false"), object: finish)
-        XCTAssertEqual(XCTWaiter().wait(for: [disabled], timeout: 30), .completed)
+        let finish = app.element("finishDayButton")
+        XCTAssertTrue(finish.waitUntil(\.isEnabled, is: false))
 
         tapButton(app, "resetHandoffButton")
         tapButton(app, "cancelResetHandoffButton")
@@ -263,33 +231,30 @@ final class HandoffUITests: XCTestCase {
 
         tapButton(app, "resetHandoffButton")
         tapButton(app, "confirmResetHandoffButton")
-        let enabled = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "isEnabled == true"), object: finish)
-        XCTAssertEqual(
-            XCTWaiter().wait(for: [enabled], timeout: 30), .completed,
+        XCTAssertTrue(
+            finish.waitUntil(\.isEnabled, is: true),
             "Finish Day stayed disabled after the hand-off was reset")
     }
 
     @MainActor
-    func testSendingAMeetingLocksItAndGivesItItsOwnReviewRow() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch(fingerDrawing: false)
+    func testSendingAMeetingLocksItAndGivesItItsOwnReviewRow() {
+        let app = XCUIApplication.launchMagenda()
         render(app)
         sendFirstMeeting(app)
 
         XCTAssertTrue(
-            element(app, "sentBadge").waitForExistence(timeout: 30), "the sent badge never showed")
+            app.element("sentBadge").waitForExistence(timeout: 30), "the sent badge never showed")
         let sentPages = app.descendants(matching: .any).matching(
             NSPredicate(format: "value == %@", "Sent to Claude"))
         XCTAssertGreaterThan(sentPages.count, 0, "no page reads Sent to Claude")
         XCTAssertTrue(
-            waitForEnabled(element(app, "sendMeetingButton"), false),
+            waitForEnabled(app.element("sendMeetingButton"), false),
             "Send Meeting stayed enabled on the sent meeting")
         XCTAssertFalse(
-            element(app, "startOverButton").isEnabled, "Start Over stayed enabled")
+            app.element("startOverButton").isEnabled, "Start Over stayed enabled")
 
         // A tap on the overview button must still move pages from a locked page.
-        let indicator = element(app, "binderPageIndicator")
+        let indicator = app.element("binderPageIndicator")
         tapButton(app, "binderOverviewButton")
         let atOverview = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label BEGINSWITH %@", "Page 1 of"), object: indicator)
@@ -298,7 +263,7 @@ final class HandoffUITests: XCTestCase {
             "the page indicator says \(indicator.label) after Overview")
 
         // Back to a meeting page: the sent meeting stays in the day's PDF.
-        element(app, "binderView").swipeLeft(velocity: .fast)
+        app.element("binderView").swipeLeft(velocity: .fast)
         let moved = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "NOT (label BEGINSWITH %@)", "Page 1 of"),
             object: indicator)
@@ -306,7 +271,7 @@ final class HandoffUITests: XCTestCase {
             XCTWaiter().wait(for: [moved], timeout: 10), .completed,
             "a swipe did not leave the overview: \(indicator.label)")
 
-        let finish = element(app, "finishDayButton")
+        let finish = app.element("finishDayButton")
         tapButton(app, "finishDayButton")
         XCTAssertTrue(waitForEnabled(finish, false), "Finish Day stayed enabled")
 
@@ -314,32 +279,28 @@ final class HandoffUITests: XCTestCase {
         XCTAssertTrue(
             waitForLabel(first, beginningWith: "Notes ready for review"),
             "the first row never became ready for review")
-        let second = element(app, "reviewStatus.1")
+        let second = app.element("reviewStatus.1")
         XCTAssertTrue(second.waitForExistence(timeout: 30), "the second row never showed")
         XCTAssertTrue(
             waitForLabel(second, beginningWith: "Notes ready for review"),
             "the second row never became ready for review")
-        XCTAssertTrue(element(app, "reviewRow.1").exists)
+        XCTAssertTrue(app.element("reviewRow.1").exists)
     }
 
     @MainActor
-    func testResetHandoffUnlocksASentMeeting() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        let app = launch(fingerDrawing: false)
+    func testResetHandoffUnlocksASentMeeting() {
+        let app = XCUIApplication.launchMagenda()
         render(app)
         sendFirstMeeting(app)
         XCTAssertTrue(
-            element(app, "sentBadge").waitForExistence(timeout: 30), "the sent badge never showed")
+            app.element("sentBadge").waitForExistence(timeout: 30), "the sent badge never showed")
 
         tapButton(app, "resetHandoffButton")
         tapButton(app, "confirmResetHandoffButton")
-        let badge = element(app, "sentBadge")
-        let gone = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"), object: badge)
-        XCTAssertEqual(
-            XCTWaiter().wait(for: [gone], timeout: 30), .completed, "the sent badge stayed")
+        let badge = app.element("sentBadge")
+        XCTAssertTrue(badge.waitForNonExistence(timeout: 30), "the sent badge stayed")
         XCTAssertTrue(
-            waitForEnabled(element(app, "sendMeetingButton"), true),
+            waitForEnabled(app.element("sendMeetingButton"), true),
             "Send Meeting stayed disabled after the reset")
     }
 }
