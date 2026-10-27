@@ -8,11 +8,7 @@ import XCTest
 final class SetupUITests: XCTestCase {
     @MainActor
     func testBadClientIDShowsAMessageAndAValidOneReachesSignIn() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-MagendaFixture", "standard", "-MagendaNeedsSetup", "-MagendaSignedOut",
-        ]
-        app.launch()
+        let app = XCUIApplication.launchMagenda(["-MagendaNeedsSetup", "-MagendaSignedOut"])
 
         let field = app.textFields["clientIDField"]
         XCTAssertTrue(field.waitForExistence(timeout: 10), "the client ID field never appeared")
@@ -23,7 +19,7 @@ final class SetupUITests: XCTestCase {
         field.tap()
         field.typeText("not-an-id")
         save.tap()
-        let message = app.descendants(matching: .any)["setupMessage"]
+        let message = app.element("setupMessage")
         XCTAssertTrue(message.waitForExistence(timeout: 10), "no message for a bad client ID")
 
         field.tap()
