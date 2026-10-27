@@ -212,8 +212,14 @@ final class SettingsUITests: XCTestCase {
         let forget = app.buttons["forgetClientButton"].firstMatch
         forget.reveal(in: settingsForm(app))
         // A tap that lands while the form is still settling from the drag is dropped, so the
-        // button is tapped again while the confirmation has not appeared.
-        let confirm = app.buttons["Forget"].firstMatch
+        // button is tapped again while the confirmation has not appeared. Each summary routine row
+        // has a "Forget" button of its own, so the confirmation's is the one without that
+        // identifier.
+        let confirm = app.buttons.matching(
+            NSPredicate(
+                format: "label == %@ AND NOT (identifier BEGINSWITH %@)", "Forget",
+                "forgetSummaryRoutineButton")
+        ).firstMatch
         var taps = 0
         while !confirm.exists && taps < 5 {
             forget.tap()

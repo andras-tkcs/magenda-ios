@@ -19,24 +19,51 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SHARD_COUNT = 4
 
-# Seconds each entry took in the last measured tests.yml run on the newest iPad. An entry is the
-# hosted test target, a whole UI test class, or one UI test method of a class that is too long for
-# one shard. Shards are balanced from these, so `--check` (and the scripts job) fails when a test
-# class or method has no entry.
+# Seconds each entry takes on the newest iPad: the median of tests.yml runs 40421450881,
+# 40428109901, 40428155713 and 40434325760, over the runs that already had the entry's current
+# tests, rounded up to a multiple of 10. A failed test's time is left out. An entry is the hosted
+# test target (its Swift Testing time plus 20 s), a whole UI test class, or one UI test method of a
+# class that is too long for one shard. Shards are balanced from these, so `--check` (and the
+# scripts job) fails when a test class or method has no entry. The first test in each shard also
+# pays the simulator's cold first launch, so a shard runs a little longer than its total here.
 CLASS_SECONDS: dict[str, int] = {
-    "MagendaTests": 60,
-    "MagendaUITests/AgendaEditUITests": 450,
-    "MagendaUITests/AgendaScreenUITests": 120,
-    "MagendaUITests/BinderUITests": 390,
-    "MagendaUITests/HandoffUITests": 300,
-    "MagendaUITests/LaunchOptionsUITests": 60,
-    "MagendaUITests/LongTextUITests": 80,
-    "MagendaUITests/PreviewUITests": 160,
-    "MagendaUITests/RulesUITests": 1980,
-    "MagendaUITests/SettingsUITests": 1260,
+    "MagendaTests": 30,
+    "MagendaUITests/AgendaEditUITests": 350,
+    "MagendaUITests/AgendaScreenUITests": 140,
+    "MagendaUITests/BinderUITests": 350,
+    "MagendaUITests/HandoffUITests": 350,
+    "MagendaUITests/LaunchOptionsUITests": 70,
+    "MagendaUITests/LongTextUITests": 200,
+    "MagendaUITests/PreviewUITests": 70,
+    "MagendaUITests/RulesUITests/testADuplicateSummaryTitleShowsAnError": 140,
+    "MagendaUITests/RulesUITests/testAddingAMeetingSummaryShowsTheRowWithTheRoutineName": 160,
+    "MagendaUITests/RulesUITests/testAddingAPersonShowsTheAlias": 70,
+    "MagendaUITests/RulesUITests/testAddingAPersonalBlockLeavesMatchingEventsOffTheAgenda": 50,
+    "MagendaUITests/RulesUITests/testAddingASummaryWithoutAChoiceShowsAnError": 50,
+    "MagendaUITests/RulesUITests/testChoosingAContactFillsThePerson": 60,
+    "MagendaUITests/RulesUITests/testDeletingAPersonalBlockBringsItsEventsBack": 40,
+    "MagendaUITests/RulesUITests/testEditTogglesTheRulesIntoEditing": 30,
+    "MagendaUITests/RulesUITests/testLongPressDeletesADefaultOutOfOfficeWord": 50,
+    "MagendaUITests/RulesUITests/testResetRulesRestoresTheDefaults": 80,
+    "MagendaUITests/RulesUITests/testTheLookAheadStepperIncrements": 50,
+    "MagendaUITests/RulesUITests/testWithoutSummaryRoutinesTheRulesSaySoInsteadOfCheckboxes": 30,
+    "MagendaUITests/SettingsUITests/testAFolderNameIsSavedAndAnInvalidOneShowsAnError": 120,
+    "MagendaUITests/SettingsUITests/testASummaryRoutineWithoutANameOrWithABadURLShowsAnError": 90,
+    "MagendaUITests/SettingsUITests/testAddingASummaryRoutineShowsItsRowAndForgettingRemovesIt": 260,
+    "MagendaUITests/SettingsUITests/testAnInvalidHexShowsAnErrorAndAValidOneClearsIt": 70,
+    "MagendaUITests/SettingsUITests/testAnInvalidRoutineShowsAnErrorAndAValidOneIsSaved": 90,
+    "MagendaUITests/SettingsUITests/testChoosingAFontAndRenderingReachesThePreview": 30,
+    "MagendaUITests/SettingsUITests/testChoosingNoDelegatedListRemovesTheDelegatedPage": 60,
+    "MagendaUITests/SettingsUITests/testForgettingTheClientReturnsToSetup": 40,
+    "MagendaUITests/SettingsUITests/testForgettingTheRoutineBringsBackTheFields": 40,
+    "MagendaUITests/SettingsUITests/testResetColorsRestoresTheDefaults": 60,
+    "MagendaUITests/SettingsUITests/testSavingAnExistingSummaryRoutineNameKeepsOneRow": 90,
+    "MagendaUITests/SettingsUITests/testSigningOutReturnsToSignIn": 40,
+    "MagendaUITests/SettingsUITests/testTheClientIDIsShownAndChangeOpensTheSetupSheet": 40,
+    "MagendaUITests/SettingsUITests/testTheRulesLinkAndTheVersionAreThere": 70,
     "MagendaUITests/SetupUITests": 30,
     "MagendaUITests/SignInUITests": 30,
-    "MagendaUITests/StartOverUITests": 60,
+    "MagendaUITests/StartOverUITests": 70,
 }
 
 _CLASS_RE = re.compile(r"^(?:final )?class (\w+): XCTestCase", re.MULTILINE)
