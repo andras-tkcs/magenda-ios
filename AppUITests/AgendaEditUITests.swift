@@ -47,14 +47,20 @@ final class AgendaEditUITests: XCTestCase {
 
     /// Replaces the field's text with `text`. The keys go to whatever has focus rather than to the
     /// field, which the sheet may briefly drop from the accessibility tree while it makes room for
-    /// the keyboard.
+    /// the keyboard. Keys typed while the keyboard comes up are sometimes lost, so the text is
+    /// typed again, at most three times, while the field does not show it.
     @MainActor
     private func replaceText(_ app: XCUIApplication, _ field: XCUIElement, with text: String) {
-        // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
-        field.focusForTyping(in: app, at: 0.98)
-        let current = field.value as? String ?? ""
-        let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
-        app.typeText(deletes + text)
+        for _ in 0..<3 {
+            // A tap at the right edge puts the caret after the text, so the deletes clear it all.
+            field.focusForTyping(in: app, at: 0.98)
+            let current = field.value as? String ?? ""
+            let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
+            app.typeText(deletes + text)
+            let shown = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", text), object: field)
+            if XCTWaiter().wait(for: [shown], timeout: 5) == .completed { return }
+        }
     }
 
     @MainActor
