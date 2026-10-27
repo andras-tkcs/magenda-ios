@@ -26,18 +26,10 @@ REQUIRED_STATUS_CHECKS = [
     "core",
     "lint",
     "scripts",
-    "app (iphone, newest)",
-    "app (iphone, oldest)",
-    "app (ipad, newest)",
-    "ui (iphone, newest, edit-screen)",
-    "ui (iphone, newest, settings)",
-    "ui (iphone, newest, rest)",
-    "ui (iphone, oldest, edit-screen)",
-    "ui (iphone, oldest, settings)",
-    "ui (iphone, oldest, rest)",
-    "ui (ipad, newest, edit-screen)",
-    "ui (ipad, newest, settings)",
-    "ui (ipad, newest, rest)",
+    "ui (ipad, newest, 1)",
+    "ui (ipad, newest, 2)",
+    "ui (ipad, newest, 3)",
+    "ui (ipad, newest, 4)",
 ]
 
 

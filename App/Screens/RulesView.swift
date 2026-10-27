@@ -41,24 +41,30 @@ struct RulesView: View {
         static let peopleName = "peopleName"
         static let peopleEmail = "peopleEmail"
         static let peopleAdd = "peopleAdd"
+        static let peopleFromContacts = "peopleFromContacts"
         static let summaryTitleField = "summaryTitleField"
-        static let summarySkillField = "summarySkillField"
         static let summaryAdd = "summaryAdd"
-        static let summarySkillError = "summarySkillError"
+        static let summaryError = "summaryError"
+        static let summaryNoRoutines = "summaryNoRoutines"
         static let lookAheadStepper = "lookAheadStepper"
+        static let form = "rulesForm"
         static let resetRulesButton = "resetRulesButton"
+        static let editButton = "rulesEditButton"
+        static let deleteAction = "rulesDeleteAction"
 
         static func row(_ section: String, _ n: Int) -> String { "rulesRow.\(section).\(n)" }
+        static func summaryChoice(_ n: Int) -> String { "summaryChoice.\(n)" }
         static func add(_ section: ListSection) -> String { "rulesAdd.\(section.rawValue)" }
     }
 
     @Environment(AgendaController.self) private var controller
+    @Environment(\.contactPicker) private var contactPicker
 
     @State private var drafts: [ListSection: String] = [:]
     @State private var personName = ""
     @State private var personEmail = ""
     @State private var summaryTitle = ""
-    @State private var summarySkill = ""
+    @State private var summaryChoices: Set<String> = []
     @State private var summaryError: String?
 
     private var rules: BinderRules { controller.settings.rules }
@@ -85,7 +91,7 @@ struct RulesView: View {
                             var restored = BinderRules.default
                             restored.shortNames = settings.rules.shortNames
                             restored.personAliases = settings.rules.personAliases
-                            restored.summarySkills = settings.rules.summarySkills
+                            restored.summaryRoutines = settings.rules.summaryRoutines
                             settings.rules = restored
                         }
                     }
@@ -93,8 +99,14 @@ struct RulesView: View {
                 .accessibilityIdentifier(ID.resetRulesButton)
             }
         }
+        .accessibilityIdentifier(ID.form)
         .navigationTitle("Binder rules")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                EditButton().accessibilityIdentifier(ID.editButton)
+            }
+        }
     }
 
     // MARK: String lists
@@ -104,15 +116,12 @@ struct RulesView: View {
             let items = rules[keyPath: section.keyPath]
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 Text(item)
+                    .contextMenu {
+                        deleteMenu { delete(IndexSet(integer: index), from: section) }
+                    }
                     .accessibilityIdentifier(ID.row(section.rawValue, index))
             }
-            .onDelete { offsets in
-                Task {
-                    await controller.updateSettings {
-                        $0.rules[keyPath: section.keyPath].remove(atOffsets: offsets)
-                    }
-                }
-            }
+            .onDelete { delete($0, from: section) }
             TextField("Add…", text: draft(section))
                 .submitLabel(.done)
                 .onSubmit { add(section) }
@@ -122,6 +131,20 @@ struct RulesView: View {
         } footer: {
             Text(section.footnote)
         }
+    }
+
+    private func delete(_ offsets: IndexSet, from section: ListSection) {
+        Task {
+            await controller.updateSettings {
+                $0.rules[keyPath: section.keyPath].remove(atOffsets: offsets)
+            }
+        }
+    }
+
+    /// A long-press menu with Delete, the same as swiping the row away.
+    private func deleteMenu(_ delete: @escaping () -> Void) -> some View {
+        Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+            .accessibilityIdentifier(ID.deleteAction)
     }
 
     private func draft(_ section: ListSection) -> Binding<String> {
@@ -165,20 +188,25 @@ struct RulesView: View {
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
+                .contextMenu {
+                    deleteMenu { deleteShortNames(IndexSet(integer: index), in: entries) }
+                }
                 .accessibilityIdentifier(ID.row("shortNames", index))
             }
-            .onDelete { offsets in
-                let keys = offsets.map { entries[$0].key }
-                Task {
-                    await controller.updateSettings { settings in
-                        for key in keys { settings.rules.shortNames[key] = nil }
-                    }
-                }
-            }
+            .onDelete { deleteShortNames($0, in: entries) }
         } header: {
             Text("Short meeting names")
         } footer: {
             Text("Set from a meeting's Edit sheet.")
+        }
+    }
+
+    private func deleteShortNames(_ offsets: IndexSet, in entries: [(key: String, name: String)]) {
+        let keys = offsets.map { entries[$0].key }
+        Task {
+            await controller.updateSettings { settings in
+                for key in keys { settings.rules.shortNames[key] = nil }
+            }
         }
     }
 
@@ -188,67 +216,98 @@ struct RulesView: View {
 
     // MARK: Meeting summaries
 
-    /// The summary skills, sorted by meeting title.
-    private var summaryEntries: [(title: String, skill: String)] {
-        rules.summarySkills.map { (title: $0.key, skill: $0.value) }
-            .sorted { ($0.title, $0.skill) < ($1.title, $1.skill) }
+    /// The summary rules, sorted by meeting title.
+    private var summaryEntries: [(title: String, ids: [String])] {
+        rules.summaryRoutines.map { (title: $0.key, ids: $0.value) }
+            .sorted { $0.title < $1.title }
+    }
+
+    /// The names of the routines `ids` name, in the settings list's order; an ID naming no routine
+    /// is left out.
+    private func routineNames(_ ids: [String]) -> String {
+        let names = controller.settings.summaryRoutines.filter { ids.contains($0.id) }.map(\.name)
+        return names.isEmpty ? "(none)" : names.joined(separator: ", ")
     }
 
     private var summariesSection: some View {
         let entries = summaryEntries
+        let routines = controller.settings.summaryRoutines
         return Section {
             ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
-                Text("\(entry.title) → \(entry.skill)")
+                Text("\(entry.title) → \(routineNames(entry.ids))")
+                    .contextMenu {
+                        deleteMenu { deleteSummaries(IndexSet(integer: index), in: entries) }
+                    }
                     .accessibilityIdentifier(ID.row("summaries", index))
             }
-            .onDelete { offsets in
-                let titles = offsets.map { entries[$0].title }
-                Task {
-                    await controller.updateSettings { settings in
-                        for title in titles { settings.rules.summarySkills[title] = nil }
-                    }
-                }
-            }
+            .onDelete { deleteSummaries($0, in: entries) }
             TextField("Meeting title", text: $summaryTitle)
                 .accessibilityIdentifier(ID.summaryTitleField)
-            TextField("Summary skill", text: $summarySkill)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .accessibilityIdentifier(ID.summarySkillField)
+            if routines.isEmpty {
+                Text("Add summary routines in Settings first.")
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier(ID.summaryNoRoutines)
+            } else {
+                ForEach(Array(routines.enumerated()), id: \.element.id) { index, routine in
+                    Toggle(routine.name, isOn: summaryChoice(routine.id))
+                        .accessibilityIdentifier(ID.summaryChoice(index))
+                }
+            }
             Button("Add", action: addSummary)
                 .accessibilityIdentifier(ID.summaryAdd)
             if let summaryError {
                 Text(summaryError)
                     .font(.caption)
                     .foregroundStyle(.red)
-                    .accessibilityIdentifier(ID.summarySkillError)
+                    .accessibilityIdentifier(ID.summaryError)
             }
         } header: {
             Text("Meeting summaries")
         } footer: {
             Text(
-                "A meeting whose title matches gets this summary skill printed on its page. For a one-off meeting, write the skill on the page's Summary line."
+                "A meeting whose title matches gets these summary routines. For one meeting, change them on its Edit sheet."
             )
         }
     }
 
+    private func summaryChoice(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { summaryChoices.contains(id) },
+            set: { isOn in
+                if isOn { summaryChoices.insert(id) } else { summaryChoices.remove(id) }
+            })
+    }
+
+    private func deleteSummaries(
+        _ offsets: IndexSet, in entries: [(title: String, ids: [String])]
+    ) {
+        let titles = offsets.map { entries[$0].title }
+        Task {
+            await controller.updateSettings { settings in
+                for title in titles { settings.rules.summaryRoutines[title] = nil }
+            }
+        }
+    }
+
     private func addSummary() {
+        let routines = controller.settings.summaryRoutines
+        guard !routines.isEmpty else { return }
         let title = TextFitter.normalized(summaryTitle)
-        let skill = summarySkill.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return }
-        guard SummarySkill.isValidName(skill) else {
-            summaryError = "A skill name uses letters, digits, -, _, : and . only."
+        let ids = routines.map(\.id).filter { summaryChoices.contains($0) }
+        guard !ids.isEmpty else {
+            summaryError = "Choose at least one summary routine."
             return
         }
         let folded = BinderText.fold(title)
-        guard !rules.summarySkills.keys.contains(where: { BinderText.fold($0) == folded }) else {
-            summaryError = "There is already a summary skill for that meeting title."
+        guard !rules.summaryRoutines.keys.contains(where: { BinderText.fold($0) == folded }) else {
+            summaryError = "There is already a summary rule for that meeting title."
             return
         }
         summaryError = nil
         summaryTitle = ""
-        summarySkill = ""
-        Task { await controller.updateSettings { $0.rules.summarySkills[title] = skill } }
+        summaryChoices = []
+        Task { await controller.updateSettings { $0.rules.summaryRoutines[title] = ids } }
     }
 
     // MARK: People
@@ -263,16 +322,12 @@ struct RulesView: View {
         return Section {
             ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                 Text("\(entry.key) → \(entry.email)")
+                    .contextMenu {
+                        deleteMenu { deletePeople(IndexSet(integer: index), in: entries) }
+                    }
                     .accessibilityIdentifier(ID.row("people", index))
             }
-            .onDelete { offsets in
-                let keys = offsets.map { entries[$0].key }
-                Task {
-                    await controller.updateSettings { settings in
-                        for key in keys { settings.rules.personAliases[key] = nil }
-                    }
-                }
-            }
+            .onDelete { deletePeople($0, in: entries) }
             TextField("Name in tasks", text: $personName)
                 .accessibilityIdentifier(ID.peopleName)
             TextField("Email", text: $personEmail)
@@ -280,24 +335,41 @@ struct RulesView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .accessibilityIdentifier(ID.peopleEmail)
+            if let contactPicker {
+                Button("Choose from Contacts…") {
+                    Task {
+                        guard let picked = await contactPicker.pickContact() else { return }
+                        personName = picked.suggestedName
+                        personEmail = picked.email
+                    }
+                }
+                .accessibilityIdentifier(ID.peopleFromContacts)
+            }
             Button("Add", action: addPerson)
                 .accessibilityIdentifier(ID.peopleAdd)
         } header: {
             Text("People")
         } footer: {
             Text(
-                "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs."
+                "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs. Choose from Contacts fills in a name and email you can still change."
             )
         }
     }
 
+    private func deletePeople(_ offsets: IndexSet, in entries: [(key: String, email: String)]) {
+        let keys = offsets.map { entries[$0].key }
+        Task {
+            await controller.updateSettings { settings in
+                for key in keys { settings.rules.personAliases[key] = nil }
+            }
+        }
+    }
+
     private func addPerson() {
-        let key = BinderText.fold(personName.trimmingCharacters(in: .whitespacesAndNewlines))
-        let email = personEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !key.isEmpty, !email.isEmpty else { return }
+        guard let alias = PersonAlias(name: personName, email: personEmail) else { return }
         personName = ""
         personEmail = ""
-        Task { await controller.updateSettings { $0.rules.personAliases[key] = email } }
+        Task { await controller.updateSettings { $0.rules.personAliases[alias.key] = alias.email } }
     }
 
     // MARK: Look-ahead
@@ -315,6 +387,7 @@ struct RulesView: View {
     if let controller = AppEnvironment.previewController() {
         NavigationStack { RulesView() }
             .environment(controller)
+            .environment(\.contactPicker, FixtureContactPicker())
             .task { await controller.start() }
     }
 }

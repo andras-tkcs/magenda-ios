@@ -7,6 +7,9 @@ struct AppServices {
     let handoff: HandoffController
     let pageDrawer: PageDrawer
     let allowsFingerDrawing: Bool
+    let contactPicker: any ContactPicking
+    let animates: Bool
+    let launchRequest: LaunchRequest
 }
 
 /// Builds the app's services: live Google services, or fixtures when the launch arguments ask for
@@ -19,6 +22,24 @@ enum AppEnvironment {
     private static let fixtureRoutine = RoutineCredentials(
         fireURL: "https://api.anthropic.com/v1/claude_code/routines/trig_fixture/fire",
         token: "sk-ant-oat01-fixture")
+
+    /// The summary routines the fixtures pretend were set up, unless `-MagendaNoSummaryRoutines`
+    /// is given, each with credentials in the fixture store.
+    private static let fixtureSummaryRoutines = [
+        SummaryRoutine(id: "11111111-1111-4111-8111-111111111111", name: "Client memo"),
+        SummaryRoutine(id: "22222222-2222-4222-8222-222222222222", name: "Decision log"),
+    ]
+
+    private static let fixtureSummaryCredentials: [String: RoutineCredentials] = {
+        let triggers = ["trig_fixturememo", "trig_fixturelog"]
+        let pairs = zip(fixtureSummaryRoutines, triggers).compactMap { routine, trigger in
+            RoutineCredentials(
+                fireURL: "https://api.anthropic.com/v1/claude_code/routines/\(trigger)/fire",
+                token: "sk-ant-oat01-fixture"
+            ).map { (routine.id, $0) }
+        }
+        return Dictionary(uniqueKeysWithValues: pairs)
+    }()
 
     /// Reads the rendered PDF back for the hand-off.
     private static let readFile: @Sendable (URL) throws -> Data = { try Data(contentsOf: $0) }
@@ -40,6 +61,7 @@ enum AppEnvironment {
         let allowsFingerDrawing = arguments.contains("-MagendaFingerDrawing")
 
         if let fixture = GoogleFixture(launchArguments: arguments) {
+            let launch = LaunchOptions(launchArguments: arguments)
             let credentials: GoogleClientCredentials? =
                 arguments.contains("-MagendaNeedsSetup")
                 ? nil
@@ -52,23 +74,34 @@ enum AppEnvironment {
             let controller = AgendaController(
                 account: FixtureGoogleAccount(signedIn: !arguments.contains("-MagendaSignedOut")),
                 data: FixtureGoogleDataSource(fixture),
-                settingsStore: InMemorySettingsStore(AgendaSettings()),
+                settingsStore: InMemorySettingsStore(
+                    AgendaSettings(
+                        summaryRoutines: arguments.contains("-MagendaNoSummaryRoutines")
+                            ? [] : fixtureSummaryRoutines)),
                 credentials: InMemoryClientCredentialsStore(credentials),
                 measurer: measurer, renderer: renderer,
                 binderStore: binderStore,
                 manifest: manifest, timeZone: timeZone, today: fixtureDay)
             let routine = InMemoryRoutineCredentialsStore(
                 arguments.contains("-MagendaNoRoutine") ? nil : fixtureRoutine)
+            let summaryCredentials = InMemorySummaryRoutineCredentialsStore(
+                fixtureSummaryCredentials)
             let endOfDay = FixtureEndOfDay()
             let handoff = HandoffController(
                 store: InMemoryHandoffStore(), binderStore: binderStore,
                 drive: FixtureDrive(state: endOfDay),
                 trigger: FixtureRoutineTrigger(state: endOfDay, credentials: routine),
-                routineCredentials: routine, renderer: renderer, hasher: CryptoKitHasher(),
-                today: { fixtureDay }, readFile: readFile, removeFile: removeFile)
+                routineCredentials: routine,
+                summaryTrigger: FixtureSummaryTrigger(
+                    state: endOfDay, credentials: summaryCredentials),
+                summaryCredentials: summaryCredentials, renderer: renderer,
+                hasher: CryptoKitHasher(),
+                today: { fixtureDay }, readFile: readFile, removeFile: removeFile,
+                folderName: { controller.settings.driveFolderName })
             return AppServices(
                 controller: controller, handoff: handoff, pageDrawer: drawer,
-                allowsFingerDrawing: allowsFingerDrawing)
+                allowsFingerDrawing: allowsFingerDrawing, contactPicker: FixtureContactPicker(),
+                animates: launch.animates, launchRequest: LaunchRequest(launch))
         }
 
         let session = GoogleSession(
@@ -89,18 +122,25 @@ enum AppEnvironment {
             manifest: manifest, timeZone: timeZone,
             today: CalendarDay.today(in: timeZone, now: Date()))
         let routine = KeychainRoutineCredentialsStore()
+        let summaryCredentials = KeychainSummaryRoutineCredentialsStore()
         let handoff = HandoffController(
             store: FileHandoffStore(
                 directory: URL.applicationSupportDirectory.appending(path: "Handoff"),
                 protection: FileProtection.writingOptions),
             binderStore: binderStore, drive: GoogleDriveClient(sender: session),
             trigger: RoutineTriggerClient(http: URLSessionHTTPClient(), credentials: routine),
-            routineCredentials: routine, renderer: renderer, hasher: CryptoKitHasher(),
+            routineCredentials: routine,
+            summaryTrigger: SummaryRoutineTriggerClient(
+                http: URLSessionHTTPClient(), credentials: summaryCredentials),
+            summaryCredentials: summaryCredentials, renderer: renderer,
+            hasher: CryptoKitHasher(),
             today: { CalendarDay.today(in: timeZone, now: Date()) },
-            readFile: readFile, removeFile: removeFile)
+            readFile: readFile, removeFile: removeFile,
+            folderName: { controller.settings.driveFolderName })
         return AppServices(
             controller: controller, handoff: handoff, pageDrawer: drawer,
-            allowsFingerDrawing: allowsFingerDrawing)
+            allowsFingerDrawing: allowsFingerDrawing, contactPicker: SystemContactPicker(),
+            animates: true, launchRequest: LaunchRequest(.standard))
     }
 
     /// The binder store of a fixture launch: in memory, or with `-MagendaBinderStoreFile <name>`

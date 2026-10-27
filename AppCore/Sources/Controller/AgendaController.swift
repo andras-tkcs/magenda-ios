@@ -261,12 +261,17 @@ public final class AgendaController {
         change(&after)
         settings = after
         settingsStore.save(after)
-        invalidateRendered()
+        var drawnBefore = before
+        drawnBefore.driveFolderName = after.driveFolderName
+        if after != drawnBefore {
+            invalidateRendered()
+        }
         let readsDifferently =
             after.calendarIDs != before.calendarIDs
             || after.todoListTitle != before.todoListTitle
             || after.delegatedListTitle != before.delegatedListTitle
             || after.rules != before.rules
+            || after.summaryRoutines != before.summaryRoutines
         if readsDifferently {
             await load()
         }
@@ -513,7 +518,9 @@ public final class AgendaController {
         }
         let tasks = try await openTasks(in: todoList)
         let delegated = try await openTasks(in: delegatedList)
-        var draft = AgendaBuilder(timeZone: timeZone, rules: settings.rules).draft(
+        let builder = AgendaBuilder(
+            timeZone: timeZone, rules: settings.rules, summaryRoutines: settings.summaryRoutines)
+        var draft = builder.draft(
             for: day, events: events, tasks: tasks, delegated: delegated)
         if todoList == nil {
             draft.notices.append(

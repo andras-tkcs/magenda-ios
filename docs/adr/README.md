@@ -143,3 +143,12 @@ until a later ADR supersedes it.
 | [0033](0033-a-meeting-can-be-sent-before-the-day-ends.md) | A meeting can be sent to the routine before the day ends, as its own PDF and Doc, and its pages are locked afterwards | Accepted |
 | [0034](0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md) | The routine payload moves to `magenda.end-of-day/2` and marks the pages of meetings sent earlier | Accepted |
 | [0035](0035-start-over-is-refused-while-a-meeting-is-sent.md) | Start Over is refused while a meeting of the day is sent, and Reset Hand-off unlocks the pages | Accepted |
+| [0036](0036-finished-days-upload-to-a-drive-folder-named-in-settings.md) | Finished days and meetings sent early upload to a Drive folder named in Settings, and each date stays in the folder its first upload used | Accepted |
+| [0037](0037-people-rules-are-filled-from-the-system-contact-picker.md) | People rules are filled from the system contact picker, which needs no Contacts permission | Accepted |
+| [0038](0038-summaries-are-written-by-dedicated-summary-routines-that-magenda-starts.md) | Summaries are written by dedicated summary routines, one Claude routine and API trigger per kind, chosen with checkboxes and started by Magenda when the notes are approved | Accepted |
+| [0039](0039-a-summary-announces-itself-in-the-doc-with-a-marker-line.md) | A summary announces itself in the Doc with a `Summary ready: <routine ID> <page>` marker line, and Approve summaries closes the day | Accepted |
+| [0040](0040-the-routine-payload-moves-to-schema-3-and-summaries-have-their-own-schema.md) | The routine payload moves to `magenda.end-of-day/3` with steps `notes` and `close`, and summary routines receive `magenda.summary/1` | Accepted |
+| [0041](0041-magenda-is-an-ipad-app.md) | Magenda is an iPad app: the iPhone family and its PDF preview are gone | Accepted |
+| [0042](0042-pull-requests-test-the-newest-ipad-runtime.md) | Pull requests test the newest iPad runtime; the oldest supported runtime is tested weekly and in the release pre-flight | Accepted |
+| [0043](0043-simulator-tests-run-in-four-timed-shards.md) | Simulator tests run as four shards balanced from measured timings, and each shard builds once | Accepted |
+| [0044](0044-ui-tests-start-in-the-screen-they-test.md) | UI tests start in the screen they test, with animations off, through launch arguments that only a fixture launch reads | Accepted |

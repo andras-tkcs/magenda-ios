@@ -73,16 +73,17 @@ struct AgendaContentTests {
         #expect(input.sortedForPage().map(\.text) == ["z", "y", "x", "w"])
     }
 
-    @Test("Content written without task IDs or summary skills still decodes")
+    @Test("Content written without task IDs or summary routines still decodes")
     func legacyJSON() throws {
         let data = try JSONEncoder().encode(AgendaContentFixtures.typical)
         var legacy = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        legacy["meetingSummarySkills"] = nil
+        legacy["meetingSummaryRoutines"] = nil
+        legacy["meetingSummarySkills"] = ["old-skill"]
         let decoded = try JSONDecoder().decode(
             AgendaContent.self, from: JSONSerialization.data(withJSONObject: legacy))
-        #expect(decoded.meetingSummarySkills.isEmpty)
+        #expect(decoded.meetingSummaryRoutines.isEmpty)
         var expected = AgendaContentFixtures.typical
-        expected.meetingSummarySkills = []
+        expected.meetingSummaryRoutines = []
         #expect(decoded == expected)
         let todo = try JSONDecoder().decode(
             TodoItem.self, from: Data(#"{"text":"a","notes":"","due":""}"#.utf8))

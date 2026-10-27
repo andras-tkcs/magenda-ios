@@ -2,7 +2,26 @@ import Foundation
 
 /// How far a finished day has come.
 public enum HandoffStage: String, Codable, Sendable {
-    case queued, uploaded, notesRequested, notesApproved, summaryApproved
+    case queued, uploaded, notesRequested
+    /// Approve notes was tapped and some summary routine has not been started.
+    case summariesPending
+    case summariesRequested, closing
+
+    /// Decodes the raw stage. `notesApproved` and `summaryApproved`, which an earlier build wrote
+    /// once it had started the end-of-day routine's closing steps, read as `.closing`.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        switch raw {
+        case "notesApproved", "summaryApproved": self = .closing
+        default:
+            guard let stage = HandoffStage(rawValue: raw) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container, debugDescription: "Unknown hand-off stage \(raw).")
+            }
+            self = stage
+        }
+    }
 }
 
 /// One page of the PDF, for the routine.
@@ -17,8 +36,8 @@ public struct HandoffPage: Equatable, Codable, Sendable {
     public let eventID: String?
     /// Meeting pages: the meeting-page title.
     public let title: String?
-    /// Meeting pages with a mapped skill: the skill.
-    public let summarySkill: String?
+    /// Meeting pages that ask for summaries: the summary routines; nil when none.
+    public let summaryRoutines: [SummaryRoutine]?
     /// Added pages: the `storageString` of the page they copy.
     public let source: String?
     /// Day runs: the part that already sent this page; the routine must not process it again.
@@ -27,7 +46,7 @@ public struct HandoffPage: Equatable, Codable, Sendable {
     /// Creates a page entry.
     public init(
         page: Int, key: String, calendarID: String? = nil, eventID: String? = nil,
-        title: String? = nil, summarySkill: String? = nil, source: String? = nil,
+        title: String? = nil, summaryRoutines: [SummaryRoutine]? = nil, source: String? = nil,
         earlierPart: Int? = nil
     ) {
         self.page = page
@@ -35,7 +54,7 @@ public struct HandoffPage: Equatable, Codable, Sendable {
         self.calendarID = calendarID
         self.eventID = eventID
         self.title = title
-        self.summarySkill = summarySkill
+        self.summaryRoutines = summaryRoutines
         self.source = source
         self.earlierPart = earlierPart
     }
@@ -52,7 +71,7 @@ public struct HandoffPage: Equatable, Codable, Sendable {
     fileprivate func sent(inPart number: Int) -> HandoffPage {
         HandoffPage(
             page: page, key: key, calendarID: calendarID, eventID: eventID, title: title,
-            summarySkill: summarySkill, source: source, earlierPart: number)
+            summaryRoutines: summaryRoutines, source: source, earlierPart: number)
     }
 }
 
@@ -130,8 +149,7 @@ public struct HandoffPart: Equatable, Codable, Sendable {
 
 /// What the Review list can do with a day.
 public enum HandoffAction: Equatable, Sendable {
-    case retry
-    case approve(RoutineStep)
+    case retry, approveNotes, approveSummaries
 }
 
 /// What the Review list shows for a day.
@@ -141,8 +159,9 @@ public enum HandoffPhase: Equatable, Sendable {
     case waitingToSend
     case notesReady
     case writingNotes
+    case summariesWaitingToSend
+    case writingSummaries
     case summaryReady
-    case working
     case closing
     case meetingClosed
 
@@ -156,8 +175,9 @@ public enum HandoffPhase: Equatable, Sendable {
         case .waitingToSend: "Uploaded, not yet sent to Claude"
         case .notesReady: "Notes ready for review"
         case .writingNotes: "Claude is writing the notes"
-        case .summaryReady: "Summary ready for review"
-        case .working: "Claude is working on the next step"
+        case .summariesWaitingToSend: "Notes approved. Summaries not yet sent to Claude"
+        case .writingSummaries: "Claude is writing the summaries"
+        case .summaryReady: "Summaries ready for review"
         case .closing: "Claude is closing the day"
         case .meetingClosed: "Closed"
         }
@@ -166,10 +186,10 @@ public enum HandoffPhase: Equatable, Sendable {
     /// The button the row offers, if any.
     public var action: HandoffAction? {
         switch self {
-        case .waitingToUpload, .waitingToSend: .retry
-        case .notesReady: .approve(.approveNotes)
-        case .summaryReady: .approve(.approveSummary)
-        case .closed, .meetingClosed, .writingNotes, .working, .closing: nil
+        case .waitingToUpload, .waitingToSend, .summariesWaitingToSend: .retry
+        case .notesReady: .approveNotes
+        case .summaryReady: .approveSummaries
+        case .closed, .meetingClosed, .writingNotes, .writingSummaries, .closing: nil
         }
     }
 }
@@ -201,6 +221,8 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     public var driveFileID: String?
     /// The day's Google Doc.
     public var docID: String?
+    /// The Drive folder holding the PDF and the Doc; set by the first upload.
+    public var folderID: String?
     /// How far the hand-off has come.
     public var stage: HandoffStage
     /// The Doc's status as last read; `.waitingForNotes` until read.
@@ -215,10 +237,15 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     public var sessionURL: URL?
     /// nil for the finished day; the meeting this record covers when it was sent early.
     public let part: HandoffPart?
+    /// The IDs of the summary routines already started for this record.
+    public var firedSummaries: [String]
+    /// The summary markers read from the Doc, each `"<routine ID> <page>"`.
+    public var summaryMarkers: [String]
 
     private enum CodingKeys: String, CodingKey {
-        case version, date, checksum, pages, tasks, delegated, driveFileID, docID, stage, docStatus
-        case closedOn, purged, lastError, sessionURL, part
+        case version, date, checksum, pages, tasks, delegated, driveFileID, docID, folderID, stage
+        case docStatus
+        case closedOn, purged, lastError, sessionURL, part, firedSummaries, summaryMarkers
     }
 
     /// Which hand-off this is.
@@ -262,6 +289,8 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         docStatus = .waitingForNotes
         purged = false
         self.part = part
+        firedSummaries = []
+        summaryMarkers = []
     }
 
     /// Creates a queued hand-off from the PDF's `checksum`, the binder `day` and its `plan`. A
@@ -323,6 +352,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         delegated = try container.decode([HandoffDelegated].self, forKey: .delegated)
         driveFileID = try container.decodeIfPresent(String.self, forKey: .driveFileID)
         docID = try container.decodeIfPresent(String.self, forKey: .docID)
+        folderID = try container.decodeIfPresent(String.self, forKey: .folderID)
         stage = try container.decode(HandoffStage.self, forKey: .stage)
         docStatus = try container.decode(DocStatus.self, forKey: .docStatus)
         closedOn = try container.decodeIfPresent(CalendarDay.self, forKey: .closedOn)
@@ -330,6 +360,37 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
         sessionURL = try container.decodeIfPresent(URL.self, forKey: .sessionURL)
         part = try container.decodeIfPresent(HandoffPart.self, forKey: .part)
+        firedSummaries =
+            try container.decodeIfPresent([String].self, forKey: .firedSummaries) ?? []
+        summaryMarkers =
+            try container.decodeIfPresent([String].self, forKey: .summaryMarkers) ?? []
+    }
+
+    // The summary routines of the pages this record sent itself, each once, in page order; a
+    // page already sent in a part is summarized in that part's record.
+    private var distinctSummaryRoutines: [SummaryRoutine] {
+        var seen = Set<String>()
+        return pages.filter { $0.earlierPart == nil }.flatMap { $0.summaryRoutines ?? [] }
+            .filter { seen.insert($0.id).inserted }
+    }
+
+    /// The distinct summary routine IDs of the pages this record sent itself, in page order.
+    public var summaryRoutineIDs: [String] {
+        distinctSummaryRoutines.map(\.id)
+    }
+
+    /// The summary routines among `summaryRoutineIDs` not yet started, in that order.
+    public var unsentSummaryRoutines: [SummaryRoutine] {
+        distinctSummaryRoutines.filter { !firedSummaries.contains($0.id) }
+    }
+
+    /// Whether every summary routine asked for by a page this record sent itself has written
+    /// its marker for that page; true when none was asked for.
+    public var summariesWritten: Bool {
+        let written = Set(summaryMarkers)
+        return pages.filter { $0.earlierPart == nil }.allSatisfy { page in
+            (page.summaryRoutines ?? []).allSatisfy { written.contains("\($0.id) \(page.page)") }
+        }
     }
 
     /// What the Review list shows.
@@ -344,15 +405,20 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         case (.uploaded, _): return .waitingToSend
         case (.notesRequested, .notesReady): return .notesReady
         case (.notesRequested, _): return .writingNotes
-        case (.notesApproved, .summaryReady): return .summaryReady
-        case (.notesApproved, _): return .working
-        case (.summaryApproved, _): return .closing
+        case (.summariesPending, _):
+            return unsentSummaryRoutines.isEmpty ? summariesPhase : .summariesWaitingToSend
+        case (.summariesRequested, _): return summariesPhase
+        case (.closing, _): return .closing
         }
     }
 
-    /// What the routine receives for `step`: one JSON object with sorted keys. When it would be
-    /// over 65,536 characters it leaves out `tasks` and `delegated` and sets `truncated`; when
-    /// that is still too long it also leaves out every page's `title`, `summarySkill` and `source`.
+    private var summariesPhase: HandoffPhase {
+        summariesWritten ? .summaryReady : .writingSummaries
+    }
+
+    /// What the end-of-day routine receives for `step` (`notes` or `close`): one JSON object with
+    /// sorted keys. When it would be over 65,536 characters it leaves out `tasks` and `delegated` and sets `truncated`; when
+    /// that is still too long it also leaves out every page's `title`, `summaryRoutines` and `source`.
     /// A meeting run has no `tasks` and no `delegated`.
     public func payload(step: RoutineStep) -> String {
         let full = Payload(self, step: step)
@@ -368,7 +434,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         return encode(shortened)
     }
 
-    private func encode(_ payload: Payload) -> String {
+    private func encode(_ payload: some Encodable) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
         // Encoding plain strings, numbers and arrays cannot fail; `compactMap` keeps that
@@ -379,13 +445,14 @@ public struct DayHandoff: Equatable, Codable, Sendable {
 
     /// The JSON the routine receives.
     private struct Payload: Encodable {
-        let schema = "magenda.end-of-day/2"
+        let schema = "magenda.end-of-day/3"
         let scope: String
         let part: Int?
         let step: String
         let date: CalendarDay
         let checksum: String
         let driveFileID: String?
+        let folderID: String?
         let docID: String?
         let pageCount: Int
         var pages: [HandoffPage]
@@ -398,6 +465,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
             date = handoff.date
             checksum = handoff.checksum
             driveFileID = handoff.driveFileID
+            folderID = handoff.folderID
             docID = handoff.docID
             pageCount = handoff.pages.count
             pages = handoff.pages
@@ -405,6 +473,59 @@ public struct DayHandoff: Equatable, Codable, Sendable {
             part = handoff.part?.number
             tasks = handoff.part == nil ? handoff.tasks : nil
             delegated = handoff.part == nil ? handoff.delegated : nil
+        }
+    }
+
+    /// What summary routine `routine` receives: one JSON object with sorted keys, naming the
+    /// meetings of this record that ask for it. Titles are cut to 200 characters.
+    public func summaryPayload(for routine: SummaryRoutine) -> String {
+        encode(SummaryPayload(self, routine: routine))
+    }
+
+    /// The JSON a summary routine receives.
+    private struct SummaryPayload: Encodable {
+        struct Meeting: Encodable {
+            let page: Int
+            let key: String
+            let calendarID: String?
+            let eventID: String?
+            let title: String?
+            let extraPages: [Int]?
+        }
+
+        let schema = "magenda.summary/1"
+        let scope: String
+        let part: Int?
+        let routineID: String
+        let routineName: String
+        let date: CalendarDay
+        let checksum: String
+        let driveFileID: String?
+        let folderID: String?
+        let docID: String?
+        let pageCount: Int
+        let meetings: [Meeting]
+
+        init(_ handoff: DayHandoff, routine: SummaryRoutine) {
+            routineID = routine.id
+            routineName = routine.name
+            date = handoff.date
+            checksum = handoff.checksum
+            driveFileID = handoff.driveFileID
+            folderID = handoff.folderID
+            docID = handoff.docID
+            pageCount = handoff.pages.count
+            scope = handoff.part == nil ? "day" : "meeting"
+            part = handoff.part?.number
+            meetings = handoff.pages.filter {
+                $0.earlierPart == nil && ($0.summaryRoutines ?? []).contains { $0.id == routine.id }
+            }.map { page in
+                let extras = handoff.pages.filter { $0.source == page.key }.map(\.page)
+                return Meeting(
+                    page: page.page, key: page.key, calendarID: page.calendarID,
+                    eventID: page.eventID, title: page.title.map { String($0.prefix(200)) },
+                    extraPages: extras.isEmpty ? nil : extras)
+            }
         }
     }
 
@@ -434,7 +555,7 @@ public struct DayHandoff: Equatable, Codable, Sendable {
             let found = meeting(id, for: page.key, in: day)
             return HandoffPage(
                 page: number, key: key, calendarID: parts?.0, eventID: parts?.1,
-                title: found?.title, summarySkill: found?.skill)
+                title: found?.title, summaryRoutines: found?.routines)
         case .extra:
             let source = day.extras.first { PageKey.extra($0.id) == page.key }?.source
             return HandoffPage(page: number, key: key, source: source?.storageString)
@@ -443,11 +564,11 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         }
     }
 
-    /// The title and summary skill of the meeting page `id`, from the content the page was laid
+    /// The title and summary routines of the meeting page `id`, from the content the page was laid
     /// out from: the day's, else the one retained with the page.
     private static func meeting(
         _ id: String, for key: PageKey, in day: BinderDay
-    ) -> (title: String, skill: String?)? {
+    ) -> (title: String, routines: [SummaryRoutine]?)? {
         let contents = [day.content] + day.retained.filter { $0.key == key }.map(\.content)
         for content in contents {
             guard
@@ -455,10 +576,10 @@ public struct DayHandoff: Equatable, Codable, Sendable {
                     $0 < content.meetingIDs.count ? content.meetingIDs[$0] == id : id == "#\($0)"
                 })
             else { continue }
-            let skill =
-                content.meetingSummarySkills.indices.contains(index)
-                ? content.meetingSummarySkills[index] : ""
-            return (content.meetings[index], skill.isEmpty ? nil : skill)
+            let routines =
+                content.meetingSummaryRoutines.indices.contains(index)
+                ? content.meetingSummaryRoutines[index] : []
+            return (content.meetings[index], routines.isEmpty ? nil : routines)
         }
         return nil
     }

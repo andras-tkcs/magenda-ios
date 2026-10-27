@@ -208,39 +208,60 @@ struct AgendaDraftTests {
         #expect(content.meetings.isEmpty)
     }
 
-    @Test("Content carries task IDs and each meeting's summary skill")
-    func contentIDsAndSkills() {
+    private let recap = SummaryRoutine(id: "id-recap", name: "Recap")
+    private let board = SummaryRoutine(id: "id-board", name: "Board")
+
+    @Test("Content carries task IDs and each meeting's summary routines in the list's order")
+    func contentIDsAndRoutines() {
         var first = event("a", "Sync", slot: 2)
-        first.summarySkill = "s1"
-        let value = draft(
-            events: [first, event("b", "Other", slot: 4)], tasks: [task("t1", "Call")])
+        first.summaryRoutineIDs = ["id-board", "id-gone", "id-recap"]
+        let value = AgendaDraft(
+            date: day, notices: [], titlePrefixes: [],
+            events: [first, event("b", "Other", slot: 4)], tasks: [task("t1", "Call")],
+            delegated: [delegatedTask("d1", "Hire", marked: true), delegatedTask("d2", "Lease")],
+            summaryRoutines: [recap, board])
         let content = value.content()
         #expect(content.todoItems.map(\.taskID) == ["t1"])
         #expect(content.delegated.map(\.taskID) == ["d1", "d2"])
-        #expect(content.meetingSummarySkills == ["s1", ""])
+        #expect(content.meetingSummaryRoutines == [[recap, board], []])
     }
 
-    @Test("A short name that maps to a skill gives the events with that key the skill")
-    func shortNameSkill() {
+    @Test("A short name that maps to routines gives the events with that key the routine IDs")
+    func shortNameRoutines() {
         var value = AgendaDraft(
             date: day, notices: [], titlePrefixes: [],
             events: [event("a", "Team sync", slot: 2, key: "k"), event("b", "Other", slot: 4)],
-            tasks: [], delegated: [], summarySkills: ["Sync": "weekly"])
+            tasks: [], delegated: [], summaryRules: ["Sync": ["id-recap"]],
+            summaryRoutines: [recap])
         value.applyShortName("sync", key: "k")
-        #expect(value.events.map(\.summarySkill) == ["weekly", nil])
+        #expect(value.events.map(\.summaryRoutineIDs) == [["id-recap"], []])
         value.applyShortName("", key: "k")
-        #expect(value.events.map(\.summarySkill) == [nil, nil])
+        #expect(value.events.map(\.summaryRoutineIDs) == [[], []])
     }
 
-    @Test("A title that maps to a skill gives the event the skill")
-    func titleSkill() {
+    @Test("A title that maps to routines gives the event the routine IDs, and a change recomputes")
+    func titleRoutines() {
         var value = AgendaDraft(
             date: day, notices: [], titlePrefixes: [],
             events: [event("a", "Team sync", slot: 2)], tasks: [], delegated: [],
-            summarySkills: ["Sync": "weekly"])
+            summaryRules: ["Sync": ["id-recap", "id-board"]], summaryRoutines: [recap, board])
         value.setTitle("Sync", forEvent: "primary|a")
-        #expect(value.events[0].summarySkill == "weekly")
+        #expect(value.events[0].summaryRoutineIDs == ["id-recap", "id-board"])
+        value.setSummaryRoutineIDs(["id-board"], forEvent: "primary|a")
+        #expect(value.events[0].summaryRoutineIDs == ["id-board"])
         value.setTitle("Elsewhere", forEvent: "primary|a")
-        #expect(value.events[0].summarySkill == nil)
+        #expect(value.events[0].summaryRoutineIDs.isEmpty)
+    }
+
+    @Test("Setting the routine IDs overrides the title's rule and drops unknown IDs")
+    func setRoutineIDs() {
+        var value = AgendaDraft(
+            date: day, notices: [], titlePrefixes: [],
+            events: [event("a", "Sync", slot: 2), event("b", "Other", slot: 4)], tasks: [],
+            delegated: [], summaryRules: ["Sync": ["id-recap"]], summaryRoutines: [recap, board])
+        value.setSummaryRoutineIDs(["id-board", "id-gone"], forEvent: "primary|a")
+        #expect(value.events.map(\.summaryRoutineIDs) == [["id-board"], []])
+        value.setSummaryRoutineIDs([], forEvent: "primary|a")
+        #expect(value.events[0].summaryRoutineIDs.isEmpty)
     }
 }

@@ -1,5 +1,6 @@
 import AppCore
 import SwiftUI
+import UIKit
 
 /// The settings sheet: which calendars and task lists feed the agenda, how the PDF looks, the
 /// Google client and account, and the app's version.
@@ -14,16 +15,29 @@ struct SettingsView: View {
         static let clientIDLabel = "clientIDLabel"
         static let changeClientButton = "changeClientButton"
         static let forgetClientButton = "forgetClientButton"
+        static let driveFolderField = "driveFolderField"
+        static let driveFolderError = "driveFolderError"
+        static let driveFolderFooter = "driveFolderFooter"
         static let routineURLField = "routineURLField"
         static let routineTokenField = "routineTokenField"
         static let saveRoutineButton = "saveRoutineButton"
         static let routineError = "routineError"
         static let routineStatusLabel = "routineStatusLabel"
         static let forgetRoutineButton = "forgetRoutineButton"
+        static let summaryRoutineNameField = "summaryRoutineNameField"
+        static let summaryRoutineURLField = "summaryRoutineURLField"
+        static let summaryRoutineTokenField = "summaryRoutineTokenField"
+        static let saveSummaryRoutineButton = "saveSummaryRoutineButton"
+        static let summaryRoutineError = "summaryRoutineError"
         static let signOutButton = "signOutButton"
         static let version = "version"
         static let settingsDone = "settingsDone"
+        static let form = "settingsForm"
 
+        static func summaryRoutineRow(_ n: Int) -> String { "summaryRoutineRow.\(n)" }
+        static func forgetSummaryRoutineButton(_ n: Int) -> String {
+            "forgetSummaryRoutineButton.\(n)"
+        }
         static func calendarRow(_ n: Int) -> String { "calendarRow.\(n)" }
         static func fontOption(_ pack: FontPack) -> String { "fontOption.\(pack.rawValue)" }
         static func colorField(_ role: ColorRole) -> String { "colorField.\(role.rawValue)" }
@@ -56,6 +70,11 @@ struct SettingsView: View {
         }
     }
 
+    /// A screen pushed inside the settings sheet.
+    enum Route: Hashable {
+        case rules
+    }
+
     let appInfo: AppInfo
 
     @Environment(AgendaController.self) private var controller
@@ -66,27 +85,43 @@ struct SettingsView: View {
     @State private var invalidRoles: Set<ColorRole> = []
     @State private var showsClientSheet = false
     @State private var confirmsForget = false
+    @State private var routineToForget: SummaryRoutine?
+    @State private var folderDraft = ""
+    @State private var folderInvalid = false
     @State private var routineURL = ""
     @State private var routineToken = ""
     @State private var routineSaveFailed = false
+    @State private var summaryRoutineName = ""
+    @State private var summaryRoutineURL = ""
+    @State private var summaryRoutineToken = ""
+    @State private var summaryRoutineError: String?
+    @State private var path: [Route]
+
+    /// Settings, optionally opened with the binder rules already pushed.
+    init(appInfo: AppInfo, opensRules: Bool = false) {
+        self.appInfo = appInfo
+        _path = State(initialValue: opensRules ? [.rules] : [])
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Form {
                 calendarsSection
                 taskListsSection
                 lookSection
                 Section {
-                    NavigationLink("Binder rules") {
-                        RulesView()
-                    }
-                    .accessibilityIdentifier(ID.rulesLink)
+                    NavigationLink("Binder rules", value: Route.rules)
+                        .accessibilityIdentifier(ID.rulesLink)
                 }
                 clientSection
+                driveSection
                 routineSection
+                summaryRoutinesSection
                 accountSection
                 aboutSection
             }
+            .accessibilityIdentifier(ID.form)
+            .navigationDestination(for: Route.self) { _ in RulesView() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -95,7 +130,10 @@ struct SettingsView: View {
                         .accessibilityIdentifier(ID.settingsDone)
                 }
             }
-            .onAppear(perform: resetHexDrafts)
+            .onAppear {
+                resetHexDrafts()
+                folderDraft = controller.settings.driveFolderName
+            }
             .sheet(isPresented: $showsClientSheet) {
                 SetupView(isSheet: true)
             }
@@ -105,6 +143,18 @@ struct SettingsView: View {
             ) {
                 Button("Forget", role: .destructive) {
                     Task { await controller.forgetClientCredentials() }
+                }
+            }
+            .confirmationDialog(
+                "Forget this summary routine? Its token is deleted and every rule drops it.",
+                isPresented: Binding(
+                    get: { routineToForget != nil },
+                    set: { if !$0 { routineToForget = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Forget summary routine", role: .destructive) {
+                    if let routine = routineToForget { forgetSummaryRoutine(routine.id) }
+                    routineToForget = nil
                 }
             }
         }
@@ -316,6 +366,40 @@ struct SettingsView: View {
         }
     }
 
+    private var driveSection: some View {
+        Section {
+            TextField("Folder name", text: $folderDraft)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .onSubmit(commitFolder)
+                .onChange(of: folderDraft) { folderInvalid = false }
+                .accessibilityIdentifier(ID.driveFolderField)
+            if folderInvalid {
+                Text(DriveFolderName.invalidMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier(ID.driveFolderError)
+            }
+        } header: {
+            Text("Google Drive")
+        } footer: {
+            Text(
+                "Finished days upload to the “\(controller.settings.driveFolderName)” folder in your Google Drive, which Magenda creates. A new name makes a new folder; days already uploaded stay where they are."
+            )
+            .accessibilityIdentifier(ID.driveFolderFooter)
+        }
+    }
+
+    private func commitFolder() {
+        guard let name = DriveFolderName.validated(folderDraft) else {
+            folderInvalid = true
+            return
+        }
+        folderInvalid = false
+        folderDraft = name
+        Task { await controller.updateSettings { $0.driveFolderName = name } }
+    }
+
     @ViewBuilder
     private var routineSection: some View {
         if let triggerID = handoff.routineTriggerID {
@@ -350,13 +434,18 @@ struct SettingsView: View {
                 Text("End-of-day routine")
             } footer: {
                 Text(
-                    "Finished days upload to Google Drive. To send them to Claude, add the API trigger of your end-of-day routine from claude.ai/code/routines."
+                    "Finished days upload to Google Drive (see above). To send them to Claude, add the API trigger of your end-of-day routine from claude.ai/code/routines."
                 )
             }
         }
     }
 
     private func saveRoutine() {
+        // A saved routine swaps these fields for its status row. The keyboard goes first, so the
+        // focused field is never removed from under it and the form does not shrink while the
+        // keyboard's inset is still changing.
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         if handoff.saveRoutine(fireURL: routineURL, token: routineToken) {
             routineURL = ""
             routineToken = ""
@@ -364,6 +453,81 @@ struct SettingsView: View {
         } else {
             routineSaveFailed = true
         }
+    }
+
+    // MARK: Summary routines
+
+    private var summaryRoutinesSection: some View {
+        Section {
+            let routines = controller.settings.summaryRoutines
+            ForEach(Array(routines.enumerated()), id: \.element.id) { index, routine in
+                HStack {
+                    Text(routine.name)
+                        .accessibilityIdentifier(ID.summaryRoutineRow(index))
+                    Spacer()
+                    Button("Forget", role: .destructive) { routineToForget = routine }
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier(ID.forgetSummaryRoutineButton(index))
+                }
+            }
+            TextField("Name", text: $summaryRoutineName)
+                .autocorrectionDisabled()
+                .onChange(of: summaryRoutineName) { summaryRoutineError = nil }
+                .accessibilityIdentifier(ID.summaryRoutineNameField)
+            TextField("Fire URL", text: $summaryRoutineURL)
+                .keyboardType(.URL)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onChange(of: summaryRoutineURL) { summaryRoutineError = nil }
+                .accessibilityIdentifier(ID.summaryRoutineURLField)
+            SecureField("Token", text: $summaryRoutineToken)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onChange(of: summaryRoutineToken) { summaryRoutineError = nil }
+                .accessibilityIdentifier(ID.summaryRoutineTokenField)
+            if let summaryRoutineError {
+                Text(summaryRoutineError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier(ID.summaryRoutineError)
+            }
+            Button("Save", action: saveSummaryRoutine)
+                .accessibilityIdentifier(ID.saveSummaryRoutineButton)
+        } header: {
+            Text("Summary routines")
+        } footer: {
+            Text(
+                "Each summary is written by its own Claude routine with its own API trigger. Create it at claude.ai/code/routines, give it only the access that summary needs, and add its trigger here. Saving a name that already exists replaces that routine's URL and token."
+            )
+        }
+    }
+
+    private func forgetSummaryRoutine(_ id: String) {
+        handoff.forgetSummaryRoutine(id: id)
+        Task { await controller.updateSettings { $0.removeSummaryRoutine(id: id) } }
+    }
+
+    private func saveSummaryRoutine() {
+        guard let name = SummaryRoutine.validatedName(summaryRoutineName) else {
+            summaryRoutineError = SummaryRoutine.invalidNameMessage
+            return
+        }
+        let existing = controller.settings.summaryRoutine(named: name)
+        guard
+            let routine = handoff.saveSummaryRoutine(
+                name: existing?.name ?? name, fireURL: summaryRoutineURL,
+                token: summaryRoutineToken, id: existing?.id ?? SummaryRoutine.makeID())
+        else {
+            summaryRoutineError = handoff.message
+            return
+        }
+        if existing == nil {
+            Task { await controller.updateSettings { $0.summaryRoutines.append(routine) } }
+        }
+        summaryRoutineName = ""
+        summaryRoutineURL = ""
+        summaryRoutineToken = ""
+        summaryRoutineError = nil
     }
 
     private var accountSection: some View {

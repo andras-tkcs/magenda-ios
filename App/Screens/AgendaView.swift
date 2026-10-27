@@ -1,9 +1,8 @@
 import AppCore
 import SwiftUI
-import UIKit
 
-/// The agenda screen: the review list beside the binder on iPad or the PDF preview on iPhone,
-/// with the controller's state behind both.
+/// The agenda screen: the review list beside the binder, with the controller's state
+/// behind both.
 struct AgendaView: View {
     /// The accessibility identifiers UI tests find elements by.
     enum ID {
@@ -22,9 +21,15 @@ struct AgendaView: View {
         static let errorMessage = "errorMessage"
         static let retryButton = "retryButton"
         static let previewPlaceholder = "previewPlaceholder"
-        static let pdfPreview = "pdfPreview"
 
         static func notice(_ n: Int) -> String { "notice.\(n)" }
+    }
+
+    /// What the settings sheet opens on.
+    private enum SettingsSheet: Identifiable {
+        case settings, rules
+
+        var id: Self { self }
     }
 
     let appInfo: AppInfo
@@ -33,7 +38,8 @@ struct AgendaView: View {
 
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var preferredColumn = NavigationSplitViewColumn.sidebar
-    @State private var showsSettings = false
+    @State private var settingsSheet: SettingsSheet?
+    @Environment(\.launchRequest) private var launchRequest
     @State private var showsReview = false
     @State private var editing: EditTarget?
     @State private var confirmsStartOver = false
@@ -68,8 +74,14 @@ struct AgendaView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
-        .sheet(isPresented: $showsSettings) {
-            SettingsView(appInfo: appInfo)
+        .task {
+            guard let screen = launchRequest?.take() else { return }
+            settingsSheet = screen == .rules ? .rules : .settings
+        }
+        // The sheet is an item, not a flag beside a second state, so its content gets the screen
+        // to open on as an argument instead of reading state the body never read.
+        .sheet(item: $settingsSheet) { sheet in
+            SettingsView(appInfo: appInfo, opensRules: sheet == .rules)
         }
         .sheet(isPresented: $showsReview) {
             ReviewView()
@@ -95,7 +107,7 @@ struct AgendaView: View {
             }
         }
         // A second render of an unchanged day yields an equal `rendered`, so the change above does
-        // not fire; the end of the render itself brings the preview forward on a phone.
+        // not fire; the end of the render itself brings the binder forward in a compact layout.
         .onChange(of: controller.status) { old, new in
             if old == .rendering, new == .ready, controller.rendered != nil {
                 preferredColumn = .detail
@@ -113,7 +125,9 @@ struct AgendaView: View {
         case .event(let id):
             if let event = controller.draft?.events.first(where: { $0.id == id }) {
                 EditTextSheet(
-                    target: target, text: event.title, originalTitle: event.originalTitle)
+                    target: target, text: event.title, originalTitle: event.originalTitle,
+                    summaryRoutines: controller.settings.summaryRoutines,
+                    selectedRoutineIDs: event.summaryRoutineIDs)
             }
         case .task(let id):
             if let task = controller.draft?.tasks.first(where: { $0.id == id }) {
@@ -211,23 +225,13 @@ struct AgendaView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            if let binder = controller.binder {
-                BinderView(binder: binder)
-                    .id(ObjectIdentifier(binder))
-            } else {
-                ContentUnavailableView(
-                    "No binder yet", systemImage: "doc.richtext",
-                    description: Text("Tap Render to start the day's binder.")
-                )
-                .accessibilityIdentifier(ID.previewPlaceholder)
-            }
-        } else if let rendered = controller.rendered {
-            PreviewView(rendered: rendered)
+        if let binder = controller.binder {
+            BinderView(binder: binder)
+                .id(ObjectIdentifier(binder))
         } else {
             ContentUnavailableView(
-                "No PDF yet", systemImage: "doc.richtext",
-                description: Text("Tap Render to see the agenda.")
+                "No binder yet", systemImage: "doc.richtext",
+                description: Text("Tap Render to start the day's binder.")
             )
             .accessibilityIdentifier(ID.previewPlaceholder)
         }
@@ -235,7 +239,7 @@ struct AgendaView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        if UIDevice.current.userInterfaceIdiom == .pad, controller.binder != nil {
+        if controller.binder != nil {
             ToolbarItem(placement: .primaryAction) {
                 Button("Start Over", systemImage: "arrow.counterclockwise") {
                     confirmsStartOver = true
@@ -254,7 +258,7 @@ struct AgendaView: View {
         }
         ToolbarItem(placement: .topBarLeading) {
             Button {
-                showsSettings = true
+                settingsSheet = .settings
             } label: {
                 Image(systemName: "gearshape")
             }

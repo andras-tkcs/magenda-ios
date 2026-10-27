@@ -90,16 +90,16 @@ struct ReviewView: View {
     private static func title(of action: HandoffAction) -> String {
         switch action {
         case .retry: "Try again"
-        case .approve(.approveNotes): "Approve notes"
-        case .approve: "Approve"
+        case .approveNotes: "Approve notes"
+        case .approveSummaries: "Approve summaries"
         }
     }
 
     private static func spokenTitle(of action: HandoffAction, on day: String) -> String {
         switch action {
         case .retry: return "Try again for \(day)"
-        case .approve(.approveNotes): return "Approve the notes for \(day)"
-        case .approve: return "Approve the summary for \(day)"
+        case .approveNotes: return "Approve the notes for \(day)"
+        case .approveSummaries: return "Approve the summaries for \(day)"
         }
     }
 }

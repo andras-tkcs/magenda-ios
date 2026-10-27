@@ -4,6 +4,7 @@
 
 Accepted — 2026-10-24. Implemented.
 Amended by [ADR 0034](0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md): the payload schema.
+Amended by [ADR 0038](0038-summaries-are-written-by-dedicated-summary-routines-that-magenda-starts.md) and [ADR 0040](0040-the-routine-payload-moves-to-schema-3-and-summaries-have-their-own-schema.md): several routines, and the schema moved to 3.
 
 ## Context
 

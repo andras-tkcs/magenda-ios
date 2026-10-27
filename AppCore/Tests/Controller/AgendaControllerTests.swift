@@ -569,6 +569,33 @@ struct AgendaControllerTests {
         #expect(texts == ["Send the slides", "Call the bank"])
     }
 
+    @Test("a routine added in settings reloads the day and reaches the draft's events")
+    func summaryRoutinesReachDraft() async throws {
+        let id = "0f8fad5b-d9cb-469f-a165-70867728950e"
+        let routine = SummaryRoutine(id: id, name: "Notes")
+        var settings = AgendaSettings()
+        settings.rules.summaryRoutines = ["Team sync": [id]]
+        let counting = CountingDataSource(FixtureGoogleDataSource(.standard))
+        let context = try make(data: counting, settings: settings)
+        await context.controller.start()
+        #expect(await counting.loads == 1)
+        #expect(context.controller.draft?.summaryRoutines == [])
+
+        await context.controller.updateSettings { $0.summaryRoutines = [routine] }
+        #expect(await counting.loads == 2)
+        #expect(context.controller.draft?.summaryRoutines == [routine])
+        #expect(
+            context.controller.draft?.events.first { $0.originalTitle == "Team sync" }?
+                .summaryRoutineIDs == [id])
+
+        await context.controller.updateSettings { $0.removeSummaryRoutine(id: id) }
+        #expect(await counting.loads == 3)
+        #expect(context.controller.draft?.summaryRoutines == [])
+        #expect(
+            context.controller.draft?.events.first { $0.originalTitle == "Team sync" }?
+                .summaryRoutineIDs == [])
+    }
+
     @Test("a short name retitles every event sharing the key, without reloading")
     func shortName() async throws {
         let counting = CountingDataSource(FixtureGoogleDataSource(.standard))
@@ -598,6 +625,15 @@ struct AgendaControllerTests {
         context.controller.saveShortName("Summit", forEvent: "primary|nope")
         #expect(context.controller.settings.rules.shortNames.isEmpty)
         #expect(context.settingsStore.load().rules.shortNames.isEmpty)
+    }
+
+    @Test("changing only the Drive folder keeps the rendered PDF")
+    func driveFolderKeepsRendered() async throws {
+        let context = try await started(.standard)
+        await context.controller.render()
+        await context.controller.updateSettings { $0.driveFolderName = "Work notes" }
+        #expect(context.controller.rendered != nil)
+        #expect(context.settingsStore.load().driveFolderName == "Work notes")
     }
 
     @Test("edits to the draft and the settings clear the rendered PDF")

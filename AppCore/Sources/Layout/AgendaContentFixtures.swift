@@ -61,9 +61,14 @@ public enum AgendaContentFixtures {
                     longStrings[index], longStrings[(index + 1) % 7], longStrings[(index + 2) % 7],
                 ])
         },
-        // A longest valid skill name on the first meeting, none on the rest.
-        meetingSummarySkills: [String(String(repeating: "board-summary-", count: 5).prefix(64))]
-            + Array(repeating: "", count: 5))
+        // A longest valid routine name on the first meeting, none on the rest.
+        meetingSummaryRoutines: [
+            [
+                SummaryRoutine(
+                    id: "11111111-1111-4111-8111-111111111111",
+                    name: String(String(repeating: "Board summary ", count: 4).prefix(40)))
+            ]
+        ])
 
     /// Far more than fits: to-dos past the grid, a full schedule, many meetings, many delegated
     /// pages.

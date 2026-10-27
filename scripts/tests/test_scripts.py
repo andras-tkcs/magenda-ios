@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -236,8 +237,18 @@ class TestSimulator(unittest.TestCase):
         device, _ = simulator.choose(self.DEVICES, minimum=(18, 0), **kwargs)
         return device["udid"]
 
-    def test_newest_iphone_by_default(self) -> None:
+    def test_newest_iphone(self) -> None:
         self.assertEqual(self._udid(family="iphone", runtime="newest"), "NEW-PHONE")
+
+    def test_main_picks_an_ipad_by_default(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as listing:
+            listing.write(json.dumps({"devices": self.DEVICES}))
+            listing.flush()
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                status = simulator.main(["--devices-json", listing.name])
+        self.assertEqual(status, 0)
+        self.assertEqual(out.getvalue(), "id=NEW-PAD\n")
 
     def test_ipad_family(self) -> None:
         self.assertEqual(self._udid(family="ipad", runtime="newest"), "NEW-PAD")

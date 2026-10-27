@@ -17,6 +17,8 @@ A check stays manual only when automation cannot reliably decide pass or fail:
 - real Google sign-in and real account data, which CI has no account for (ADR 0013): sign in with
   your own client, render a day and share it (on iPad, from the binder), and finish a day to Drive
   and the end-of-day routine (ADR 0027, ADR 0028);
+- the system contact picker behind Choose from Contacts, which runs out of process and is replaced
+  by a fixture in the UI tests (ADR 0037);
 - handwriting with a real Apple Pencil on an iPad (pressure, palm rejection), which the simulator
   does not have;
 - the comparison of the app's agenda with a binder built by the old Claude workflow while that
@@ -40,8 +42,7 @@ because a release is being cut.
 
 ## Human checks
 
-With the release candidate installed from TestFlight on a real iPhone (and an iPad if the app
-supports it):
+With the release candidate installed from TestFlight on a real iPad:
 
 - [ ] The app launches, shows the version and build number TestFlight lists, and every screen
       changed in this release works.
@@ -59,8 +60,9 @@ supports it):
 - [ ] With a real Google account and a real routine, on an iPad: sign in again if asked, enter the
       routine's fire URL and token in Settings, write on a day, tap Finish Day, and the PDF and the
       notes Doc appear in the Drive folder `Magenda`. In Review, wait for "Notes ready for review",
-      open the Doc, tap Approve notes (and Approve if a summary is asked for), and the row ends as
-      "Closed. Handwriting is deleted on …" (ADR 0027 to ADR 0030).
+      open the Doc, tap Approve notes, then Approve summaries when a summary routine was ticked for a
+      meeting (check that the Doc holds a `Summary ready:` marker section first), and the row ends
+      as "Closed. Handwriting is deleted on …" (ADR 0027 to ADR 0030, ADR 0038 to ADR 0040).
 - [ ] With a real routine updated to schema 2, on an iPad: tap Send Meeting on a meeting page and
       confirm. The page shows "Sent to Claude" and can't be written on, Start Over is disabled, and
       Review has a row for the meeting that reaches "Closed". Then tap Finish Day, and the day's notes

@@ -75,9 +75,9 @@ public enum EventSelection {
                     attendeeFirstNames: others.map(firstName),
                     isIncluded: exclusion == nil,
                     includesMeetingPage: exclusion == nil && !others.isEmpty,
-                    summarySkill: SummarySkill.skill(
+                    summaryRoutineIDs: SummaryRoutines.routineIDs(
                         pageTitle: title, originalTitle: candidate.title,
-                        skills: rules.summarySkills)))
+                        rules: rules.summaryRoutines)))
         }
         return result
     }

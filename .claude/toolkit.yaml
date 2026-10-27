@@ -42,7 +42,7 @@ verify:
       skip_when_narrowed: true
   dod_conditional:
     - when: [project.yml]
-      do: "`xcodegen generate` succeeds and the app builds (an `app` job of tests.yml is green on this commit); a new target is in the scheme's build and test lists; a changed build setting has a comment saying why."
+      do: "`xcodegen generate` succeeds and the app builds (the four `ui (ipad, newest, N)` jobs of tests.yml are green on this commit); a new target is in the scheme's build and test lists; a changed build setting has a comment saying why."
     - when: ["App/PrivacyInfo.xcprivacy", "**/*.entitlements", project.yml]
       do: "If permissions, entitlements, an INFOPLIST_KEY_NS*UsageDescription or the privacy manifest changed: the purpose string is written for the user, and the changed App Store Connect privacy answers are listed as a manual_after item / in the PR's Manual verification."
     - when: [AppCore/Package.swift]
@@ -62,8 +62,8 @@ verify:
 ci:
   dispatchable:
     - workflow: tests.yml
-      use_when: "swift test, the coverage floor or swift format with no Swift toolchain in the container (read the core and lint jobs); the app build and hosted app tests on iPhone and iPad simulators (read the three app (...) jobs), and the UI tests in three shards per device (read the nine ui (...) jobs)."
-      notes: "Must be on main to be dispatchable; push the branch first. The macOS app and ui jobs take 10-20 minutes; re-run a failed ui job on its own."
+      use_when: "swift test, the coverage floor or swift format with no Swift toolchain in the container (read the core and lint jobs); the app build, the hosted tests and the UI tests on the newest iPad simulator, in four shards (read the four ui (ipad, newest, N) jobs)."
+      notes: "Must be on main to be dispatchable; push the branch first. The macOS ui jobs take 10 to 25 minutes (about 21 on a typical runner); re-run a failed ui job on its own."
     - workflow: build.yml
       use_when: "A Release archive with a version stamped in, e.g. after changing AppCore/Package.swift dependencies or as the release pre-flight."
       notes: "No inputs. Off a tag it archives unsigned and uploads nothing."

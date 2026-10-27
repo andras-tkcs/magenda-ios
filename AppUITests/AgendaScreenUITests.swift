@@ -3,27 +3,11 @@
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `AgendaView.ID` and
 // `RowID`, never by their visible text; text is only read to check what a row says.
 
-import UIKit
 import XCTest
 
 final class AgendaScreenUITests: XCTestCase {
-    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
-    @MainActor private static var previewID: String {
-        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
-    }
-
-    @MainActor
-    private func launch(_ fixture: String) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", fixture]
-        app.launch()
-        return app
-    }
-
-    @MainActor
-    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier]
-    }
+    /// What a render shows.
+    private static let previewID = "binderView"
 
     /// Drags the list up until `element` exists, at most 40 times.
     @MainActor
@@ -39,8 +23,8 @@ final class AgendaScreenUITests: XCTestCase {
 
     @MainActor
     func testStandardDayListsEveryRowWithItsReason() {
-        let app = launch("standard")
-        XCTAssertTrue(element(app, "agendaScreen").waitForExistence(timeout: 30))
+        let app = XCUIApplication.launchMagenda()
+        XCTAssertTrue(app.element("agendaScreen").waitForExistence(timeout: 30))
 
         // Rows are created lazily, so the list is scrolled down one row at a time.
         let checks: [(String, String?, String?)] = [
@@ -63,34 +47,34 @@ final class AgendaScreenUITests: XCTestCase {
             ("delegatedRow.1", nil, nil),
             ("delegatedRow.2", nil, nil),
         ]
-        let list = element(app, "agendaScreen")
+        let list = app.element("agendaScreen")
         for (row, reason, text) in checks {
-            scrollToExist(element(app, row), in: list)
-            XCTAssertTrue(element(app, row).exists, "\(row) is missing")
+            scrollToExist(app.element(row), in: list)
+            XCTAssertTrue(app.element(row).exists, "\(row) is missing")
             if let reason, let text {
-                scrollToExist(element(app, reason), in: list)
-                XCTAssertTrue(element(app, reason).exists, "\(reason) is missing")
+                scrollToExist(app.element(reason), in: list)
+                XCTAssertTrue(app.element(reason).exists, "\(reason) is missing")
                 XCTAssertTrue(
-                    element(app, reason).label.contains(text), "\(reason) doesn't say \(text)")
+                    app.element(reason).label.contains(text), "\(reason) doesn't say \(text)")
             }
         }
-        XCTAssertFalse(element(app, "delegatedMarked.1").exists)
+        XCTAssertFalse(app.element("delegatedMarked.1").exists)
     }
 
     @MainActor
     func testTurningAnEventOffRemovesItsNotesPageSwitch() {
-        let app = launch("standard")
-        XCTAssertTrue(element(app, "eventRow.1").waitForExistence(timeout: 30))
-        XCTAssertTrue(element(app, "eventPageToggle.1").exists)
-        XCTAssertFalse(element(app, "eventPageToggle.0").exists)
+        let app = XCUIApplication.launchMagenda()
+        XCTAssertTrue(app.element("eventRow.1").waitForExistence(timeout: 30))
+        XCTAssertTrue(app.element("eventPageToggle.1").exists)
+        XCTAssertFalse(app.element("eventPageToggle.0").exists)
 
         // The tap goes to the system switch inside the toggle. On an iPad simulator a synthesized
         // tap in the split view's sidebar is sometimes dropped, so the switch is tapped again
         // while the event is still included (the notes-page switch only exists then).
-        let page = element(app, "eventPageToggle.1")
+        let page = app.element("eventPageToggle.1")
         var taps = 0
         while page.exists && taps < 5 {
-            element(app, "eventToggle.1").switches.firstMatch.tap()
+            app.element("eventToggle.1").switches.firstMatch.tap()
             taps += 1
             _ = page.waitForNonExistence(timeout: 3)
         }
@@ -99,7 +83,7 @@ final class AgendaScreenUITests: XCTestCase {
 
     @MainActor
     func testNextDayChangesTheDatePicker() {
-        let app = launch("standard")
+        let app = XCUIApplication.launchMagenda()
         let picker = app.datePickers["datePicker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 30), "the date picker never appeared")
         // The picker exists a moment before its button carries the date.
@@ -124,29 +108,25 @@ final class AgendaScreenUITests: XCTestCase {
 
     @MainActor
     func testOutOfOfficeShowsANoticeAndTheNextWorkingDayButton() {
-        let app = launch("outOfOffice")
-        XCTAssertTrue(element(app, "notice.0").waitForExistence(timeout: 30), "no notice shown")
-        XCTAssertTrue(element(app, "nextWorkingDayButton").exists)
+        let app = XCUIApplication.launchMagenda(fixture: "outOfOffice")
+        XCTAssertTrue(app.element("notice.0").waitForExistence(timeout: 30), "no notice shown")
+        XCTAssertTrue(app.element("nextWorkingDayButton").exists)
     }
 
     @MainActor
     func testRenderShowsThePreview() {
-        let app = launch("standard")
+        let app = XCUIApplication.launchMagenda()
         let render = app.buttons["renderButton"]
         XCTAssertTrue(render.waitForExistence(timeout: 30), "the Render button never appeared")
-        XCTAssertTrue(element(app, "eventRow.0").waitForExistence(timeout: 30))
+        XCTAssertTrue(app.element("eventRow.0").waitForExistence(timeout: 30))
         render.tap()
 
         XCTAssertTrue(
-            element(app, Self.previewID).waitForExistence(timeout: 30),
+            app.element(Self.previewID).waitForExistence(timeout: 30),
             "the preview never appeared")
         // The list's first row stands for the list: XCUITest never reports a List itself as
         // hittable once the centre of its frame lands on one of its rows, on any device.
-        let row = element(app, "eventRow.0")
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            XCTAssertTrue(row.isHittable, "the list is hidden beside the preview on iPad")
-        } else {
-            XCTAssertFalse(row.isHittable, "the list is still in front of the preview on iPhone")
-        }
+        let row = app.element("eventRow.0")
+        XCTAssertTrue(row.isHittable, "the list is hidden beside the preview on iPad")
     }
 }

@@ -2,9 +2,8 @@
 
 An iPad-first app that builds the daily binder from Google Calendar and Google Tasks. Sign in with
 Google, pick a day, review what the app selected and why, untick or edit anything and render the
-agenda as a PDF. On iPad the day opens as a binder you write in with Apple Pencil; on iPhone the
-app previews the PDF. The PDF can be shared anywhere. The rules are fixed and editable, and no AI
-is involved (ADR 0016).
+agenda as a PDF. The day opens as a binder you write in with Apple Pencil. The PDF can be shared
+anywhere. The rules are fixed and editable, and no AI is involved (ADR 0016).
 
 ## What goes on the agenda
 
@@ -46,7 +45,8 @@ none is chosen)
   look-ahead (5 days by default; Settings → Binder rules → Look-ahead, 0 to 14), each by due date.
 - A look-ahead task titled "Name – to be discussed" (or "TBD") is kept only when that person is
   invited to an included meeting that day. A name that differs from the attendee's first name is
-  matched under Settings → Binder rules → People. Otherwise it is listed unticked with the reason.
+  matched under Settings → Binder rules → People, where you can type a
+  name and email or choose them from Contacts. Otherwise it is listed unticked with the reason.
 - A task's notes take one line; a task that does not fit the list is left off the PDF and listed in
   a banner under the preview (on iPad, under the binder's toolbar).
 
@@ -65,16 +65,16 @@ shares the day with your handwriting on its pages.
 Handwriting is saved on the device per page. Rendering the day again keeps it on its page, and a
 meeting page you wrote on stays even when the meeting has left the agenda. Start over, in the
 agenda's toolbar, deletes all of the day's handwriting and added pages after asking, and renders
-the day fresh; it is refused while a meeting of the day is sent (ADR 0035). Once a day is started, it opens without a network connection. The iPhone shows the
-PDF preview (ADR 0020, ADR 0021, ADR 0024 to ADR 0026). The saved binder and the shared PDFs can't
-be read while the device is locked (ADR 0022).
+the day fresh; it is refused while a meeting of the day is sent (ADR 0035). Once a day is started, it
+opens without a network connection (ADR 0020, ADR 0021, ADR 0024 to ADR 0026). The saved binder and
+the shared PDFs can't be read while the device is locked (ADR 0022).
 
 ## Finishing a day
 
 On an iPad, **Finish Day** in the binder's toolbar sends the day to Google Drive and starts your
 end-of-day Claude routine (ADR 0027, ADR 0028). Magenda renders the day once, with the printed
 text kept as text and your handwriting on top, and uploads it as `Magenda <date>.pdf` to a
-`Magenda` folder in your Drive. Next to it, it creates a Google Doc named `Magenda <date> notes`
+folder in your Drive, `Magenda` unless you rename it in Settings → Google Drive (ADR 0036). Next to it, it creates a Google Doc named `Magenda <date> notes`
 whose first line is the day's status. Magenda sees only the files it created. A day finished
 without a connection waits and is sent the next time the app becomes active; finishing a day again
 before it was sent replaces its PDF. **Reset Hand-off**, after a confirmation, forgets that a day was sent so you can finish it again (ADR 0032); the earlier PDF and Doc stay in Drive.
@@ -91,13 +91,16 @@ what it must do with the day, are described in
 The **Review** button in the agenda's toolbar opens the list of finished days (ADR 0029). Each row
 shows the day's state, an error if the last step failed, **Open Doc** to read and edit the notes in
 Google Docs, and the one button the state calls for: Try again (not yet uploaded or sent), Approve
-notes (the notes are ready) or Approve (the summary is ready). Each approval starts the routine's
-next step, which changes the Doc's first line (`Status: …`); Magenda reads only that line.
+notes (the notes are ready) or Approve summaries (every asked-for summary is in the Doc). Approving
+the notes starts the summary routines, or closes the day when none was asked for; Approve summaries
+closes it. Magenda reads the Doc's first line (`Status: …`) and the `Summary ready:` marker lines
+the summary routines append (ADR 0039).
 
-A meeting that needs a summary names the Claude skill that writes it (ADR 0031). Map a meeting
-title to a skill under Settings → Binder rules → Meeting summaries, or write the skill name by hand
-on the ruled **Summary:** line that every meeting page prints under its title. A mapped skill is
-printed on the line.
+Each kind of summary is written by its own Claude routine (ADR 0038). Add each one under Settings →
+Summary routines with a name and the fire URL and token of its API trigger; the token stays in the
+Keychain. Then tick which meetings get it, by meeting title under Settings → Binder rules → Meeting
+summaries or for one meeting on its Edit sheet. The meeting page prints the ticked routines' names
+after **Summary:**. Magenda starts each ticked routine once, when the notes are approved.
 
 Five days after Magenda first reads `Status: Closed`, it deletes that day's handwriting and its
 stored PDF from the device (ADR 0030). A small record of the day stays, so the day can't be sent

@@ -20,8 +20,8 @@ public struct AgendaLayout: Sendable {
         pages += meetingTitles(of: content).enumerated().map { index, title in
             meetingPage(
                 title: title, key: meetingKey(at: index, in: content),
-                skill: content.meetingSummarySkills.indices.contains(index)
-                    ? content.meetingSummarySkills[index] : "")
+                routines: content.meetingSummaryRoutines.indices.contains(index)
+                    ? content.meetingSummaryRoutines[index] : [])
         }
         pages.append(furtherNotesPage())
         let header = headerOperations(for: content.date)
@@ -169,17 +169,18 @@ public struct AgendaLayout: Sendable {
             + page.operations[end...]
     }
 
-    private func meetingPage(title: String, key: PageKey, skill: String) -> PagePlan {
+    private func meetingPage(title: String, key: PageKey, routines: [SummaryRoutine]) -> PagePlan {
         let label = labelRuns(of: slots(on: "meeting_unit"))
         return PagePlan(
             key: key, chrome: .meeting,
             operations: (label + meetingTitleRuns(title)).map { .text($0) }
-                + meetingSummaryOperations(skill: skill))
+                + meetingSummaryOperations(routines: routines))
     }
 
-    /// The "Summary:" label and, after it, the meeting's skill name, or a ruled line to write one on.
-    func meetingSummaryOperations(skill: String) -> [DrawOperation] {
-        guard let slot = manifest.slot("meeting.label") else { return [] }
+    /// The "Summary:" label and, after it, the names of the meeting's summary routines joined with
+    /// ", "; nothing when the meeting asks for none.
+    func meetingSummaryOperations(routines: [SummaryRoutine]) -> [DrawOperation] {
+        guard !routines.isEmpty, let slot = manifest.slot("meeting.label") else { return [] }
         let font = FontSpec.nominal(
             theme.fontPack, slot.weight, TemplateGeometry.meetingSummaryPoints)
         let color = color(for: slot)
@@ -188,23 +189,14 @@ public struct AgendaLayout: Sendable {
             ["Summary:"], font: font, color: color, in: box, container: box, alignment: .left)
         guard let label = labelText.first else { return [] }
         let start = label.x + label.width + TemplateGeometry.meetingSummaryGap
-        var operations = labelText.map { DrawOperation.text($0) }
-        if skill.isEmpty {
-            let y = TemplateGeometry.meetingSummaryRuleY
-            operations.append(
-                .line(
-                    from: PlanPoint(x: start, y: y),
-                    to: PlanPoint(x: TemplateGeometry.meetingTitleRight, y: y),
-                    TemplateGeometry.todoLineColor, lineWidth: 0.5))
-        } else {
-            let skillBox = PlanRect(
-                x0: start, y0: box.y0, x1: TemplateGeometry.meetingTitleRight, y1: box.y1)
-            operations += placer.place(
-                [fitter.singleLine(skill, font: font, maxWidth: skillBox.x1 - skillBox.x0)],
-                font: font, color: color, in: skillBox, container: skillBox, alignment: .left
+        let namesBox = PlanRect(
+            x0: start, y0: box.y0, x1: TemplateGeometry.meetingTitleRight, y1: box.y1)
+        let names = routines.map(\.name).joined(separator: ", ")
+        return labelText.map { DrawOperation.text($0) }
+            + placer.place(
+                [fitter.singleLine(names, font: font, maxWidth: namesBox.x1 - namesBox.x0)],
+                font: font, color: color, in: namesBox, container: namesBox, alignment: .left
             ).map { .text($0) }
-        }
-        return operations
     }
 
     private func furtherNotesPage() -> PagePlan {

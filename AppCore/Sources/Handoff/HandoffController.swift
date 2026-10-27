@@ -20,33 +20,42 @@ public final class HandoffController {
     @ObservationIgnored private let drive: any DriveFiling
     @ObservationIgnored private let trigger: any RoutineFiring
     @ObservationIgnored private let routineCredentials: any RoutineCredentialsStore
+    @ObservationIgnored private let summaryTrigger: any SummaryRoutineFiring
+    @ObservationIgnored private let summaryCredentials: any SummaryRoutineCredentialsStore
     @ObservationIgnored private let renderer: any AgendaRendering
     @ObservationIgnored private let hasher: any SHA256Hashing
     @ObservationIgnored private let today: @Sendable () -> CalendarDay
     @ObservationIgnored private let readFile: @Sendable (URL) throws -> Data
     @ObservationIgnored private let removeFile: @Sendable (URL) -> Void
 
-    private static let folderName = "Magenda"
+    @ObservationIgnored private let folderName: @MainActor () -> String
 
     /// Creates a controller. `readFile` and `removeFile` read and delete the rendered PDF.
+    /// `folderName` is read at each first upload of a day or a meeting.
     public init(
         store: any HandoffStore, binderStore: any BinderStore, drive: any DriveFiling,
         trigger: any RoutineFiring, routineCredentials: any RoutineCredentialsStore,
+        summaryTrigger: any SummaryRoutineFiring,
+        summaryCredentials: any SummaryRoutineCredentialsStore,
         renderer: any AgendaRendering, hasher: any SHA256Hashing,
         today: @escaping @Sendable () -> CalendarDay,
         readFile: @escaping @Sendable (URL) throws -> Data,
-        removeFile: @escaping @Sendable (URL) -> Void
+        removeFile: @escaping @Sendable (URL) -> Void,
+        folderName: @escaping @MainActor () -> String = { DriveFolderName.default }
     ) {
         self.store = store
         self.binderStore = binderStore
         self.drive = drive
         self.trigger = trigger
         self.routineCredentials = routineCredentials
+        self.summaryTrigger = summaryTrigger
+        self.summaryCredentials = summaryCredentials
         self.renderer = renderer
         self.hasher = hasher
         self.today = today
         self.readFile = readFile
         self.removeFile = removeFile
+        self.folderName = folderName
     }
 
     /// Loads the finished days and the stored routine.
@@ -127,6 +136,7 @@ public final class HandoffController {
         let earlier = stored(Self.dayID(date))
         handoff.driveFileID = earlier?.driveFileID
         handoff.docID = earlier?.docID
+        handoff.folderID = earlier?.folderID
         do {
             try store.savePDF(pdf, for: Self.dayID(date))
             try store.save(handoff)
@@ -232,9 +242,15 @@ public final class HandoffController {
         defer { isBusy = false }
         switch action {
         case .retry:
-            await runPipeline(handoff)
-        case .approve(let step):
-            await approve(step, on: handoff)
+            if handoff.stage == .summariesPending {
+                await sendSummaries(handoff)
+            } else {
+                await runPipeline(handoff)
+            }
+        case .approveNotes:
+            await approveNotes(on: handoff)
+        case .approveSummaries:
+            await closeDay(handoff)
         }
     }
 
@@ -261,26 +277,63 @@ public final class HandoffController {
     /// Stores the routine's fire URL and token; returns false and sets `message` when they are
     /// not valid or cannot be stored.
     public func saveRoutine(fireURL: String, token: String) -> Bool {
-        // The URL is checked alone with a token of the right shape, so a wrong token is not
-        // reported as a wrong URL.
-        guard RoutineCredentials(fireURL: fireURL, token: "sk-ant-oat01-x") != nil else {
-            message =
-                "That isn't a routine fire URL. Copy it from the routine's API trigger at claude.ai/code/routines; it ends in /fire."
-            return false
-        }
-        guard let credentials = RoutineCredentials(fireURL: fireURL, token: token) else {
-            message = "That isn't a routine token. It starts with sk-ant-oat01-."
+        guard let credentials = validatedCredentials(fireURL: fireURL, token: token) else {
             return false
         }
         do {
             try routineCredentials.save(credentials)
         } catch {
-            message = "Couldn't save the routine in the Keychain. Try again."
+            message = Self.keychainFailure
             return false
         }
         routineTriggerID = credentials.triggerID
         message = nil
         return true
+    }
+
+    /// Validates and stores a summary routine's URL and token under `id`; returns the routine, or
+    /// nil with `message` set when they are not valid or cannot be stored.
+    public func saveSummaryRoutine(
+        name: String, fireURL: String, token: String, id: String = SummaryRoutine.makeID()
+    ) -> SummaryRoutine? {
+        guard let name = SummaryRoutine.validatedName(name) else {
+            message = SummaryRoutine.invalidNameMessage
+            return nil
+        }
+        guard let credentials = validatedCredentials(fireURL: fireURL, token: token) else {
+            return nil
+        }
+        do {
+            try summaryCredentials.save(credentials, id: id)
+        } catch {
+            message = Self.keychainFailure
+            return nil
+        }
+        message = nil
+        return SummaryRoutine(id: id, name: name)
+    }
+
+    /// Deletes a summary routine's stored URL and token.
+    public func forgetSummaryRoutine(id: String) {
+        try? summaryCredentials.delete(id: id)
+    }
+
+    private static let keychainFailure = "Couldn't save the routine in the Keychain. Try again."
+
+    // The credentials for `fireURL` and `token`; nil with `message` set when either is not valid.
+    private func validatedCredentials(fireURL: String, token: String) -> RoutineCredentials? {
+        // The URL is checked alone with a token of the right shape, so a wrong token is not
+        // reported as a wrong URL.
+        guard RoutineCredentials(fireURL: fireURL, token: "sk-ant-oat01-x") != nil else {
+            message =
+                "That isn't a routine fire URL. Copy it from the routine's API trigger at claude.ai/code/routines; it ends in /fire."
+            return nil
+        }
+        guard let credentials = RoutineCredentials(fireURL: fireURL, token: token) else {
+            message = "That isn't a routine token. It starts with sk-ant-oat01-."
+            return nil
+        }
+        return credentials
     }
 
     /// Deletes the stored routine.
@@ -296,6 +349,11 @@ public final class HandoffController {
 
     private func stored(_ id: HandoffID) -> DayHandoff? {
         days.first { $0.id == id }
+    }
+
+    /// The folder another record of `date` was uploaded to, so one date stays in one folder.
+    private func sameDateFolderID(_ date: CalendarDay) -> String? {
+        days.first { $0.date == date && $0.folderID != nil }?.folderID
     }
 
     /// Keeps `handoff` in `days`, in its place in `HandoffID.listOrder`, replacing the record with
@@ -342,7 +400,16 @@ public final class HandoffController {
                     try save(handoff)
                     return
                 }
-                let folderID = try await drive.folderID(named: Self.folderName)
+                let folderID: String
+                if let known = handoff.folderID ?? sameDateFolderID(handoff.date) {
+                    folderID = known
+                } else {
+                    // A file uploaded before folders were recorded is in the default folder, and
+                    // replacing it does not move it.
+                    let name = handoff.driveFileID == nil ? folderName() : DriveFolderName.default
+                    folderID = try await drive.folderID(named: name)
+                }
+                handoff.folderID = folderID
                 handoff.driveFileID = try await drive.uploadPDF(
                     pdf, name: handoff.pdfName, folderID: folderID,
                     replacing: handoff.driveFileID)
@@ -367,12 +434,52 @@ public final class HandoffController {
         }
     }
 
-    /// Fires `step`, then reads the Doc so the row shows the result at once.
-    private func approve(_ step: RoutineStep, on current: DayHandoff) async {
+    /// Approves the notes: closes the day when no summary was asked for, else starts the summary
+    /// routines. The stage is saved first, so a failure partway offers Try again.
+    private func approveNotes(on current: DayHandoff) async {
+        guard !current.summaryRoutineIDs.isEmpty else {
+            await closeDay(current)
+            return
+        }
+        var handoff = current
+        handoff.stage = .summariesPending
+        do {
+            try save(handoff)
+        } catch {
+            fail(&handoff, with: error)
+            return
+        }
+        await sendSummaries(handoff)
+    }
+
+    /// Starts each summary routine not yet started, in order, recording each; stops at the first
+    /// failure, recording it. When all are started, reads the Doc so the row shows the result.
+    private func sendSummaries(_ start: DayHandoff) async {
+        var handoff = start
+        do {
+            for routine in handoff.unsentSummaryRoutines {
+                handoff.sessionURL = try await summaryTrigger.fire(
+                    text: handoff.summaryPayload(for: routine), routineID: routine.id)
+                handoff.firedSummaries.append(routine.id)
+                try save(handoff)
+            }
+            handoff.stage = .summariesRequested
+            handoff.lastError = nil
+            try save(handoff)
+        } catch {
+            fail(&handoff, with: error)
+            return
+        }
+        if let docID = handoff.docID { await readStatus(handoff, docID: docID) }
+    }
+
+    /// Starts the end-of-day routine's `close` step, then reads the Doc so the row shows the
+    /// result.
+    private func closeDay(_ current: DayHandoff) async {
         var handoff = current
         do {
-            handoff.sessionURL = try await trigger.fire(text: handoff.payload(step: step))
-            handoff.stage = step == .approveNotes ? .notesApproved : .summaryApproved
+            handoff.sessionURL = try await trigger.fire(text: handoff.payload(step: .close))
+            handoff.stage = .closing
             handoff.lastError = nil
             try save(handoff)
         } catch {
@@ -386,11 +493,15 @@ public final class HandoffController {
     private func readStatus(_ start: DayHandoff, docID: String) async {
         var handoff = start
         do {
-            let status = DocStatus.parse(try await drive.exportText(ofDoc: docID))
+            let text = try await drive.exportText(ofDoc: docID)
+            let status = DocStatus.parse(text)
             handoff.docStatus = status
-            // A day that is not yet sent keeps the error that stopped it; reading its Doc
-            // does not undo that.
-            if handoff.stage != .queued && handoff.stage != .uploaded { handoff.lastError = nil }
+            handoff.summaryMarkers = DocStatus.summaryMarkers(in: text)
+            // A day that is not yet sent, or whose summaries are not all started, keeps the
+            // error that stopped it; reading its Doc does not undo that.
+            if ![.queued, .uploaded, .summariesPending].contains(handoff.stage) {
+                handoff.lastError = nil
+            }
             if status == .closed { handoff.closedOn = today() }
             try save(handoff)
         } catch {

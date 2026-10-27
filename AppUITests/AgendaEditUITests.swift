@@ -4,27 +4,11 @@
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `EditTextSheet.ID`,
 // `AgendaView.ID` and `RowID`, never by their visible text.
 
-import UIKit
 import XCTest
 
 final class AgendaEditUITests: XCTestCase {
-    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
-    @MainActor private static var previewID: String {
-        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
-    }
-
-    @MainActor
-    private func launch() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "standard"]
-        app.launch()
-        return app
-    }
-
-    @MainActor
-    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier].firstMatch
-    }
+    /// What a render shows.
+    private static let previewID = "binderView"
 
     /// Drags the list up until `row` can be tapped, at most 40 times.
     @MainActor
@@ -42,7 +26,7 @@ final class AgendaEditUITests: XCTestCase {
     /// sidebar is sometimes dropped, so the row is tapped again while the sheet has not appeared.
     @MainActor
     private func openEditor(_ app: XCUIApplication, row identifier: String) -> XCUIElement {
-        let list = element(app, "agendaScreen")
+        let list = app.element("agendaScreen")
         XCTAssertTrue(list.waitForExistence(timeout: 30), "the list never appeared")
         let row = app.buttons[identifier]
         // Rows are created lazily, so a row further down only exists once it is scrolled to.
@@ -50,7 +34,7 @@ final class AgendaEditUITests: XCTestCase {
             app.buttons["eventRow.0"].waitForExistence(timeout: 30), "the first row never appeared")
         scrollToHittable(row, in: list)
         XCTAssertTrue(row.exists && row.isHittable, "\(identifier) was never scrolled into view")
-        let field = element(app, "editField")
+        let field = app.element("editField")
         var taps = 0
         while !field.exists && taps < 5 {
             row.tap()
@@ -73,7 +57,7 @@ final class AgendaEditUITests: XCTestCase {
 
     @MainActor
     func testDoneChangesTheTaskRow() {
-        let app = launch()
+        let app = XCUIApplication.launchMagenda()
         let field = openEditor(app, row: "taskRow.0")
         replaceText(field, with: "Call the plumber")
         app.buttons["editDone"].firstMatch.tap()
@@ -81,41 +65,41 @@ final class AgendaEditUITests: XCTestCase {
         XCTAssertEqual(
             waitForLabel(app.buttons["taskRow.0"], "Call the plumber"), "Call the plumber",
             "the task row still has its old text")
-        XCTAssertFalse(element(app, "editField").exists)
+        XCTAssertFalse(app.element("editField").exists)
     }
 
     @MainActor
     func testCancelLeavesTheTaskRowUnchanged() {
-        let app = launch()
+        let app = XCUIApplication.launchMagenda()
         let field = openEditor(app, row: "taskRow.0")
         let before = app.buttons["taskRow.0"].label
         replaceText(field, with: "Something else")
         app.buttons["editCancel"].firstMatch.tap()
 
         XCTAssertTrue(
-            element(app, "editField").waitForNonExistence(timeout: 30), "the sheet stayed open")
+            app.element("editField").waitForNonExistence(timeout: 30), "the sheet stayed open")
         XCTAssertEqual(app.buttons["taskRow.0"].label, before)
     }
 
     @MainActor
     func testOnlyAnEventOffersToRememberItsName() {
-        let app = launch()
+        let app = XCUIApplication.launchMagenda()
         _ = openEditor(app, row: "eventRow.4")
-        XCTAssertTrue(element(app, "editRemember").exists, "an event has no remember switch")
+        XCTAssertTrue(app.element("editRemember").exists, "an event has no remember switch")
         app.buttons["editCancel"].firstMatch.tap()
-        XCTAssertTrue(element(app, "editField").waitForNonExistence(timeout: 30))
+        XCTAssertTrue(app.element("editField").waitForNonExistence(timeout: 30))
 
         _ = openEditor(app, row: "taskRow.0")
-        XCTAssertFalse(element(app, "editRemember").exists, "a task has a remember switch")
+        XCTAssertFalse(app.element("editRemember").exists, "a task has a remember switch")
     }
 
     @MainActor
     func testRememberingAnEventNameShowsItAsThePageTitle() {
-        let app = launch()
+        let app = XCUIApplication.launchMagenda()
         let field = openEditor(app, row: "eventRow.4")
         replaceText(field, with: "Office move")
 
-        let remember = element(app, "editRemember")
+        let remember = app.element("editRemember")
         let toggle = app.switches["editRemember"].exists ? app.switches["editRemember"] : remember
         let target = toggle.switches.firstMatch.exists ? toggle.switches.firstMatch : toggle
         var taps = 0
@@ -126,31 +110,71 @@ final class AgendaEditUITests: XCTestCase {
         XCTAssertEqual(target.value as? String, "1", "the remember switch did not turn on")
         app.buttons["editDone"].firstMatch.tap()
 
-        let reason = element(app, "eventReason.4")
+        let reason = app.element("eventReason.4")
         XCTAssertTrue(reason.waitForExistence(timeout: 30), "eventReason.4 never appeared")
         XCTAssertTrue(
             reason.label.contains("Page title: Office move"),
             "the reason says \(reason.label)")
     }
 
+    /// The switch inside the toggle `identifier`, once the sheet is scrolled to it.
     @MainActor
-    func testCommandRShowsThePreviewOnIPad() throws {
-        try XCTSkipUnless(
-            UIDevice.current.userInterfaceIdiom == .pad, "keyboard shortcuts are an iPad feature")
-        let app = launch()
-        XCTAssertTrue(element(app, "eventRow.0").waitForExistence(timeout: 30))
+    private func summarySwitch(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        let toggle = app.element(identifier)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 30), "\(identifier) never appeared")
+        let form = app.collectionViews.firstMatch
+        var swipes = 0
+        while !toggle.isHittable && swipes < 5 {
+            form.swipeUp()
+            swipes += 1
+        }
+        return toggle.switches.firstMatch.exists ? toggle.switches.firstMatch : toggle
+    }
+
+    @MainActor
+    func testTickingASummaryRoutineIsKeptWhenTheSheetIsReopened() {
+        let app = XCUIApplication.launchMagenda()
+        _ = openEditor(app, row: "eventRow.1")
+        XCTAssertTrue(app.element("editSummary.1").waitForExistence(timeout: 30))
+        let first = summarySwitch(app, "editSummary.0")
+        var taps = 0
+        while (first.value as? String) != "1" && taps < 5 {
+            first.tap()
+            taps += 1
+        }
+        XCTAssertEqual(first.value as? String, "1", "the first summary did not turn on")
+        app.buttons["editDone"].firstMatch.tap()
+        XCTAssertTrue(
+            app.element("editField").waitForNonExistence(timeout: 30), "the sheet stayed open")
+
+        _ = openEditor(app, row: "eventRow.1")
+        XCTAssertEqual(
+            summarySwitch(app, "editSummary.0").value as? String, "1",
+            "the ticked summary was not kept")
+        XCTAssertNotEqual(summarySwitch(app, "editSummary.1").value as? String, "1")
+    }
+
+    @MainActor
+    func testWithoutSummaryRoutinesTheSheetHasNoSummaries() {
+        let app = XCUIApplication.launchMagenda(["-MagendaNoSummaryRoutines"])
+        _ = openEditor(app, row: "eventRow.1")
+        XCTAssertFalse(app.element("editSummary.0").exists, "a summary toggle was offered")
+    }
+
+    @MainActor
+    func testCommandRShowsThePreviewOnIPad() {
+        let app = XCUIApplication.launchMagenda()
+        XCTAssertTrue(app.element("eventRow.0").waitForExistence(timeout: 30))
         app.typeKey("r", modifierFlags: .command)
         XCTAssertTrue(
-            element(app, Self.previewID).waitForExistence(timeout: 30),
+            app.element(Self.previewID).waitForExistence(timeout: 30),
             "⌘R did not render the agenda")
     }
 
     /// Waits up to 30 seconds for `element`'s label to become `label`; returns the final label.
     @MainActor
     private func waitForLabel(_ element: XCUIElement, _ label: String) -> String {
-        let changed = expectation(
-            for: NSPredicate(format: "label == %@", label), evaluatedWith: element)
-        _ = XCTWaiter().wait(for: [changed], timeout: 30)
+        element.waitUntil(\.label, is: label)
         return element.label
     }
 }

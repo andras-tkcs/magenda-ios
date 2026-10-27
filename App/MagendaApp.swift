@@ -1,5 +1,6 @@
 import AppCore
 import SwiftUI
+import UIKit
 
 /// The app's entry point: one agenda controller shared by every window.
 @main
@@ -11,9 +12,12 @@ struct MagendaApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        _services = State(
-            initialValue: try? AppEnvironment.makeServices(
-                arguments: ProcessInfo.processInfo.arguments, bundle: .main))
+        let services = try? AppEnvironment.makeServices(
+            arguments: ProcessInfo.processInfo.arguments, bundle: .main)
+        _services = State(initialValue: services)
+        if services?.animates == false {
+            UIView.setAnimationsEnabled(false)
+        }
     }
 
     var body: some Scene {
@@ -24,6 +28,8 @@ struct MagendaApp: App {
                     .environment(services.handoff)
                     .environment(\.pageDrawer, services.pageDrawer)
                     .environment(\.allowsFingerDrawing, services.allowsFingerDrawing)
+                    .environment(\.contactPicker, services.contactPicker)
+                    .environment(\.launchRequest, services.launchRequest)
                     .task {
                         await services.controller.start()
                         services.handoff.start()
