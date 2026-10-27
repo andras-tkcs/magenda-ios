@@ -3,16 +3,13 @@
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `AgendaView.ID` and
 // `RowID`.
 
-import UIKit
 import XCTest
 
 final class LongTextUITests: XCTestCase {
     private static let largestSize = "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge"
 
-    /// What a render shows: the binder on iPad, the PDF preview on iPhone.
-    @MainActor private static var previewID: String {
-        UIDevice.current.userInterfaceIdiom == .pad ? "binderView" : "pdfPreview"
-    }
+    /// What a render shows.
+    private static let previewID = "binderView"
 
     @MainActor
     func testRowsFitTheWindowAtTheDefaultSize() {
@@ -26,11 +23,9 @@ final class LongTextUITests: XCTestCase {
 
     @MainActor
     private func checkRows(arguments: [String]) {
-        let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "longText"] + arguments
-        app.launch()
+        let app = XCUIApplication.launchMagenda(fixture: "longText", arguments)
 
-        let list = app.descendants(matching: .any)["agendaScreen"]
+        let list = app.element("agendaScreen")
         XCTAssertTrue(list.waitForExistence(timeout: 10), "the agenda never appeared")
         let window = app.windows.firstMatch
 
@@ -41,8 +36,8 @@ final class LongTextUITests: XCTestCase {
         ]
         for group in groups {
             for n in 0..<group.count {
-                let row = app.descendants(matching: .any)["\(group.row).\(n)"]
-                let toggle = app.descendants(matching: .any)["\(group.toggle).\(n)"]
+                let row = app.element("\(group.row).\(n)")
+                let toggle = app.element("\(group.toggle).\(n)")
                 scrollIntoView(row, in: list)
                 XCTAssertTrue(row.exists, "\(group.row).\(n) was never found")
                 XCTAssertGreaterThanOrEqual(
@@ -57,7 +52,7 @@ final class LongTextUITests: XCTestCase {
         XCTAssertTrue(render.isHittable, "the Render button can't be tapped")
         render.tap()
         XCTAssertTrue(
-            app.descendants(matching: .any)[Self.previewID].waitForExistence(timeout: 30),
+            app.element(Self.previewID).waitForExistence(timeout: 30),
             "the preview never appeared")
     }
 

@@ -8,25 +8,21 @@ import XCTest
 final class SignInUITests: XCTestCase {
     @MainActor
     func testSignedOutShowsSignInAndSigningInReachesTheAgenda() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "standard", "-MagendaSignedOut"]
-        app.launch()
+        let app = XCUIApplication.launchMagenda(["-MagendaSignedOut"])
 
         let button = app.buttons["signInButton"]
         XCTAssertTrue(button.waitForExistence(timeout: 10), "the sign-in button never appeared")
         button.tap()
 
-        let agenda = app.descendants(matching: .any)["agendaScreen"]
+        let agenda = app.element("agendaScreen")
         XCTAssertTrue(agenda.waitForExistence(timeout: 10), "the agenda never appeared")
     }
 
     @MainActor
     func testSignedInGoesStraightToTheAgenda() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-MagendaFixture", "standard"]
-        app.launch()
+        let app = XCUIApplication.launchMagenda()
 
-        let agenda = app.descendants(matching: .any)["agendaScreen"]
+        let agenda = app.element("agendaScreen")
         XCTAssertTrue(agenda.waitForExistence(timeout: 10), "the agenda never appeared")
         XCTAssertFalse(app.buttons["signInButton"].exists, "the sign-in button was shown")
     }
