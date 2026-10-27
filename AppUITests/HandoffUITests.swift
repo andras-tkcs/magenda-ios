@@ -167,7 +167,7 @@ final class HandoffUITests: XCTestCase {
         let target = toggle.switches.firstMatch.exists ? toggle.switches.firstMatch : toggle
         var taps = 0
         while (target.value as? String) != "1" && taps < 5 {
-            target.tap()
+            target.tapSwitch(attempt: taps)
             taps += 1
         }
         XCTAssertEqual(target.value as? String, "1", "the summary did not turn on")

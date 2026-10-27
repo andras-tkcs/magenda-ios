@@ -44,6 +44,49 @@ extension XCUIElement {
         wait(for: keyPath, toEqual: value, timeout: timeout)
     }
 
+    /// Taps this text field at `dx` across its width (the right edge by default, which puts the
+    /// caret after the text) until it has keyboard focus, at most five times; fails the test
+    /// otherwise. A tap on a field in a sheet that is still settling is sometimes dropped, and keys
+    /// typed before the focus arrives fail with "Neither element nor any descendant has keyboard
+    /// focus".
+    @MainActor
+    func focusForTyping(
+        in app: XCUIApplication, at dx: CGFloat = 0.95,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        guard waitForExistence(timeout: 30) else {
+            XCTFail("\(self) never appeared", file: file, line: line)
+            return
+        }
+        // Read once while the field is there: a form sheet may drop it from the tree for a moment
+        // while it makes room for the keyboard, and the query below must not resolve it again.
+        let focused = app.descendants(matching: .any).matching(
+            NSPredicate(format: "hasKeyboardFocus == true AND identifier == %@", identifier)
+        ).firstMatch
+        for _ in 0..<5 {
+            if exists {
+                coordinate(withNormalizedOffset: CGVector(dx: dx, dy: 0.5)).tap()
+            }
+            if focused.waitForExistence(timeout: 10) { return }
+        }
+        XCTFail("\(self) never took keyboard focus", file: file, line: line)
+    }
+
+    /// Touches this switch in the way `attempt` picks: a tap at its middle, a tap on its right
+    /// half, or a short press. A retry loop passes its count, so that a kind of synthesized touch
+    /// the iPad's split view or a sheet keeps dropping is not the only one tried.
+    @MainActor
+    func tapSwitch(attempt: Int) {
+        switch attempt % 3 {
+        case 0:
+            tap()
+        case 1:
+            coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)).tap()
+        default:
+            coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
+        }
+    }
+
     /// Scrolls the content of this container (positive `distance` shows what is further down) with
     /// one held drag that does not fling.
     @MainActor

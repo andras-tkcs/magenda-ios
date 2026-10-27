@@ -71,9 +71,11 @@ jobs:
     name: ui (ipad, ${{ matrix.runtime }}, ${{ matrix.shard }})
     if: github.event_name != 'workflow_dispatch' || inputs.simulators
     runs-on: macos-latest
-    # A shard's job takes about 21 minutes on a typical runner and up to about 27 on a slow one:
-    # some 7 minutes of build, boot and xcodebuild start-up, then its share of the tests.
-    timeout-minutes: 30
+    # A shard's job takes about 26 minutes on a typical runner: some 10 minutes of build, boot and
+    # xcodebuild start-up, then about 16 of tests. A slow runner runs the tests up to 1.5 times
+    # slower and can take 7 minutes to boot, about 38 in all (ADR 0045). A hung test fails on its
+    # own time allowance long before this limit.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -106,17 +108,48 @@ jobs:
             -destination "$DESTINATION" -derivedDataPath build/DerivedData -quiet
       # The boot comes after the build: a boot that overlaps the build slows it from about 1 minute
       # to 4-7 minutes. `bootstatus -b` returns only once the device is fully up, so the first test
-      # does not launch into a half-booted simulator.
+      # does not launch into a half-booted simulator. A boot that fails is retried once on the
+      # erased device. The app is then installed and launched once on its fixture: the first launch
+      # on a just-booted device can take longer than XCTest's own launch time-out, and here it is
+      # paid outside the tests.
       - name: Boot the simulator and wait for it
-        run: xcrun simctl bootstatus "${DESTINATION#id=}" -b
+        run: |
+          udid="${DESTINATION#id=}"
+          if ! xcrun simctl bootstatus "$udid" -b; then
+            echo "::warning::the simulator did not boot; erasing it and booting it again"
+            xcrun simctl shutdown "$udid" || true
+            xcrun simctl erase "$udid"
+            xcrun simctl bootstatus "$udid" -b
+          fi
+          xcrun simctl install "$udid" build/DerivedData/Build/Products/Debug-iphonesimulator/Magenda.app
+          if xcrun simctl launch "$udid" name.tkcs.magenda -MagendaFixture standard -MagendaNoAnimations; then
+            xcrun simctl terminate "$udid" name.tkcs.magenda || true
+          else
+            echo "::warning::the warm-up launch failed; the first test pays the cold launch"
+          fi
+      # xcodebuild exits 70 when it cannot find the destination: the simulator service on a hosted
+      # runner sometimes loses the booted device between steps. Then the simulator is picked and
+      # booted again and the tests run once more. A failed test exits 65 and is never retried.
       - name: Tests (100% pass rate required)
         run: |
-          # SHARD_ARGS is deliberately unquoted: it is several -only-testing words.
-          xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
-            -destination "$DESTINATION" -derivedDataPath build/DerivedData \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 600 \
-            -maximum-test-execution-time-allowance 1200 \
-            $SHARD_ARGS -resultBundlePath "build/tests-$SHARD.xcresult"
+          run_tests() {
+            # SHARD_ARGS is deliberately unquoted: it is several -only-testing words.
+            xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
+              -destination "$DESTINATION" -derivedDataPath build/DerivedData \
+              -test-timeouts-enabled YES -default-test-execution-time-allowance 600 \
+              -maximum-test-execution-time-allowance 1200 \
+              $SHARD_ARGS -resultBundlePath "build/tests-$SHARD.xcresult"
+          }
+          status=0
+          run_tests || status=$?
+          if [ "$status" -ne 70 ]; then
+            exit "$status"
+          fi
+          echo "::warning::xcodebuild could not find the simulator; picking and booting it again"
+          DESTINATION=$(python3 scripts/simulator.py --family ipad --runtime "$RUNTIME")
+          xcrun simctl bootstatus "${DESTINATION#id=}" -b
+          rm -rf "build/tests-$SHARD.xcresult"
+          run_tests
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

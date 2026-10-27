@@ -45,21 +45,23 @@ final class AgendaEditUITests: XCTestCase {
         return field
     }
 
-    /// Replaces the field's text with `text`.
+    /// Replaces the field's text with `text`. The keys go to whatever has focus rather than to the
+    /// field, which the sheet may briefly drop from the accessibility tree while it makes room for
+    /// the keyboard.
     @MainActor
-    private func replaceText(_ field: XCUIElement, with text: String) {
+    private func replaceText(_ app: XCUIApplication, _ field: XCUIElement, with text: String) {
         // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        field.focusForTyping(in: app, at: 0.98)
         let current = field.value as? String ?? ""
         let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
-        field.typeText(deletes + text)
+        app.typeText(deletes + text)
     }
 
     @MainActor
     func testDoneChangesTheTaskRow() {
         let app = XCUIApplication.launchMagenda()
         let field = openEditor(app, row: "taskRow.0")
-        replaceText(field, with: "Call the plumber")
+        replaceText(app, field, with: "Call the plumber")
         app.buttons["editDone"].firstMatch.tap()
 
         XCTAssertEqual(
@@ -73,7 +75,7 @@ final class AgendaEditUITests: XCTestCase {
         let app = XCUIApplication.launchMagenda()
         let field = openEditor(app, row: "taskRow.0")
         let before = app.buttons["taskRow.0"].label
-        replaceText(field, with: "Something else")
+        replaceText(app, field, with: "Something else")
         app.buttons["editCancel"].firstMatch.tap()
 
         XCTAssertTrue(
@@ -97,14 +99,14 @@ final class AgendaEditUITests: XCTestCase {
     func testRememberingAnEventNameShowsItAsThePageTitle() {
         let app = XCUIApplication.launchMagenda()
         let field = openEditor(app, row: "eventRow.4")
-        replaceText(field, with: "Office move")
+        replaceText(app, field, with: "Office move")
 
         let remember = app.element("editRemember")
         let toggle = app.switches["editRemember"].exists ? app.switches["editRemember"] : remember
         let target = toggle.switches.firstMatch.exists ? toggle.switches.firstMatch : toggle
         var taps = 0
         while (target.value as? String) != "1" && taps < 5 {
-            target.tap()
+            target.tapSwitch(attempt: taps)
             taps += 1
         }
         XCTAssertEqual(target.value as? String, "1", "the remember switch did not turn on")
@@ -139,7 +141,7 @@ final class AgendaEditUITests: XCTestCase {
         let first = summarySwitch(app, "editSummary.0")
         var taps = 0
         while (first.value as? String) != "1" && taps < 5 {
-            first.tap()
+            first.tapSwitch(attempt: taps)
             taps += 1
         }
         XCTAssertEqual(first.value as? String, "1", "the first summary did not turn on")

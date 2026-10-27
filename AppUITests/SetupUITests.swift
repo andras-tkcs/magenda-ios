@@ -16,15 +16,15 @@ final class SetupUITests: XCTestCase {
         XCTAssertTrue(save.exists)
         XCTAssertFalse(save.isEnabled, "Save was enabled with an empty client ID")
 
-        field.tap()
-        field.typeText("not-an-id")
+        field.focusForTyping(in: app)
+        app.typeText("not-an-id")
         save.tap()
         let message = app.element("setupMessage")
         XCTAssertTrue(message.waitForExistence(timeout: 10), "no message for a bad client ID")
 
-        field.tap()
+        field.focusForTyping(in: app)
         field.clearText()
-        field.typeText("123456789012-test.apps.googleusercontent.com")
+        app.typeText("123456789012-test.apps.googleusercontent.com")
         save.tap()
         XCTAssertTrue(
             app.buttons["signInButton"].waitForExistence(timeout: 10),

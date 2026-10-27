@@ -152,3 +152,4 @@ until a later ADR supersedes it.
 | [0042](0042-pull-requests-test-the-newest-ipad-runtime.md) | Pull requests test the newest iPad runtime; the oldest supported runtime is tested weekly and in the release pre-flight | Accepted |
 | [0043](0043-simulator-tests-run-in-four-timed-shards.md) | Simulator tests run as four shards balanced from measured timings, and each shard builds once | Accepted |
 | [0044](0044-ui-tests-start-in-the-screen-they-test.md) | UI tests start in the screen they test, with animations off, through launch arguments that only a fixture launch reads | Accepted |
+| [0045](0045-simulator-shards-get-a-warm-up-launch-one-retry-and-a-40-minute-limit.md) | Each simulator shard warms the app up before its tests, retries a lost simulator once, and has a 40-minute limit | Accepted |
