@@ -65,7 +65,7 @@ final class RulesUITests: XCTestCase {
     @MainActor
     private func enter(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
         field.reveal(in: rulesForm(app), bottom: upperHalf(app))
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        field.focusForTyping(in: app)
         app.typeText(text)
     }
 

@@ -110,7 +110,7 @@ final class SettingsUITests: XCTestCase {
         field.reveal(in: settingsForm(app), bottom: upperHalf(app))
         let current = field.value as? String ?? ""
         // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        field.focusForTyping(in: app)
         let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
         app.typeText(deletes + text + "\n")
     }
@@ -283,12 +283,12 @@ final class SettingsUITests: XCTestCase {
             "the sign-in button never appeared")
     }
 
-    /// Types into a text field of the settings form: scrolls it clear of the keyboard, taps it,
-    /// and types.
+    /// Types into a text field of the settings form: scrolls it clear of the keyboard, taps it
+    /// until it has focus, and types.
     @MainActor
     private func enterText(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
         field.reveal(in: settingsForm(app), bottom: upperHalf(app))
-        field.tap()
+        field.focusForTyping(in: app)
         app.typeText(text)
     }
 
@@ -309,7 +309,7 @@ final class SettingsUITests: XCTestCase {
         urlField.reveal(in: settingsForm(app), bottom: upperHalf(app))
         // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
         let current = urlField.value as? String ?? ""
-        urlField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        urlField.focusForTyping(in: app)
         let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
         app.typeText(deletes + "https://api.anthropic.com/v1/claude_code/routines/trig_ui/fire")
         save.reveal(in: settingsForm(app), bottom: upperHalf(app))

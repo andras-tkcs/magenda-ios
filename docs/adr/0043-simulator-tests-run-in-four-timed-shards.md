@@ -4,6 +4,8 @@
 
 Accepted — 2026-10-27. Implemented. The run-time targets it set (a run in 20 minutes or less, no
 macOS job over 18) are not met on the hosted runners; see Consequences.
+Amended by [0045](0045-simulator-shards-get-a-warm-up-launch-one-retry-and-a-40-minute-limit.md)
+(the warm-up launch, the retry of a lost simulator, and the 40-minute job limit).
 
 ## Context
 
