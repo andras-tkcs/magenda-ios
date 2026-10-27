@@ -2,7 +2,7 @@ name: Tests
 
 # Layers 1-3 of docs/testing-policy.md, on every PR. A 100% pass rate is required to merge. The
 # simulator jobs are four timed shards on the newest iPad: each builds once, then runs its share of
-# the hosted and UI tests (scripts/ui_shards.py). Job names here are what
+# the hosted and UI tests (scripts/ui_shards.py, ADR 0043). Job names here are what
 # scripts/update_branch_protection.py's REQUIRED_STATUS_CHECKS lists; rename one and update that
 # list in the same PR.
 on:

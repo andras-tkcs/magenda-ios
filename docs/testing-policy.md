@@ -16,7 +16,7 @@ high-value end-to-end tests cross a boundary.
 |---|---|---|---|---|
 | 1 | Unit | Logic in isolation, offline | `AppCore/Tests/` (`swift test`); `AppTests/` for what only the built app can show | `tests.yml` `core` (Linux), `ui` shards (simulators), every PR |
 | 2 | UI | The real app launches on a simulator, and a user's path through it works | `AppUITests/` (XCUITest) | `tests.yml` `ui` shards, every PR |
-| 3 | Compatibility | Layers 1–2 on the newest and the oldest supported iOS | A matrix, not a test | `tests.yml` `ui` shards: the newest iPad on every PR; the oldest supported runtime weekly and in the release pre-flight |
+| 3 | Compatibility | Layers 1–2 on the newest and the oldest supported iOS | A matrix, not a test | `tests.yml` `ui` shards: the newest iPad on every PR; the oldest supported runtime weekly and in the release pre-flight (ADR 0042) |
 | 4 | Backend contract | Google's responses still decode the way the app expects | `AppCore/Tests/Google/Fixtures/` | `tests.yml` `core`, every PR; no live check; see below |
 | 5 | Release archive | The Release configuration archives and carries the tag's version | `build.yml` `archive` | Tag push, and dispatched as the release pre-flight |
 | 6 | Distribution | The signed build is accepted by App Store Connect and installs from TestFlight | `build.yml` `testflight` | Tag push |
@@ -44,22 +44,26 @@ and on dispatch. A 100% pass rate is required to merge.
 | `scripts` (Ubuntu) | `python3 -m unittest discover -s scripts/tests`, including the no-project-history guard |
 | `ui (ipad, <runtime>, <1-4>)` (macOS), four jobs per runtime | `xcodegen generate` and one build, then a boot, then this shard's share of `MagendaTests` and the UI tests on the iPad simulator `scripts/simulator.py` picks |
 
-`runtime` is `newest` on every PR. `oldest` runs on Mondays (on `main`) and on a dispatch with
+`runtime` is `newest` on every PR (ADR 0042). `oldest` runs on Mondays (on `main`) and on a dispatch with
 `runtimes: oldest` or `both`; a dispatch with `simulators: false` skips the macOS jobs.
 
-Each shard builds once, boots its simulator after the build, and waits for the boot to finish
+Each shard builds once (ADR 0043), boots its simulator after the build, and waits for the boot to finish
 before the first test: a boot that overlaps the build slows it from about a minute to several, and
 a UI test launched into a half-booted device times out before its body runs. A failed shard is
 re-run on its own ("Re-run failed jobs"). A new push to a PR, or a new dispatch on the same branch,
 cancels the stale run.
 
-`scripts/ui_shards.py` balances the shards from `CLASS_SECONDS`, the median seconds each test class
+`scripts/ui_shards.py` balances the shards from `CLASS_SECONDS` (ADR 0043), the median seconds each test class
 took over a few measured runs. A new UI test class needs an entry there: the `scripts` job fails
 without one. A shard's job takes about 21 minutes on a typical runner: some 7 minutes of build, boot
 and `xcodebuild` start-up, then about 14 minutes of tests. Runners vary, so a slow one takes up to
 about 27, under the job's 30-minute limit. Refresh the numbers from green runs when the shards'
 jobs drift more than a few minutes apart or one nears that limit, and split a class over 630 s into
 per-method entries. `python3 scripts/ui_shards.py --table` shows the split.
+
+UI tests start in the screen they test and run with animations off: `launchMagenda` passes
+`-MagendaNoAnimations`, and `-MagendaOpen settings` or `-MagendaOpen rules` opens that screen. Only
+a fixture launch reads these arguments (ADR 0044).
 
 `scripts/simulator.py` chooses devices by family and runtime rather than by name, because names
 change with every Xcode. `oldest` means the oldest installed runtime at or above the deployment

@@ -7,6 +7,7 @@ Amends [ADR 0011](0011-the-agenda-pdf-is-drawn-on-device-from-the-vendored-magen
 Amended by [ADR 0023](0023-binder-undo-uses-a-handwriting-history-kept-by-the-session.md): undo and redo use the session's handwriting history.
 Amended by [ADR 0024](0024-binder-pages-turn-sideways-one-whole-page-at-a-time.md): pages turn sideways, one whole page per screen.
 Amended by [ADR 0025](0025-only-added-binder-pages-can-be-deleted.md): added pages can be deleted.
+Amended by [ADR 0041](0041-magenda-is-an-ipad-app.md): Magenda is iPad-only, so item 7's iPhone preview is gone.
 
 ## Context
 

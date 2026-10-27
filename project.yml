@@ -39,7 +39,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: name.tkcs.magenda
         PRODUCT_NAME: Magenda
-        # iPad-only.
+        # iPad-only (ADR 0041).
         TARGETED_DEVICE_FAMILY: "2"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: "Magenda"
