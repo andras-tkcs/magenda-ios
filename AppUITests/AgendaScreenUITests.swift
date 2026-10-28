@@ -91,26 +91,19 @@ final class AgendaScreenUITests: XCTestCase {
     @MainActor
     func testNextDayChangesTheDatePicker() {
         let app = XCUIApplication.launchMagenda()
-        let picker = app.datePickers["datePicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 30), "the date picker never appeared")
-        // The picker exists a moment before its button carries the date.
-        let shown = expectation(
-            for: NSPredicate { _, _ in !self.shownDate(picker).isEmpty }, evaluatedWith: nil)
-        wait(for: [shown], timeout: 10)
-        let before = shownDate(picker)
-        XCTAssertFalse(before.isEmpty, "the date picker shows no date")
+        XCTAssertTrue(
+            app.datePickers["datePicker"].waitForExistence(timeout: 30),
+            "the date picker never appeared")
+        // The label is ours, drawn over the picker, so the day it names is what the user sees.
+        let label = app.staticTexts["dayLabel"]
+        XCTAssertTrue(label.waitForExistence(timeout: 30), "the day label never appeared")
+        let before = label.label
+        XCTAssertFalse(before.isEmpty, "the day label shows no day")
 
         app.buttons["nextDayButton"].tap()
         let changed = expectation(
-            for: NSPredicate { _, _ in self.shownDate(picker) != before }, evaluatedWith: nil)
+            for: NSPredicate { _, _ in label.label != before }, evaluatedWith: nil)
         wait(for: [changed], timeout: 10)
-    }
-
-    /// The date a compact date picker shows: the value of the button inside it, or its own.
-    @MainActor
-    private func shownDate(_ picker: XCUIElement) -> String {
-        let button = picker.buttons.firstMatch
-        return (button.exists ? button.value : picker.value) as? String ?? ""
     }
 
     @MainActor
