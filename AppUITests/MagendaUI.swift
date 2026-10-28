@@ -9,9 +9,11 @@ extension XCUIApplication {
 
     /// Launches Magenda on `fixture` with animations off, plus `extra` arguments.
     ///
-    /// The first launch on a freshly booted simulator can take a minute or more before the app
-    /// answers accessibility queries, which would use up a test's own waits. So that launch first
-    /// waits, for up to three minutes, until the app's window can be found.
+    /// The app can take a while to answer accessibility queries after a launch: a minute or more
+    /// the first time on a freshly booted simulator, and about 30 s for one query in some later
+    /// launches. Either would use up a test's own waits, so every launch first waits until the
+    /// app's window can be found, for up to three minutes the first time and one minute after
+    /// (ADR 0047).
     @MainActor
     static func launchMagenda(fixture: String = "standard", _ extra: [String] = [])
         -> XCUIApplication
@@ -19,10 +21,8 @@ extension XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-MagendaFixture", fixture, "-MagendaNoAnimations"] + extra
         app.launch()
-        if !hasLaunched {
-            hasLaunched = true
-            _ = app.windows.firstMatch.waitForExistence(timeout: 180)
-        }
+        _ = app.windows.firstMatch.waitForExistence(timeout: hasLaunched ? 60 : 180)
+        hasLaunched = true
         return app
     }
 
@@ -44,6 +44,49 @@ extension XCUIElement {
         wait(for: keyPath, toEqual: value, timeout: timeout)
     }
 
+    /// Taps this text field at `dx` across its width (the right edge by default, which puts the
+    /// caret after the text) until it has keyboard focus, at most five times; fails the test
+    /// otherwise. A tap on a field in a sheet that is still settling is sometimes dropped, and keys
+    /// typed before the focus arrives fail with "Neither element nor any descendant has keyboard
+    /// focus".
+    @MainActor
+    func focusForTyping(
+        in app: XCUIApplication, at dx: CGFloat = 0.95,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        guard waitForExistence(timeout: 30) else {
+            XCTFail("\(self) never appeared", file: file, line: line)
+            return
+        }
+        // Read once while the field is there: a form sheet may drop it from the tree for a moment
+        // while it makes room for the keyboard, and the query below must not resolve it again.
+        let focused = app.descendants(matching: .any).matching(
+            NSPredicate(format: "hasKeyboardFocus == true AND identifier == %@", identifier)
+        ).firstMatch
+        for _ in 0..<5 {
+            if exists {
+                coordinate(withNormalizedOffset: CGVector(dx: dx, dy: 0.5)).tap()
+            }
+            if focused.waitForExistence(timeout: 10) { return }
+        }
+        XCTFail("\(self) never took keyboard focus", file: file, line: line)
+    }
+
+    /// Touches this switch in the way `attempt` picks: a tap at its middle, a tap on its right
+    /// half, or a short press. A retry loop passes its count, so that a kind of synthesized touch
+    /// the iPad's split view or a sheet keeps dropping is not the only one tried.
+    @MainActor
+    func tapSwitch(attempt: Int) {
+        switch attempt % 3 {
+        case 0:
+            tap()
+        case 1:
+            coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)).tap()
+        default:
+            coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
+        }
+    }
+
     /// Scrolls the content of this container (positive `distance` shows what is further down) with
     /// one held drag that does not fling.
     @MainActor
@@ -61,7 +104,9 @@ extension XCUIElement {
     }
 
     /// Scrolls `container` until this element is hittable with its middle between `top` and
-    /// `bottom`, or until the container cannot scroll further. Fails the test otherwise.
+    /// `bottom`, or until the container cannot scroll further. Fails the test otherwise. A drag
+    /// moves the content further than its own length, so each drag that overshoots the band is
+    /// followed by drags half as long.
     @MainActor
     func reveal(
         in container: XCUIElement, top: CGFloat? = nil, bottom: CGFloat? = nil,
@@ -72,6 +117,8 @@ extension XCUIElement {
         let bottomLimit = bottom ?? containerFrame.maxY - 20
         var lastMid: CGFloat?
         var stalled = 0
+        var wasAbove: Bool?
+        var scale: CGFloat = 1
         for attempt in 0..<24 {
             guard exists else {
                 lastMid = nil
@@ -83,10 +130,15 @@ extension XCUIElement {
             stalled = lastMid.map { abs($0 - mid) < 2 ? stalled + 1 : 0 } ?? 0
             lastMid = mid
             if stalled >= 2 && isHittable { return }  // the container cannot scroll any further
-            if mid < topLimit {
-                container.scrollContent(by: -min(max(topLimit - mid + 40, 100), 300))
+            let isAbove = mid < topLimit
+            if let wasAbove, wasAbove != isAbove {
+                scale = max(scale / 2, 0.125)
+            }
+            wasAbove = isAbove
+            if isAbove {
+                container.scrollContent(by: -min(max(topLimit - mid + 40, 100), 300) * scale)
             } else {
-                container.scrollContent(by: min(max(mid - bottomLimit + 40, 100), 300))
+                container.scrollContent(by: min(max(mid - bottomLimit + 40, 100), 300) * scale)
             }
         }
         XCTFail("\(self) was never scrolled into view", file: file, line: line)

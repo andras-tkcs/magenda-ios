@@ -49,15 +49,17 @@ and on dispatch. A 100% pass rate is required to merge.
 
 Each shard builds once (ADR 0043), boots its simulator after the build, and waits for the boot to finish
 before the first test: a boot that overlaps the build slows it from about a minute to several, and
-a UI test launched into a half-booted device times out before its body runs. A failed shard is
+a UI test launched into a half-booted device times out before its body runs. The boot step then
+launches the app once on its fixture, so the cold first launch is not paid inside a test, and a
+simulator the runner loses before the tests start is picked and booted again once (ADR 0045). A failed shard is
 re-run on its own ("Re-run failed jobs"). A new push to a PR, or a new dispatch on the same branch,
 cancels the stale run.
 
 `scripts/ui_shards.py` balances the shards from `CLASS_SECONDS` (ADR 0043), the median seconds each test class
 took over a few measured runs. A new UI test class needs an entry there: the `scripts` job fails
-without one. A shard's job takes about 21 minutes on a typical runner: some 7 minutes of build, boot
-and `xcodebuild` start-up, then about 14 minutes of tests. Runners vary, so a slow one takes up to
-about 27, under the job's 30-minute limit. Refresh the numbers from green runs when the shards'
+without one. A shard's job takes about 26 minutes on a typical runner: some 10 minutes of build, boot
+and `xcodebuild` start-up, then about 16 minutes of tests. Runners vary, so a slow one takes up to
+about 38, under the job's 40-minute limit (ADR 0045). Refresh the numbers from green runs when the shards'
 jobs drift more than a few minutes apart or one nears that limit, and split a class over 630 s into
 per-method entries. `python3 scripts/ui_shards.py --table` shows the split.
 

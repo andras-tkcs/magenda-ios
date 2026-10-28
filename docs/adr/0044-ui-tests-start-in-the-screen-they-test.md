@@ -3,6 +3,7 @@
 ## Status
 
 Accepted — 2026-10-27. Implemented.
+Amended by [0047](0047-every-ui-test-launch-waits-for-the-app-window.md).
 
 ## Context
 

@@ -65,7 +65,7 @@ final class RulesUITests: XCTestCase {
     @MainActor
     private func enter(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
         field.reveal(in: rulesForm(app), bottom: upperHalf(app))
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        field.focusForTyping(in: app)
         app.typeText(text)
     }
 
@@ -198,7 +198,7 @@ final class RulesUITests: XCTestCase {
             let toggle = choice.switches.firstMatch.exists ? choice.switches.firstMatch : choice
             var taps = 0
             while (toggle.value as? String) != "1" && taps < 5 {
-                toggle.tap()
+                toggle.tapSwitch(attempt: taps)
                 taps += 1
             }
             XCTAssertEqual(toggle.value as? String, "1", "the summary choice did not turn on")

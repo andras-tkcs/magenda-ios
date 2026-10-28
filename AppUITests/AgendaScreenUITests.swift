@@ -1,7 +1,8 @@
 // The agenda screen, driven through the accessibility tree against the fixtures.
 //
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `AgendaView.ID` and
-// `RowID`, never by their visible text; text is only read to check what a row says.
+// `RowID`, never by their visible text, except a row's context-menu item, which has none; text is
+// otherwise only read to check what a row says.
 
 import XCTest
 
@@ -68,17 +69,23 @@ final class AgendaScreenUITests: XCTestCase {
         XCTAssertTrue(app.element("eventPageToggle.1").exists)
         XCTAssertFalse(app.element("eventPageToggle.0").exists)
 
-        // The tap goes to the system switch inside the toggle. On an iPad simulator a synthesized
-        // tap in the split view's sidebar is sometimes dropped, so the switch is tapped again
-        // while the event is still included (the notes-page switch only exists then).
+        // The event is turned off through the row's context menu: a switch in the split view's
+        // sidebar rarely takes a synthesized touch (ADR 0046). Each attempt presses the row, waits
+        // for the menu item to be hittable and taps it, while the event is still included (the
+        // notes-page switch only exists then).
         let page = app.element("eventPageToggle.1")
-        var taps = 0
-        while page.exists && taps < 5 {
-            app.element("eventToggle.1").switches.firstMatch.tap()
-            taps += 1
-            _ = page.waitForNonExistence(timeout: 3)
+        let leaveOut = app.buttons["Leave out"].firstMatch
+        var attempts = 0
+        while page.exists && attempts < 5 {
+            app.element("eventRow.1").press(forDuration: 1.2)
+            attempts += 1
+            guard leaveOut.waitForExistence(timeout: 10) else { continue }
+            if leaveOut.waitUntil(\.isHittable, is: true, timeout: 10) {
+                leaveOut.tap()
+            }
+            _ = page.waitForNonExistence(timeout: 10)
         }
-        XCTAssertFalse(page.exists, "the notes-page switch is still there after \(taps) taps")
+        XCTAssertFalse(page.exists, "the notes-page switch is still there after \(attempts) tries")
     }
 
     @MainActor
@@ -125,8 +132,11 @@ final class AgendaScreenUITests: XCTestCase {
             app.element(Self.previewID).waitForExistence(timeout: 30),
             "the preview never appeared")
         // The list's first row stands for the list: XCUITest never reports a List itself as
-        // hittable once the centre of its frame lands on one of its rows, on any device.
+        // hittable once the centre of its frame lands on one of its rows, on any device. While the
+        // binder lays out its first pages a query can time out, so hittability is waited for.
         let row = app.element("eventRow.0")
-        XCTAssertTrue(row.isHittable, "the list is hidden beside the preview on iPad")
+        XCTAssertTrue(
+            row.waitUntil(\.isHittable, is: true, timeout: 30),
+            "the list is hidden beside the preview on iPad")
     }
 }
