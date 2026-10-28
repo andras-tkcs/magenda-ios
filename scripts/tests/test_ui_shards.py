@@ -86,11 +86,66 @@ class TestUIShards(unittest.TestCase):
 
     def test_the_workflow_matrix_lists_every_shard(self) -> None:
         text = (REPO / ".github/workflows/tests.yml").read_text(encoding="utf-8")
-        match = re.search(r"shard: \[([\d, ]+)\]", text)
+        match = re.search(r"'\[([\d, ]+)\]'\) \}\}", text)
         self.assertIsNotNone(match)
         assert match
         listed = [int(number) for number in match.group(1).split(",")]
         self.assertEqual(listed, list(range(1, ui_shards.SHARD_COUNT + 1)))
+
+    def test_select_accepts_the_hosted_tests_a_class_and_a_method(self) -> None:
+        classes = {"AUITests": ["testOne", "testTwo"]}
+        keys = ui_shards.select("MagendaTests, MagendaUITests/AUITests MagendaUITests/AUITests/testOne", classes)
+        self.assertEqual(keys, ["MagendaTests", "MagendaUITests/AUITests", "MagendaUITests/AUITests/testOne"])
+
+    def test_select_drops_duplicates_and_keeps_order(self) -> None:
+        classes = {"AUITests": ["testOne", "testTwo"]}
+        keys = ui_shards.select("MagendaUITests/AUITests/testTwo, MagendaTests MagendaUITests/AUITests/testTwo", classes)
+        self.assertEqual(keys, ["MagendaUITests/AUITests/testTwo", "MagendaTests"])
+
+    def test_select_rejects_unknown_tests(self) -> None:
+        classes = {"AUITests": ["testOne", "testTwo"]}
+        with self.assertRaises(ValueError) as caught:
+            ui_shards.select("MagendaUITests/Nope, MagendaTests MagendaUITests/AUITests/testNope", classes)
+        message = str(caught.exception)
+        self.assertEqual(message, "unknown tests: MagendaUITests/Nope, MagendaUITests/AUITests/testNope")
+
+    def test_select_rejects_an_empty_list(self) -> None:
+        with self.assertRaises(ValueError):
+            ui_shards.select(" , ", {"AUITests": ["testOne"]})
+
+    def test_select_rejects_shell_words(self) -> None:
+        for names in ("MagendaTests;rm", "$(id)"):
+            with self.subTest(names):
+                with self.assertRaises(ValueError):
+                    ui_shards.select(names, {"AUITests": ["testOne"]})
+
+    def test_select_rejects_the_warm_up_class(self) -> None:
+        classes = {"WarmUpUITests": ["testTheAppAnswers"]}
+        for names in ("MagendaUITests/WarmUpUITests", "MagendaUITests/WarmUpUITests/testTheAppAnswers"):
+            with self.subTest(names):
+                with self.assertRaises(ValueError):
+                    ui_shards.select(names, classes)
+
+    def test_the_warm_up_class_needs_no_timing(self) -> None:
+        classes = {"AUITests": ["testOne"], ui_shards.WARM_UP_CLASS: ["testTheAppAnswers"]}
+        seconds = {"MagendaTests": 1, "MagendaUITests/AUITests": 1}
+        self.assertEqual(ui_shards.problems(seconds, classes), [])
+        found = ui_shards.problems({**seconds, "MagendaUITests/WarmUpUITests": 1}, classes)
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0].endswith("is stale: no such test"), found)
+
+    def test_the_workflow_passes_only_through_the_environment(self) -> None:
+        text = (REPO / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+        self.assertIn("ONLY: ${{ inputs.only }}", text)
+        self.assertIn('--only "$ONLY"', text)
+        self.assertEqual(text.count("inputs.only"), 2)
+
+    def test_the_workflow_warms_up_before_each_test_run(self) -> None:
+        text = (REPO / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+        needle = "-only-testing:MagendaUITests/WarmUpUITests"
+        self.assertEqual(text.count(needle), 1)
+        self.assertGreater(text.index(needle), text.index("name: Tests (100% pass rate required)"))
+        self.assertEqual(len(re.findall(r"^\s+warm_up$", text, re.MULTILINE)), 2)
 
     def test_required_checks_are_the_shards(self) -> None:
         checks = update_branch_protection.REQUIRED_STATUS_CHECKS

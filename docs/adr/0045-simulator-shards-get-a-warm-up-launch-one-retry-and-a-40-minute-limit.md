@@ -4,6 +4,7 @@
 
 Accepted — 2026-10-27. Implemented.
 Amends [0043](0043-simulator-tests-run-in-four-timed-shards.md).
+Amended by [0049](0049-simulator-jobs-warm-up-xctest-before-their-tests.md) (a throwaway UI test warms up XCTest before the job's tests, and the job limit is 45 minutes).
 
 ## Context
 

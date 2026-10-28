@@ -22,6 +22,10 @@ on:
         type: choice
         options: [newest, oldest, both]
         default: newest
+      only:
+        description: "Run only these tests, in one simulator job instead of the shards: comma-separated MagendaTests, MagendaUITests/<Class> or MagendaUITests/<Class>/<test>. Not a merge gate."
+        type: string
+        default: ""
 
 # A new push to a PR, or a new dispatch on the same branch, cancels the stale run. Pushes and the
 # weekly run get a group of their own, so they are never cancelled or replaced.
@@ -67,23 +71,26 @@ jobs:
   # The hosted tests and the UI tests on simulators, as four shards so a failed shard is re-run
   # alone ("Re-run failed jobs") and no job runs for long. scripts/ui_shards.py balances the shards
   # from measured timings. Each job builds for itself, then runs its share.
+  # A dispatch that names tests to run only (ADR 0048) runs one job per runtime with just those
+  # tests, for iterating; it is never the merge gate.
   ui:
     name: ui (ipad, ${{ matrix.runtime }}, ${{ matrix.shard }})
     if: github.event_name != 'workflow_dispatch' || inputs.simulators
     runs-on: macos-latest
-    # A shard's job takes about 26 minutes on a typical runner: some 10 minutes of build, boot and
-    # xcodebuild start-up, then about 16 of tests. A slow runner runs the tests up to 1.5 times
-    # slower and can take 7 minutes to boot, about 38 in all (ADR 0045). A hung test fails on its
-    # own time allowance long before this limit.
-    timeout-minutes: 40
+    # A shard's job takes about 28 minutes on a typical runner: some 12 minutes of build, boot,
+    # warm-up and xcodebuild start-up, then about 16 of tests. A slow runner runs the tests up to
+    # 1.5 times slower and can take 7 minutes to boot and 5 to warm up, about 43 in all (ADR 0045,
+    # ADR 0049). A hung test fails on its own time allowance long before this limit.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         runtime: ${{ fromJSON((github.event_name == 'schedule' || inputs.runtimes == 'both') && '["newest","oldest"]' || (inputs.runtimes == 'oldest' && '["oldest"]' || '["newest"]')) }}
-        shard: [1, 2, 3, 4]
+        shard: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.only) && '["only"]' || '[1, 2, 3, 4]') }}
     env:
       RUNTIME: ${{ matrix.runtime }}
       SHARD: ${{ matrix.shard }}
+      ONLY: ${{ inputs.only }}
       HOMEBREW_NO_AUTO_UPDATE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -100,7 +107,11 @@ jobs:
           echo "DESTINATION=$destination" >> "$GITHUB_ENV"
       - name: Choose this shard's tests
         run: |
-          args=$(python3 scripts/ui_shards.py --shard "$SHARD")
+          if [ "$SHARD" = only ]; then
+            args=$(python3 scripts/ui_shards.py --only "$ONLY")
+          else
+            args=$(python3 scripts/ui_shards.py --shard "$SHARD")
+          fi
           echo "SHARD_ARGS=$args" >> "$GITHUB_ENV"
       - name: Build for testing
         run: |
@@ -127,11 +138,24 @@ jobs:
           else
             echo "::warning::the warm-up launch failed; the first test pays the cold launch"
           fi
-      # xcodebuild exits 70 when it cannot find the destination: the simulator service on a hosted
-      # runner sometimes loses the booted device between steps. Then the simulator is picked and
-      # booted again and the tests run once more. A failed test exits 65 and is never retried.
+      # Before the tests, and again after a lost simulator is booted again, a throwaway UI test
+      # takes XCTest's first accessibility snapshot in its own xcodebuild run, whose result is
+      # ignored: on a just-booted simulator that snapshot can time out and end the test it hits
+      # (ADR 0049). xcodebuild exits 70 when it cannot find the destination: the simulator
+      # service on a hosted runner sometimes loses the booted device between steps. Then the
+      # simulator is picked and booted again and the tests run once more. A failed test exits 65
+      # and is never retried.
       - name: Tests (100% pass rate required)
         run: |
+          warm_up() {
+            if ! xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
+                -destination "$DESTINATION" -derivedDataPath build/DerivedData \
+                -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
+                -maximum-test-execution-time-allowance 300 \
+                -only-testing:MagendaUITests/WarmUpUITests; then
+              echo "::warning::the warm-up test failed; the job's tests run anyway"
+            fi
+          }
           run_tests() {
             # SHARD_ARGS is deliberately unquoted: it is several -only-testing words.
             xcodebuild test-without-building -project Magenda.xcodeproj -scheme Magenda \
@@ -140,6 +164,7 @@ jobs:
               -maximum-test-execution-time-allowance 1200 \
               $SHARD_ARGS -resultBundlePath "build/tests-$SHARD.xcresult"
           }
+          warm_up
           status=0
           run_tests || status=$?
           if [ "$status" -ne 70 ]; then
@@ -149,6 +174,7 @@ jobs:
           DESTINATION=$(python3 scripts/simulator.py --family ipad --runtime "$RUNTIME")
           xcrun simctl bootstatus "${DESTINATION#id=}" -b
           rm -rf "build/tests-$SHARD.xcresult"
+          warm_up
           run_tests
       - name: Upload test results
         if: failure()

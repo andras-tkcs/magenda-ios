@@ -27,7 +27,7 @@ rather than reporting a number that isn't comparable.
 - On Linux, row 5 never can.
 
 For each such row, take its result from `tests.yml` for this branch's head commit instead: the
-open PR's checks, or, with no PR yet, a `tests.yml` run you dispatch against the branch (push
+open PR's checks, or, with no PR yet, a `tests.yml` run you dispatch against the branch without `only` (push
 first; see `.claude/skills/steward/SKILL.md`). Report the job name, its conclusion and the run URL.
 If the run has not finished, the row is `pending`, not PASS.
 

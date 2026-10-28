@@ -22,6 +22,7 @@ back.
 | You need | Dispatch | Notes |
 |---|---|---|
 | `swift test`, the coverage floor or `swift format`, with no toolchain here | `tests.yml` | Read the `core` and `lint` jobs. With a toolchain, run them here instead (`docs/testing-policy.md`, "Fast checks"). |
+| A quick simulator check while iterating | `tests.yml` | Input `only`: the UI test classes of the screens the diff touches, plus `MagendaUITests/LaunchOptionsUITests`, plus `MagendaTests` when `AppTests/` changed. One `ui (ipad, newest, only)` job, about 10–14 minutes. Never a gate: `/dod`'s simulator row and merging need the four shards. |
 | The app built, its hosted tests and its UI tests on simulators | `tests.yml` | Read the four `ui (ipad, newest, N)` jobs (each builds once, then runs its share of the hosted and UI tests). Re-run a failed `ui` job on its own. `simulators: false` is allowed only for a branch whose diff touches nothing but `docs/`, `CHANGELOG.md`, `.claude/`, or `scripts/` files other than `ui_shards.py`, `simulator.py` and `pre_release_check.py`; any change under `App/`, `AppCore/`, `AppTests/`, `AppUITests/`, `project.yml` or `.github/` runs the simulators, and `/dod`'s simulator row always needs a run with simulators. On a failure, download the job's `xcresult-*` artifact or read the log; never guess. |
 | A Release archive with a version stamped in | `build.yml` | No inputs. Archives unsigned and uploads nothing off a tag. |
 | To cut a release tag | `release.yml` | Inputs `version` and `dry_run`. **`dry_run` defaults to true** — dispatch it that way first. Only cut for real when the maintainer has seen the dry run and said to. See `/cut-release`. |
@@ -33,8 +34,10 @@ Things about dispatching, so they are not rediscovered at runtime:
   present on the default branch; the `ref` you pass selects which checkout runs. A workflow added
   on a feature branch is not dispatchable until that branch merges.
 - **Push before you dispatch.** The run checks out the remote branch, not your working tree.
-- **macOS jobs are slow and queue.** The `ui` jobs take 15 to 38 minutes (about 26 on a typical runner). Arm a
+- **macOS jobs are slow and queue.** The `ui` jobs take 17 to 43 minutes (about 28 on a typical runner). Arm a
   check-in rather than polling.
+- **Iterate on targeted runs, then open the PR.** Every push to an open PR runs all four shards, so
+  get the change green with `only` runs first and batch review fixes into one push.
 - **Pushing a release tag directly is not possible here** — the container can push branches but
   not `refs/tags/*`. Don't try; a failed push can leave a local tag behind that makes
   `tag_release.py`'s later checks lie.
@@ -67,6 +70,9 @@ A second red run on the same commit is real and must not be re-run away. In part
   (`waitForExistence(timeout:)`); fix the wait, never add a sleep.
 - A simulator that is "not found" means `scripts/simulator.py`'s choice or the runner image
   changed; read its stderr in the log before touching the test.
+- Besides ADR 0045's warm-up launch, the only result ignored is the `WarmUpUITests` run inside the
+  Tests step (ADR 0049). Never move a real test into `WarmUpUITests`, never ignore another test's
+  result, and never wrap a test in `XCTExpectFailure`.
 - A missing Swift toolchain here is **not** a test failure. It is the dispatch table above.
 
 ## Conventions worth restating because they are easy to get wrong
