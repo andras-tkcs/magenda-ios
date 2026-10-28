@@ -9,6 +9,7 @@ struct AgendaView: View {
         static let agendaScreen = "agendaScreen"
         static let previousDayButton = "previousDayButton"
         static let datePicker = "datePicker"
+        static let dayLabel = "dayLabel"
         static let nextDayButton = "nextDayButton"
         static let settingsButton = "settingsButton"
         static let reviewButton = "reviewButton"
@@ -305,12 +306,12 @@ struct AgendaView: View {
                     .padding(.vertical, 6)
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
                     .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                    .accessibilityIdentifier(ID.dayLabel)
                 DatePicker("Date", selection: pickedDate, displayedComponents: .date)
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .opacity(0.015)
-                    .accessibilityLabel(dayLabel)
+                    .accessibilityLabel("Choose date")
                     .accessibilityIdentifier(ID.datePicker)
             }
             Spacer()
