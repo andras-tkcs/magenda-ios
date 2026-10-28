@@ -62,6 +62,18 @@ struct AgendaView: View {
             })
     }
 
+    /// The selected day as "Wed, 2026 10 29", led by "Today" or "Tomorrow" when it is one.
+    private var dayLabel: String {
+        let calendar = Calendar.current
+        let date = pickedDate.wrappedValue
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, yyyy MM dd"
+        let text = formatter.string(from: date)
+        if calendar.isDateInToday(date) { return "Today · \(text)" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow · \(text)" }
+        return text
+    }
+
     var body: some View {
         NavigationSplitView(
             columnVisibility: $columnVisibility, preferredCompactColumn: $preferredColumn
@@ -284,10 +296,23 @@ struct AgendaView: View {
             .accessibilityLabel("Previous day")
             .accessibilityIdentifier(ID.previousDayButton)
             Spacer()
-            DatePicker("Date", selection: pickedDate, displayedComponents: .date)
-                .datePickerStyle(.compact)
-                .labelsHidden()
-                .accessibilityIdentifier(ID.datePicker)
+            // The compact picker can't show a weekday or "Today", so it sits invisibly over a
+            // label of our own and still opens the calendar when tapped.
+            ZStack {
+                Text(dayLabel)
+                    .font(.body)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                DatePicker("Date", selection: pickedDate, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .opacity(0.015)
+                    .accessibilityLabel(dayLabel)
+                    .accessibilityIdentifier(ID.datePicker)
+            }
             Spacer()
             Button {
                 Task { await controller.setDay(controller.day.adding(days: 1)) }
