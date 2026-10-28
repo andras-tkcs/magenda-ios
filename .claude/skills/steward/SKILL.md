@@ -33,7 +33,7 @@ Things about dispatching, so they are not rediscovered at runtime:
   present on the default branch; the `ref` you pass selects which checkout runs. A workflow added
   on a feature branch is not dispatchable until that branch merges.
 - **Push before you dispatch.** The run checks out the remote branch, not your working tree.
-- **macOS jobs are slow and queue.** The `ui` jobs take 10 to 25 minutes (about 21 on a typical runner). Arm a
+- **macOS jobs are slow and queue.** The `ui` jobs take 15 to 38 minutes (about 26 on a typical runner). Arm a
   check-in rather than polling.
 - **Pushing a release tag directly is not possible here** — the container can push branches but
   not `refs/tags/*`. Don't try; a failed push can leave a local tag behind that makes
