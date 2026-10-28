@@ -71,7 +71,8 @@ jobs:
             echo "::error::Archive is $got_version ($got_build), expected $MARKETING ($BUILD)."
             exit 1
           fi
-          got_icon="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$plist" || true)"
+          # An iPad-only app (ADR 0041) carries the icon under CFBundleIcons~ipad.
+          got_icon="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons~ipad:CFBundlePrimaryIcon:CFBundleIconName' "$plist" || true)"
           if [ "$got_icon" != "AppIcon" ]; then
             echo "::error::The archive has no compiled AppIcon."
             exit 1
