@@ -7,6 +7,7 @@ shards take about the same time, and fails when a UI test class has no timing:
     python3 scripts/ui_shards.py --shard 1     # -only-testing: words for shard 1 of 4
     python3 scripts/ui_shards.py --check       # every test class has a timing, and none is stale
     python3 scripts/ui_shards.py --table       # each shard's total and its entries
+    python3 scripts/ui_shards.py --only MagendaUITests/RulesUITests   # one job's tests, unsharded
 """
 
 from __future__ import annotations
@@ -18,6 +19,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 SHARD_COUNT = 4
+
+# The UI test class tests.yml runs on its own before a job's tests, to warm up XCTest on a
+# just-booted simulator (ADR 0049). It has no timing and is never in a shard or `--only`.
+WARM_UP_CLASS = "WarmUpUITests"
 
 # Seconds each entry takes on the newest iPad: the median of tests.yml runs 40466925355 and
 # 40467180761 (their green shards, and the tests a cancelled shard finished), rounded up to a
@@ -90,6 +95,8 @@ def problems(seconds: dict[str, int], classes: dict[str, list[str]]) -> list[str
         found.append("MagendaTests has no entry")
     expected = {"MagendaTests"}
     for name, methods in classes.items():
+        if name == WARM_UP_CLASS:
+            continue
         whole = f"MagendaUITests/{name}"
         per_method = [f"{whole}/{method}" for method in methods]
         expected.add(whole)
@@ -123,12 +130,37 @@ def arguments(keys: list[str]) -> list[str]:
     return ["-only-testing:" + key for key in keys]
 
 
+def select(names: str, classes: dict[str, list[str]]) -> list[str]:
+    """The test keys named in `names` (separated by commas or whitespace), without duplicates.
+
+    Only known tests are accepted, so the result is safe to word-split in a shell.
+    """
+    valid = {"MagendaTests"}
+    for name, methods in classes.items():
+        if name == WARM_UP_CLASS:
+            continue
+        valid.add(f"MagendaUITests/{name}")
+        valid.update(f"MagendaUITests/{name}/{method}" for method in methods)
+    keys = list(dict.fromkeys(part for part in re.split(r"[,\s]+", names) if part))
+    unknown = [key for key in keys if key not in valid]
+    if unknown:
+        raise ValueError(f"unknown tests: {', '.join(unknown)}")
+    if not keys:
+        raise ValueError("--only needs at least one test")
+    return keys
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--shard", type=int, metavar="N", help="print shard N's xcodebuild arguments (1-based)")
     group.add_argument("--check", action="store_true", help="check that every test class has a timing")
     group.add_argument("--table", action="store_true", help="print each shard's total and entries")
+    group.add_argument(
+        "--only",
+        metavar="NAMES",
+        help="print the xcodebuild arguments for these comma-separated tests, without sharding",
+    )
     parser.add_argument("--count", type=int, default=SHARD_COUNT, help="number of shards (default: %(default)s)")
     args = parser.parse_args(argv)
 
@@ -137,6 +169,14 @@ def main(argv: list[str] | None = None) -> int:
         for line in lines:
             print(line)
         return 1 if lines else 0
+
+    if args.only is not None:
+        try:
+            keys = select(args.only, test_classes(REPO / "AppUITests"))
+        except ValueError as error:
+            parser.error(str(error))
+        print(" ".join(arguments(keys)))
+        return 0
 
     shards = assign(CLASS_SECONDS, args.count)
     if args.table:
