@@ -47,19 +47,26 @@ and on dispatch. A 100% pass rate is required to merge.
 `runtime` is `newest` on every PR (ADR 0042). `oldest` runs on Mondays (on `main`) and on a dispatch with
 `runtimes: oldest` or `both`; a dispatch with `simulators: false` skips the macOS jobs.
 
+A dispatch with `only` (comma-separated `MagendaTests`, `MagendaUITests/<Class>` or
+`MagendaUITests/<Class>/<test>`) runs just those tests in one `ui (ipad, <runtime>, only)` job. It is for
+iterating, not a gate (ADR 0048). It needs `simulators: true`, the default; with `simulators: false` no
+simulator job runs.
+
 Each shard builds once (ADR 0043), boots its simulator after the build, and waits for the boot to finish
 before the first test: a boot that overlaps the build slows it from about a minute to several, and
 a UI test launched into a half-booted device times out before its body runs. The boot step then
 launches the app once on its fixture, so the cold first launch is not paid inside a test, and a
-simulator the runner loses before the tests start is picked and booted again once (ADR 0045). A failed shard is
+simulator the runner loses before the tests start is picked and booted again once (ADR 0045). Before the job's
+tests, and again after a lost simulator is booted again, a throwaway UI test (`WarmUpUITests`) runs in its own
+`xcodebuild` invocation, with its result ignored, to warm up XCTest on the fresh simulator (ADR 0049). A failed shard is
 re-run on its own ("Re-run failed jobs"). A new push to a PR, or a new dispatch on the same branch,
 cancels the stale run.
 
 `scripts/ui_shards.py` balances the shards from `CLASS_SECONDS` (ADR 0043), the median seconds each test class
 took over a few measured runs. A new UI test class needs an entry there: the `scripts` job fails
-without one. A shard's job takes about 26 minutes on a typical runner: some 10 minutes of build, boot
-and `xcodebuild` start-up, then about 16 minutes of tests. Runners vary, so a slow one takes up to
-about 38, under the job's 40-minute limit (ADR 0045). Refresh the numbers from green runs when the shards'
+without one. A shard's job takes about 28 minutes on a typical runner: some 12 minutes of build, boot,
+warm-up and `xcodebuild` start-up, then about 16 minutes of tests. Runners vary, so a slow one takes up to
+about 43, under the job's 45-minute limit (ADR 0045, ADR 0049). Refresh the numbers from green runs when the shards'
 jobs drift more than a few minutes apart or one nears that limit, and split a class over 630 s into
 per-method entries. `python3 scripts/ui_shards.py --table` shows the split.
 
