@@ -138,7 +138,7 @@ enum AppEnvironment {
             today: { CalendarDay.today(in: timeZone, now: Date()) },
             readFile: readFile, removeFile: removeFile,
             folderName: { controller.settings.driveFolderName },
-                existingFolderID: { controller.settings.driveFolderID })
+            existingFolderID: { controller.settings.driveFolderID })
         return AppServices(
             controller: controller, handoff: handoff, pageDrawer: drawer,
             allowsFingerDrawing: allowsFingerDrawing, contactPicker: SystemContactPicker(),
