@@ -17,6 +17,7 @@ struct SettingsView: View {
         static let forgetClientButton = "forgetClientButton"
         static let driveFolderField = "driveFolderField"
         static let driveFolderError = "driveFolderError"
+        static let driveFolderLinkField = "driveFolderLinkField"
         static let driveFolderFooter = "driveFolderFooter"
         static let routineURLField = "routineURLField"
         static let routineTokenField = "routineTokenField"
@@ -91,6 +92,8 @@ struct SettingsView: View {
     @State private var routineToForget: SummaryRoutine?
     @State private var folderDraft = ""
     @State private var folderInvalid = false
+    @State private var folderLinkDraft = ""
+    @State private var folderLinkInvalid = false
     @State private var routineURL = ""
     @State private var routineToken = ""
     @State private var routineSaveFailed = false
@@ -136,6 +139,7 @@ struct SettingsView: View {
             .onAppear {
                 resetHexDrafts()
                 folderDraft = controller.settings.driveFolderName
+                folderLinkDraft = controller.settings.driveFolderID ?? ""
             }
             .sheet(isPresented: $showsClientSheet) {
                 SetupView(isSheet: true)
@@ -383,11 +387,23 @@ struct SettingsView: View {
                     .foregroundStyle(.red)
                     .accessibilityIdentifier(ID.driveFolderError)
             }
+            TextField("Existing folder link (optional)", text: $folderLinkDraft)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.done)
+                .onSubmit(commitFolderLink)
+                .onChange(of: folderLinkDraft) { folderLinkInvalid = false }
+                .accessibilityIdentifier(ID.driveFolderLinkField)
+            if folderLinkInvalid {
+                Text("That isn't a Google Drive folder link.")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
         } header: {
             Text("Google Drive")
         } footer: {
             Text(
-                "Finished days upload to the “\(controller.settings.driveFolderName)” folder in your Google Drive, which Magenda creates. A new name makes a new folder; days already uploaded stay where they are."
+                "Finished days upload to the “\(controller.settings.driveFolderName)” folder in your Google Drive, which Magenda creates. A new name makes a new folder; days already uploaded stay where they are. To use a folder that already exists, paste its link; the name is then ignored."
             )
             .accessibilityIdentifier(ID.driveFolderFooter)
         }
@@ -401,6 +417,22 @@ struct SettingsView: View {
         folderInvalid = false
         folderDraft = name
         Task { await controller.updateSettings { $0.driveFolderName = name } }
+    }
+
+    private func commitFolderLink() {
+        let text = folderLinkDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            folderLinkInvalid = false
+            Task { await controller.updateSettings { $0.driveFolderID = nil } }
+            return
+        }
+        guard let id = DriveFolderName.folderID(from: text) else {
+            folderLinkInvalid = true
+            return
+        }
+        folderLinkInvalid = false
+        folderLinkDraft = id
+        Task { await controller.updateSettings { $0.driveFolderID = id } }
     }
 
     @ViewBuilder

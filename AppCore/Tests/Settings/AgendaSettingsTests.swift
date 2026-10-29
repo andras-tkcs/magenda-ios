@@ -60,6 +60,15 @@ struct AgendaSettingsTests {
         #expect(try decode(#"{"driveFolderName":"a/b"}"#).driveFolderName == "Magenda")
     }
 
+    @Test("A saved Drive folder ID decodes; a missing or invalid one is nil")
+    func driveFolderIDDecoding() throws {
+        #expect(try decode("{}").driveFolderID == nil)
+        #expect(
+            try decode(#"{"driveFolderID":"1AbC_dEf-GhIjKlMnOp"}"#).driveFolderID
+                == "1AbC_dEf-GhIjKlMnOp")
+        #expect(try decode(#"{"driveFolderID":"nope"}"#).driveFolderID == nil)
+    }
+
     @Test("An unknown font pack decodes as Outfit")
     func unknownFontPack() throws {
         #expect(try decode(#"{"fontPack":"comic_sans"}"#).fontPack == .outfit)

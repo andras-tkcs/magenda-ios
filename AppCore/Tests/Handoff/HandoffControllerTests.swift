@@ -184,7 +184,8 @@ struct HandoffControllerTests {
         credentials: (any RoutineCredentialsStore)? = nil,
         summaryCredentials: (any SummaryRoutineCredentialsStore)? = nil,
         routines: [SummaryRoutine] = [],
-        folderName: (@MainActor () -> String)? = nil
+        folderName: (@MainActor () -> String)? = nil,
+        existingFolderID: (@MainActor () -> String?)? = nil
     ) throws {
         layout = BinderLayout(
             manifest: try TemplateManifest.bundled(), measurer: FakeTextMeasurer())
@@ -205,7 +206,7 @@ struct HandoffControllerTests {
             Data("pdf".utf8): Data(repeating: 0xAB, count: 32),
             Data("pdf2".utf8): Data(repeating: 0xCD, count: 32),
         ])
-        if let folderName {
+        if folderName != nil || existingFolderID != nil {
             controller = HandoffController(
                 store: store, binderStore: binderStore, drive: drive, trigger: trigger,
                 routineCredentials: credentials ?? self.credentials,
@@ -213,7 +214,9 @@ struct HandoffControllerTests {
                 summaryCredentials: summaryCredentials ?? self.summaryCredentials,
                 renderer: renderer ?? self.renderer, hasher: hasher,
                 today: { clock.today }, readFile: { _ in try reads.read() },
-                removeFile: { removals.remove($0) }, folderName: folderName)
+                removeFile: { removals.remove($0) },
+                folderName: folderName ?? { DriveFolderName.default },
+                existingFolderID: existingFolderID ?? { nil })
         } else {
             controller = HandoffController(
                 store: store, binderStore: binderStore, drive: drive, trigger: trigger,
@@ -480,6 +483,15 @@ struct HandoffControllerTests {
         await rig.controller.finish(rig.binder)
         #expect(await rig.drive.calls.contains(.folderID(named: "Work notes")))
         #expect(try rig.saved().folderID == "folder-1")
+    }
+
+    @Test("an existing folder ID is used without looking a folder up or creating one")
+    func existingFolderID() async throws {
+        let rig = try HandoffControllerTests(existingFolderID: { "chosen-folder-id" })
+        await rig.controller.finish(rig.binder)
+        let calls = await rig.drive.calls
+        #expect(!calls.contains { if case .folderID = $0 { true } else { false } })
+        #expect(try rig.saved().folderID == "chosen-folder-id")
     }
 
     @Test("a day keeps the folder of its first upload")

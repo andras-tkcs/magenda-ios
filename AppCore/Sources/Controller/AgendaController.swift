@@ -263,6 +263,7 @@ public final class AgendaController {
         settingsStore.save(after)
         var drawnBefore = before
         drawnBefore.driveFolderName = after.driveFolderName
+        drawnBefore.driveFolderID = after.driveFolderID
         if after != drawnBefore {
             invalidateRendered()
         }
