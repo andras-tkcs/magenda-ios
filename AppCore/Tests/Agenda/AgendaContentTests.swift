@@ -94,4 +94,17 @@ struct AgendaContentTests {
                 #"{"text":"a","owner":"b","cadence":"daily","marked":false,"status":[]}"#.utf8))
         #expect(delegated.taskID == nil)
     }
+
+    @Test("Routine pages are kept, and content written without them has none")
+    func routinePages() throws {
+        var content = AgendaContentFixtures.typical
+        content.routinePages = [SummaryRoutine(id: "r1", name: "Updates", hasPage: true)]
+        let data = try JSONEncoder().encode(content)
+        #expect(try JSONDecoder().decode(AgendaContent.self, from: data) == content)
+        var legacy = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy["routinePages"] = nil
+        let decoded = try JSONDecoder().decode(
+            AgendaContent.self, from: JSONSerialization.data(withJSONObject: legacy))
+        #expect(decoded.routinePages.isEmpty)
+    }
 }
