@@ -29,9 +29,11 @@ public final class HandoffController {
     @ObservationIgnored private let removeFile: @Sendable (URL) -> Void
 
     @ObservationIgnored private let folderName: @MainActor () -> String
+    @ObservationIgnored private let existingFolderID: @MainActor () -> String?
 
     /// Creates a controller. `readFile` and `removeFile` read and delete the rendered PDF.
-    /// `folderName` is read at each first upload of a day or a meeting.
+    /// `folderName` and `existingFolderID` are read at each first upload of a day or a meeting;
+    /// an existing folder ID is used as it is and nothing is looked up or created.
     public init(
         store: any HandoffStore, binderStore: any BinderStore, drive: any DriveFiling,
         trigger: any RoutineFiring, routineCredentials: any RoutineCredentialsStore,
@@ -41,7 +43,8 @@ public final class HandoffController {
         today: @escaping @Sendable () -> CalendarDay,
         readFile: @escaping @Sendable (URL) throws -> Data,
         removeFile: @escaping @Sendable (URL) -> Void,
-        folderName: @escaping @MainActor () -> String = { DriveFolderName.default }
+        folderName: @escaping @MainActor () -> String = { DriveFolderName.default },
+        existingFolderID: @escaping @MainActor () -> String? = { nil }
     ) {
         self.store = store
         self.binderStore = binderStore
@@ -56,6 +59,7 @@ public final class HandoffController {
         self.readFile = readFile
         self.removeFile = removeFile
         self.folderName = folderName
+        self.existingFolderID = existingFolderID
     }
 
     /// Loads the finished days and the stored routine.
@@ -403,6 +407,8 @@ public final class HandoffController {
                 let folderID: String
                 if let known = handoff.folderID ?? sameDateFolderID(handoff.date) {
                     folderID = known
+                } else if handoff.driveFileID == nil, let chosen = existingFolderID() {
+                    folderID = chosen
                 } else {
                     // A file uploaded before folders were recorded is in the default folder, and
                     // replacing it does not move it.

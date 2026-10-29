@@ -34,4 +34,19 @@ struct DriveFolderNameTests {
         #expect(DriveFolderName.maxLength == 100)
         #expect(DriveFolderName.invalidMessage == "Use 1 to 100 characters, without a slash.")
     }
+
+    @Test("a folder ID is read from a Drive link or accepted bare")
+    func folderIDParsing() {
+        let id = "1AbC_dEf-GhIjKlMnOp"
+        #expect(
+            DriveFolderName.folderID(from: "https://drive.google.com/drive/folders/\(id)") == id)
+        #expect(
+            DriveFolderName.folderID(
+                from: " https://drive.google.com/drive/u/0/folders/\(id)?usp=sharing ")
+                == id)
+        #expect(DriveFolderName.folderID(from: id) == id)
+        #expect(DriveFolderName.folderID(from: "https://drive.google.com/drive/my-drive") == nil)
+        #expect(DriveFolderName.folderID(from: "Magenda") == nil)
+        #expect(DriveFolderName.folderID(from: "") == nil)
+    }
 }
