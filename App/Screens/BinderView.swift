@@ -298,6 +298,8 @@ struct BinderView: View {
             "Notes"
         case .extra:
             "Added page"
+        case .routine:
+            "Summary routine page"
         }
     }
 }

@@ -36,6 +36,9 @@ struct SettingsView: View {
         static let form = "settingsForm"
 
         static func summaryRoutineRow(_ n: Int) -> String { "summaryRoutineRow.\(n)" }
+        static func summaryRoutinePageToggle(_ n: Int) -> String {
+            "summaryRoutinePageToggle.\(n)"
+        }
         static func forgetSummaryRoutineButton(_ n: Int) -> String {
             "forgetSummaryRoutineButton.\(n)"
         }
@@ -497,6 +500,14 @@ struct SettingsView: View {
                     Text(routine.name)
                         .accessibilityIdentifier(ID.summaryRoutineRow(index))
                     Spacer()
+                    Toggle(
+                        "Own page",
+                        isOn: Binding(
+                            get: { routine.hasPage },
+                            set: { on in setSummaryRoutinePage(on, id: routine.id) })
+                    )
+                    .fixedSize()
+                    .accessibilityIdentifier(ID.summaryRoutinePageToggle(index))
                     Button("Forget", role: .destructive) { routineToForget = routine }
                         .buttonStyle(.borderless)
                         .accessibilityIdentifier(ID.forgetSummaryRoutineButton(index))
@@ -529,8 +540,18 @@ struct SettingsView: View {
             Text("Summary routines")
         } footer: {
             Text(
-                "Each summary is written by its own Claude routine with its own API trigger. Create it at claude.ai/code/routines, give it only the access that summary needs, and add its trigger here. Saving a name that already exists replaces that routine's URL and token."
+                "Each summary is written by its own Claude routine with its own API trigger. Create it at claude.ai/code/routines, give it only the access that summary needs, and add its trigger here. Saving a name that already exists replaces that routine's URL and token. A routine with its own page adds a page at the end of every day's binder; the routine is started only on a day when something is written on it."
             )
+        }
+    }
+
+    private func setSummaryRoutinePage(_ on: Bool, id: String) {
+        Task {
+            await controller.updateSettings { settings in
+                if let index = settings.summaryRoutines.firstIndex(where: { $0.id == id }) {
+                    settings.summaryRoutines[index].hasPage = on
+                }
+            }
         }
     }
 

@@ -94,12 +94,15 @@ public struct AgendaContent: Equatable, Codable, Sendable {
     /// The summary routines of each meeting page, in the order of `meetings`, with the names they
     /// had when the day was rendered; an empty array means none.
     public var meetingSummaryRoutines: [[SummaryRoutine]]
+    /// The summary routines that have a page of their own at the end of the binder, in order, with
+    /// the names they had when the day was rendered.
+    public var routinePages: [SummaryRoutine]
 
     /// Creates agenda content.
     public init(
         date: CalendarDay, todoItems: [TodoItem], schedule: [ScheduleEntry], meetings: [String],
         meetingIDs: [String] = [], delegated: [DelegatedItem],
-        meetingSummaryRoutines: [[SummaryRoutine]] = []
+        meetingSummaryRoutines: [[SummaryRoutine]] = [], routinePages: [SummaryRoutine] = []
     ) {
         self.date = date
         self.todoItems = todoItems
@@ -108,14 +111,16 @@ public struct AgendaContent: Equatable, Codable, Sendable {
         self.meetingIDs = meetingIDs
         self.delegated = delegated
         self.meetingSummaryRoutines = meetingSummaryRoutines
+        self.routinePages = routinePages
     }
 
     private enum CodingKeys: String, CodingKey {
         case date, todoItems, schedule, meetings, meetingIDs, delegated, meetingSummaryRoutines
+        case routinePages
     }
 
     /// Decodes content written by any build; a missing `meetingSummaryRoutines`, as in a day stored
-    /// by a build that still named a skill per meeting, is empty.
+    /// by a build that still named a skill per meeting, or a missing `routinePages`, is empty.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         date = try container.decode(CalendarDay.self, forKey: .date)
@@ -127,6 +132,8 @@ public struct AgendaContent: Equatable, Codable, Sendable {
         meetingSummaryRoutines =
             try container.decodeIfPresent([[SummaryRoutine]].self, forKey: .meetingSummaryRoutines)
             ?? []
+        routinePages =
+            try container.decodeIfPresent([SummaryRoutine].self, forKey: .routinePages) ?? []
     }
 }
 

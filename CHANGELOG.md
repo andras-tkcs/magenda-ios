@@ -34,6 +34,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A summary routine can have a page of its own at the end of the binder (Settings → Summary
+  routines → Own page), for something like weekly project updates that can come up on any day.
+  The routine is started when you approve the notes, but only for a day when something is
+  written on its page.
 - Settings → Google Drive takes an optional link to an existing Drive folder. Finished days then
   upload to that folder instead of one found or created by name.
 - The day selector shows the weekday and date (for example "Wed, 2026 10 29"), and leads with

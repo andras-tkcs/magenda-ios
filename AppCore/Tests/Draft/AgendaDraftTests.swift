@@ -224,6 +224,17 @@ struct AgendaDraftTests {
         #expect(content.todoItems.map(\.taskID) == ["t1"])
         #expect(content.delegated.map(\.taskID) == ["d1", "d2"])
         #expect(content.meetingSummaryRoutines == [[recap, board], []])
+        #expect(content.routinePages.isEmpty)
+    }
+
+    @Test("The content lists the routines that have a page of their own, in order")
+    func contentRoutinePages() {
+        var paged = board
+        paged.hasPage = true
+        let value = AgendaDraft(
+            date: day, notices: [], titlePrefixes: [], events: [], tasks: [], delegated: [],
+            summaryRoutines: [recap, paged])
+        #expect(value.content().routinePages == [paged])
     }
 
     @Test("A short name that maps to routines gives the events with that key the routine IDs")

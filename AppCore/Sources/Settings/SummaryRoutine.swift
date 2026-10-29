@@ -6,11 +6,36 @@ public struct SummaryRoutine: Equatable, Hashable, Codable, Identifiable, Sendab
     public let id: String
     /// What the checkboxes and the meeting page show.
     public var name: String
+    /// Whether the binder ends with a page of its own for this routine. The routine is started for
+    /// it only on a day when something was written on it.
+    public var hasPage: Bool
 
     /// Creates a routine.
-    public init(id: String, name: String) {
+    public init(id: String, name: String, hasPage: Bool = false) {
         self.id = id
         self.name = name
+        self.hasPage = hasPage
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, hasPage
+    }
+
+    /// Decodes a routine written by any build; a missing `hasPage` is false.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        hasPage = try container.decodeIfPresent(Bool.self, forKey: .hasPage) ?? false
+    }
+
+    /// Encodes the routine; `hasPage` is left out when false, so a routine without a page looks as
+    /// it always did in the payloads.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        if hasPage { try container.encode(true, forKey: .hasPage) }
     }
 
     /// The longest name accepted, in characters.

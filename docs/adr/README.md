@@ -157,3 +157,4 @@ until a later ADR supersedes it.
 | [0047](0047-every-ui-test-launch-waits-for-the-app-window.md) | Every UI test launch waits for the app's window, not only the first | Accepted |
 | [0048](0048-sessions-iterate-on-targeted-simulator-runs.md) | Sessions iterate on targeted simulator runs; the four shards stay the only gate | Accepted |
 | [0049](0049-simulator-jobs-warm-up-xctest-before-their-tests.md) | Simulator jobs warm up XCTest with a throwaway UI test before their tests, and get 45 minutes | Accepted |
+| [0050](0050-a-summary-routine-can-have-a-binder-page-of-its-own.md) | A summary routine can have a page of its own at the end of the binder, and is started only on a day when something is written on it | Accepted |

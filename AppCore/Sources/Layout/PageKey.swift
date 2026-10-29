@@ -13,9 +13,11 @@ public enum PageKey: Hashable, Sendable, Codable {
     case notes
     /// A page the person added, by ``ExtraPage`` ID.
     case extra(String)
+    /// The page of a summary routine, by ``SummaryRoutine`` ID.
+    case routine(String)
 
-    /// The key as one string: `overview`, `delegated:<n>`, `meeting:<id>`, `notes` or
-    /// `extra:<id>`.
+    /// The key as one string: `overview`, `delegated:<n>`, `meeting:<id>`, `notes`,
+    /// `extra:<id>` or `routine:<id>`.
     public var storageString: String {
         switch self {
         case .overview: "overview"
@@ -23,6 +25,7 @@ public enum PageKey: Hashable, Sendable, Codable {
         case .meeting(let id): "meeting:\(id)"
         case .notes: "notes"
         case .extra(let id): "extra:\(id)"
+        case .routine(let id): "routine:\(id)"
         }
     }
 
@@ -43,6 +46,8 @@ public enum PageKey: Hashable, Sendable, Codable {
             self = .meeting(id)
         case ("extra", let id?) where !id.isEmpty:
             self = .extra(id)
+        case ("routine", let id?) where !id.isEmpty:
+            self = .routine(id)
         default:
             return nil
         }
