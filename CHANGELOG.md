@@ -34,6 +34,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Settings → Google Drive takes an optional link to an existing Drive folder. Finished days then
+  upload to that folder instead of one found or created by name.
 - The day selector shows the weekday and date (for example "Wed, 2026 10 29"), and leads with
   "Today" or "Tomorrow" when the day is one of them.
 - On iPad, Render opens the day's binder: one whole page at a time, swiped left and right. Write on

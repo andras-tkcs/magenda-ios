@@ -21,7 +21,7 @@ Magenda creates everything below with the `drive.file` scope, so it only ever se
 
 | What | Name | Where |
 |---|---|---|
-| Folder | the folder named in Settings → Google Drive (`Magenda` unless changed) | anywhere in the person's Drive; created in the root |
+| Folder | the folder named in Settings → Google Drive (`Magenda` unless changed), or the one whose link is pasted there | anywhere in the person's Drive; created in the root |
 | PDF | `Magenda <YYYY-MM-DD>.pdf` | in the folder |
 | Doc | `Magenda <YYYY-MM-DD> notes` | in the folder |
 | PDF of a meeting sent early | `Magenda <YYYY-MM-DD> part <n>.pdf` | in the folder |
