@@ -44,6 +44,34 @@ struct AgendaLayoutTests {
         #expect(plan.pages.map(\.key) == [.overview, .meeting(""), .notes])
     }
 
+    @Test("A routine with its own page gets a titled page after the notes page")
+    func routinePages() throws {
+        var content = try content()
+        content.routinePages = [
+            SummaryRoutine(id: "r1", name: "Project updates", hasPage: true),
+            SummaryRoutine(id: "r2", name: "Ideas", hasPage: true),
+        ]
+        let plan = try layout().plan(for: content)
+        #expect(
+            plan.pages.map(\.key) == [
+                .overview, .meeting(""), .notes, .routine("r1"), .routine("r2"),
+            ])
+        #expect(plan.pages.suffix(2).allSatisfy { $0.chrome == .furtherNotes })
+        #expect(runs(plan.pages[3]).first?.text == "Project updates")
+        #expect(runs(plan.pages[4]).first?.text == "Ideas")
+    }
+
+    @Test("A routine page title too long for the page is ellipsized")
+    func routinePageTitleFits() throws {
+        var content = try content()
+        content.routinePages = [
+            SummaryRoutine(id: "r1", name: String(repeating: "W", count: 40), hasPage: true)
+        ]
+        let plan = try layout().plan(for: content)
+        let title = try #require(runs(plan.pages[3]).first)
+        #expect(title.bounds.x1 <= TemplateGeometry.meetingTitleRight)
+    }
+
     @Test("Meeting pages are keyed by event ID, or by position without one")
     func meetingKeys() throws {
         let day = try day()

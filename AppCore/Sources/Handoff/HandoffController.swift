@@ -132,7 +132,7 @@ public final class HandoffController {
         }
         var handoff = DayHandoff(
             date: date, checksum: "sha256:" + digest, day: binder.day, plan: binder.plan,
-            earlierParts: earlierParts)
+            earlierParts: earlierParts, inkedKeys: binder.inkedKeys)
         let earlier = stored(Self.dayID(date))
         handoff.driveFileID = earlier?.driveFileID
         handoff.docID = earlier?.docID

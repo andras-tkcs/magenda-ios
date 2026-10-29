@@ -1,5 +1,6 @@
 // AppCore's `SummaryRoutine`: names, IDs and the title lookup.
 
+import Foundation
 import Testing
 
 @testable import AppCore
@@ -52,6 +53,33 @@ struct SummaryRoutineTests {
         let first = SummaryRoutine.makeID()
         #expect(SummaryRoutine.isValidID(first))
         #expect(first != SummaryRoutine.makeID())
+    }
+
+    @Test("A routine has no page of its own unless it is given one")
+    func pageDefault() {
+        #expect(!SummaryRoutine(id: "a", name: "A").hasPage)
+        #expect(SummaryRoutine(id: "a", name: "A", hasPage: true).hasPage)
+    }
+
+    @Test("A routine stored without hasPage decodes without a page, and hasPage round-trips")
+    func pageCoding() throws {
+        let old = try JSONDecoder().decode(
+            SummaryRoutine.self, from: Data(#"{"id":"a","name":"A"}"#.utf8))
+        #expect(old == SummaryRoutine(id: "a", name: "A"))
+        let routine = SummaryRoutine(id: "a", name: "A", hasPage: true)
+        let data = try JSONEncoder().encode(routine)
+        #expect(try JSONDecoder().decode(SummaryRoutine.self, from: data) == routine)
+    }
+
+    @Test("hasPage is left out of the JSON when false")
+    func pageEncodingOmitted() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let plain = try encoder.encode(SummaryRoutine(id: "a", name: "A"))
+        #expect(String(decoding: plain, as: UTF8.self) == #"{"id":"a","name":"A"}"#)
+        let paged = try encoder.encode(SummaryRoutine(id: "a", name: "A", hasPage: true))
+        #expect(
+            String(decoding: paged, as: UTF8.self) == #"{"hasPage":true,"id":"a","name":"A"}"#)
     }
 
     @Test("A title match is folded, on the page title or the original")

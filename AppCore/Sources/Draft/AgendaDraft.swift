@@ -149,7 +149,8 @@ public struct AgendaDraft: Equatable, Sendable {
                     text: $0.text, owner: $0.owner, cadence: $0.cadence, marked: $0.marked,
                     status: $0.status, taskID: $0.id)
             },
-            meetingSummaryRoutines: meetingSummaryRoutines)
+            meetingSummaryRoutines: meetingSummaryRoutines,
+            routinePages: summaryRoutines.filter(\.hasPage))
     }
 
     private static func update<Element: Identifiable>(

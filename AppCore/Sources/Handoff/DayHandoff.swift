@@ -294,13 +294,15 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     }
 
     /// Creates a queued hand-off from the PDF's `checksum`, the binder `day` and its `plan`. A
-    /// page whose key is in `earlierParts` was already sent in that part.
+    /// page whose key is in `earlierParts` was already sent in that part. A summary routine's own
+    /// page asks for that routine only when it, or a page added as its copy, is in `inkedKeys`.
     public init(
         date: CalendarDay, checksum: String, day: BinderDay, plan: RenderPlan,
-        earlierParts: [PageKey: Int] = [:]
+        earlierParts: [PageKey: Int] = [:], inkedKeys: Set<PageKey> = []
     ) {
         let pages = plan.pages.enumerated().map { index, page in
-            let entry = Self.handoffPage(number: index + 1, page: page, in: day)
+            let entry = Self.handoffPage(
+                number: index + 1, page: page, in: day, inkedKeys: inkedKeys)
             return earlierParts[page.key].map(entry.sent(inPart:)) ?? entry
         }
         var printed = day.content.todoItems
@@ -546,7 +548,9 @@ public struct DayHandoff: Equatable, Codable, Sendable {
     }
 
     /// The entry for `page`, which is page `number` of the PDF.
-    private static func handoffPage(number: Int, page: PagePlan, in day: BinderDay) -> HandoffPage {
+    private static func handoffPage(
+        number: Int, page: PagePlan, in day: BinderDay, inkedKeys: Set<PageKey> = []
+    ) -> HandoffPage {
         let key = page.key.storageString
         switch page.key {
         case .meeting(let id):
@@ -559,6 +563,19 @@ public struct DayHandoff: Equatable, Codable, Sendable {
         case .extra:
             let source = day.extras.first { PageKey.extra($0.id) == page.key }?.source
             return HandoffPage(page: number, key: key, source: source?.storageString)
+        case .routine(let id):
+            let written =
+                inkedKeys.contains(page.key)
+                || day.extras.contains {
+                    $0.source == page.key && inkedKeys.contains(.extra($0.id))
+                }
+            // The content the page was laid out from: the day's, else the one retained with it.
+            let routine =
+                ([day.content] + day.retained.filter { $0.key == page.key }.map(\.content))
+                .lazy.compactMap { $0.routinePages.first { $0.id == id } }.first
+            return HandoffPage(
+                page: number, key: key, title: routine?.name,
+                summaryRoutines: written ? routine.map { [$0] } : nil)
         default:
             return HandoffPage(page: number, key: key)
         }

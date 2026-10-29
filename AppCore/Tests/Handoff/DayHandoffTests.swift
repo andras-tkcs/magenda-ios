@@ -59,6 +59,59 @@ struct DayHandoffTests {
         #expect(handoff.lastError == nil && handoff.sessionURL == nil)
     }
 
+    @Test("A routine's own page asks for the routine only when it, or a copy of it, has ink")
+    func routinePageNeedsInk() throws {
+        let updates = SummaryRoutine(id: "r1", name: "Updates", hasPage: true)
+        var content = try Self.content()
+        content.routinePages = [updates]
+        var binder = BinderDay(content: content, theme: Theme())
+        binder.addPage(after: .routine("r1"), id: "copy")
+        let plan = Self.plan([.overview, .notes, .routine("r1"), .extra("copy")])
+        func pages(inked: Set<PageKey>) throws -> DayHandoff {
+            DayHandoff(
+                date: try Self.day(), checksum: Self.checksum, day: binder, plan: plan,
+                inkedKeys: inked)
+        }
+
+        let blank = try pages(inked: [.notes])
+        #expect(blank.pages[2].title == "Updates")
+        #expect(blank.pages[2].summaryRoutines == nil)
+        #expect(blank.summaryRoutineIDs.isEmpty && blank.summariesWritten)
+        #expect(blank.unsentSummaryRoutines.isEmpty)
+
+        let written = try pages(inked: [.routine("r1")])
+        #expect(written.pages[2].summaryRoutines == [updates])
+        #expect(written.summaryRoutineIDs == ["r1"])
+        let payload = written.summaryPayload(for: updates)
+        #expect(payload.contains(#""key":"routine:r1""#) && payload.contains(#""extraPages":[4]"#))
+
+        let onCopy = try pages(inked: [.extra("copy")])
+        #expect(onCopy.pages[2].summaryRoutines == [updates])
+    }
+
+    @Test("A page kept for its ink after its routine lost the page still asks for the routine")
+    func retainedRoutinePage() throws {
+        let updates = SummaryRoutine(id: "r1", name: "Updates", hasPage: true)
+        var old = try Self.content()
+        old.routinePages = [updates]
+        let binder = BinderDay(
+            content: try Self.content(), theme: Theme(),
+            retained: [RetainedPage(key: .routine("r1"), content: old)])
+        let handoff = DayHandoff(
+            date: try Self.day(), checksum: Self.checksum, day: binder,
+            plan: Self.plan([.overview, .routine("r1")]), inkedKeys: [.routine("r1")])
+        #expect(handoff.pages[1].summaryRoutines == [updates])
+    }
+
+    @Test("A routine page whose routine is unknown asks for nothing")
+    func unknownRoutinePage() throws {
+        let handoff = DayHandoff(
+            date: try Self.day(), checksum: Self.checksum,
+            day: BinderDay(content: try Self.content(), theme: Theme()),
+            plan: Self.plan([.routine("gone")]), inkedKeys: [.routine("gone")])
+        #expect(handoff.pages[0].summaryRoutines == nil && handoff.pages[0].title == nil)
+    }
+
     @Test("The builder describes meeting pages, added pages and the printed rows")
     func builder() throws {
         let retainedContent = try Self.content(

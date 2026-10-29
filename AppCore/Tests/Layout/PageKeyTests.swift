@@ -9,7 +9,7 @@ import Testing
 struct PageKeyTests {
     private static let keys: [PageKey] = [
         .overview, .delegated(0), .delegated(3), .meeting("primary|abc:def"), .meeting(""),
-        .notes, .extra("x1"),
+        .notes, .extra("x1"), .routine("r1"),
     ]
 
     @Test("Every key round-trips through its storage string", arguments: PageKeyTests.keys)
@@ -25,6 +25,7 @@ struct PageKeyTests {
         #expect(PageKey.meeting("").storageString == "meeting:")
         #expect(PageKey.notes.storageString == "notes")
         #expect(PageKey.extra("e").storageString == "extra:e")
+        #expect(PageKey.routine("r").storageString == "routine:r")
     }
 
     @Test("A meeting ID may contain colons and pipes, or be empty")
@@ -36,7 +37,8 @@ struct PageKeyTests {
     @Test(
         "Malformed strings have no key",
         arguments: [
-            "", "delegated:x", "delegated:-1", "extra:", "overview:x", "notes:x", "unknown",
+            "", "delegated:x", "delegated:-1", "extra:", "routine:", "overview:x", "notes:x",
+            "unknown",
         ])
     func malformed(_ text: String) {
         #expect(PageKey(storageString: text) == nil)

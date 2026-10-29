@@ -12,7 +12,7 @@ public struct AgendaLayout: Sendable {
     }
 
     /// The plan for `content`: the overview, the delegated pages, one page per meeting and the
-    /// further-notes page.
+    /// further-notes page, then a page for each summary routine that has one.
     public func plan(for content: AgendaContent) -> RenderPlan {
         let overview = overviewPage(for: content)
         let delegated = delegatedPages(for: content)
@@ -24,6 +24,7 @@ public struct AgendaLayout: Sendable {
                     ? content.meetingSummaryRoutines[index] : [])
         }
         pages.append(furtherNotesPage())
+        pages += content.routinePages.map(routinePage)
         let header = headerOperations(for: content.date)
         return RenderPlan(
             pageWidth: manifest.pageWidth, pageHeight: manifest.pageHeight,
@@ -197,6 +198,20 @@ public struct AgendaLayout: Sendable {
                 [fitter.singleLine(names, font: font, maxWidth: namesBox.x1 - namesBox.x0)],
                 font: font, color: color, in: namesBox, container: namesBox, alignment: .left
             ).map { .text($0) }
+    }
+
+    /// A page of its own for `routine`, titled with its name and otherwise blank.
+    private func routinePage(_ routine: SummaryRoutine) -> PagePlan {
+        let title = ["further_notes.label"].compactMap { manifest.slot($0) }
+            .flatMap { slot in
+                leftRuns(
+                    fitter.singleLine(
+                        routine.name, font: font(for: slot),
+                        maxWidth: TemplateGeometry.meetingTitleWidth),
+                    in: slot)
+            }
+        return PagePlan(
+            key: .routine(routine.id), chrome: .furtherNotes, operations: title.map { .text($0) })
     }
 
     private func furtherNotesPage() -> PagePlan {

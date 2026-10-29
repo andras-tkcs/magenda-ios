@@ -13,7 +13,8 @@ repository; adapt them to this page. The decisions behind it are in
 [ADR 0034](adr/0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md) (schema 2),
 [ADR 0038](adr/0038-summaries-are-written-by-dedicated-summary-routines-that-magenda-starts.md) (summary routines),
 [ADR 0039](adr/0039-a-summary-announces-itself-in-the-doc-with-a-marker-line.md) (the summary marker) and
-[ADR 0040](adr/0040-the-routine-payload-moves-to-schema-3-and-summaries-have-their-own-schema.md) (schema 3).
+[ADR 0040](adr/0040-the-routine-payload-moves-to-schema-3-and-summaries-have-their-own-schema.md) (schema 3) and
+[ADR 0050](adr/0050-a-summary-routine-can-have-a-binder-page-of-its-own.md) (a routine's own page).
 
 ## Drive layout
 
@@ -81,10 +82,11 @@ Schema `magenda.end-of-day/3`, a day run:
   Magenda recorded it.
 - `pageCount` equals the number of PDF pages. `pages[].page` is the 1-based position in the PDF
   and `key` is Magenda's page key (`overview`, `delegated:<n>`, `meeting:<event key>`, `notes`,
-  `extra:<id>`).
+  `extra:<id>`, `routine:<routine ID>`).
 - Meeting pages carry `calendarID` and `eventID` (the event key split at its first `|`), the page
   `title`, and `summaryRoutines` (an array of `{"id","name"}`) when the meeting asks for summary
-  routines. It is informational: this routine does not write summaries. A page the person added has
+  routines. It is informational: this routine does not write summaries. A summary routine's own page (`routine:<id>`) has the routine's name as `title`, and
+  `summaryRoutines` only when something is written on it or on a copy of it. A page the person added has
   `source`, the key of the page it copies. Keys with no value are left out.
 - `tasks` are the printed to-do rows in order (`taskID` is the Google task ID when the row came
   from one). `delegated` are the delegated rows in page order.
@@ -142,7 +144,10 @@ Summaries are announced by marker lines further down (see Summary routines), nev
 ## Summary routines
 
 A meeting asks for summaries by checkboxes in Magenda (a title rule in the binder rules, or the
-meeting's Edit sheet). Each summary is written by its own Claude routine with its own API trigger
+meeting's Edit sheet). A routine can also have a page of its own at the end of the binder
+(Settings → Summary routines → Own page); it is asked for on a day only when that page has
+handwriting, and then it appears in `meetings` like a meeting page, with `key` `routine:<id>`, no
+`calendarID` or `eventID`, and the routine's name as `title`. Each summary is written by its own Claude routine with its own API trigger
 and token, set up under Settings → Summary routines. When the person taps Approve notes, Magenda
 starts each routine that at least one meeting of the record asked for, once, with schema
 `magenda.summary/1`. The payload is one JSON object with sorted keys, a few kilobytes in practice (no
