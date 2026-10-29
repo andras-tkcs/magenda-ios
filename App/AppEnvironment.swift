@@ -97,7 +97,8 @@ enum AppEnvironment {
                 summaryCredentials: summaryCredentials, renderer: renderer,
                 hasher: CryptoKitHasher(),
                 today: { fixtureDay }, readFile: readFile, removeFile: removeFile,
-                folderName: { controller.settings.driveFolderName })
+                folderName: { controller.settings.driveFolderName },
+                existingFolderID: { controller.settings.driveFolderID })
             return AppServices(
                 controller: controller, handoff: handoff, pageDrawer: drawer,
                 allowsFingerDrawing: allowsFingerDrawing, contactPicker: FixtureContactPicker(),
@@ -136,7 +137,8 @@ enum AppEnvironment {
             hasher: CryptoKitHasher(),
             today: { CalendarDay.today(in: timeZone, now: Date()) },
             readFile: readFile, removeFile: removeFile,
-            folderName: { controller.settings.driveFolderName })
+            folderName: { controller.settings.driveFolderName },
+                existingFolderID: { controller.settings.driveFolderID })
         return AppServices(
             controller: controller, handoff: handoff, pageDrawer: drawer,
             allowsFingerDrawing: allowsFingerDrawing, contactPicker: SystemContactPicker(),

@@ -16,6 +16,9 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
     public var rules: BinderRules
     /// The name of the Google Drive folder finished days are uploaded to.
     public var driveFolderName: String
+    /// The ID of an existing Drive folder to upload to instead of looking one up by name; nil
+    /// means find or create `driveFolderName`.
+    public var driveFolderID: String?
     /// The summary routines the person set up, without their secrets.
     public var summaryRoutines: [SummaryRoutine]
 
@@ -24,7 +27,7 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
         fontPack: FontPack = .outfit, colors: ThemeColors = .default, calendarIDs: [String] = [],
         todoListTitle: String = "Claude", delegatedListTitle: String = "Claude Delegations",
         rules: BinderRules = .default, driveFolderName: String = DriveFolderName.default,
-        summaryRoutines: [SummaryRoutine] = []
+        driveFolderID: String? = nil, summaryRoutines: [SummaryRoutine] = []
     ) {
         self.fontPack = fontPack
         self.colors = colors
@@ -33,6 +36,7 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
         self.delegatedListTitle = delegatedListTitle
         self.rules = rules
         self.driveFolderName = driveFolderName
+        self.driveFolderID = driveFolderID
         self.summaryRoutines = summaryRoutines
     }
 
@@ -59,6 +63,8 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
             rules: try value(.rules, defaults.rules),
             driveFolderName: DriveFolderName.validated(
                 try value(.driveFolderName, defaults.driveFolderName)) ?? defaults.driveFolderName,
+            driveFolderID: try container.decodeIfPresent(String.self, forKey: .driveFolderID)
+                .flatMap(DriveFolderName.folderID(from:)),
             summaryRoutines: try value(.summaryRoutines, defaults.summaryRoutines))
     }
 
@@ -80,7 +86,7 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case fontPack, colors, calendarIDs, todoListTitle, delegatedListTitle, rules
-        case driveFolderName, summaryRoutines
+        case driveFolderName, driveFolderID, summaryRoutines
     }
 }
 
