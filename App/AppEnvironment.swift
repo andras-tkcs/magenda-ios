@@ -8,6 +8,7 @@ struct AppServices {
     let pageDrawer: PageDrawer
     let allowsFingerDrawing: Bool
     let contactPicker: any ContactPicking
+    let driveFolders: any DriveFolderBrowsing
     let animates: Bool
     let launchRequest: LaunchRequest
 }
@@ -102,6 +103,7 @@ enum AppEnvironment {
             return AppServices(
                 controller: controller, handoff: handoff, pageDrawer: drawer,
                 allowsFingerDrawing: allowsFingerDrawing, contactPicker: FixtureContactPicker(),
+                driveFolders: FixtureDriveFolders(),
                 animates: launch.animates, launchRequest: LaunchRequest(launch))
         }
 
@@ -142,6 +144,7 @@ enum AppEnvironment {
         return AppServices(
             controller: controller, handoff: handoff, pageDrawer: drawer,
             allowsFingerDrawing: allowsFingerDrawing, contactPicker: SystemContactPicker(),
+            driveFolders: GoogleDriveClient(sender: session),
             animates: true, launchRequest: LaunchRequest(.standard))
     }
 

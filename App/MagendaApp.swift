@@ -29,6 +29,7 @@ struct MagendaApp: App {
                     .environment(\.pageDrawer, services.pageDrawer)
                     .environment(\.allowsFingerDrawing, services.allowsFingerDrawing)
                     .environment(\.contactPicker, services.contactPicker)
+                    .environment(\.driveFolders, services.driveFolders)
                     .environment(\.launchRequest, services.launchRequest)
                     .task {
                         await services.controller.start()
