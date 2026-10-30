@@ -17,6 +17,43 @@ public struct PersonAlias: Equatable, Sendable {
     }
 }
 
+extension PersonAlias {
+    /// One alias per comma-separated name of `names`, all for `email`, in the order typed; a name
+    /// repeated once folded is kept once. Empty when the email is blank or no name is left once
+    /// trimmed.
+    public static func aliases(names: String, email: String) -> [PersonAlias] {
+        var seen = Set<String>()
+        return names.split(separator: ",", omittingEmptySubsequences: false).compactMap {
+            guard let alias = PersonAlias(name: String($0), email: email),
+                seen.insert(alias.key).inserted
+            else { return nil }
+            return alias
+        }
+    }
+
+    /// The aliases of `personAliases` grouped by email: one group per email, sorted by email,
+    /// each with its folded names sorted.
+    public static func groups(_ personAliases: [String: String]) -> [PersonGroup] {
+        Dictionary(grouping: personAliases, by: \.value)
+            .map { PersonGroup(email: $0.key, names: $0.value.map(\.key).sorted()) }
+            .sorted { $0.email < $1.email }
+    }
+}
+
+/// One person of the People rules: an email and every name that stands for it.
+public struct PersonGroup: Equatable, Sendable {
+    /// The lowercased email.
+    public let email: String
+    /// The folded names, sorted.
+    public let names: [String]
+
+    /// Creates a group.
+    public init(email: String, names: [String]) {
+        self.email = email
+        self.names = names
+    }
+}
+
 /// One email address picked from the person's contacts, with the contact's names.
 public struct PickedContact: Equatable, Sendable {
     /// The contact's given name; empty when it has none.
@@ -36,7 +73,7 @@ public struct PickedContact: Equatable, Sendable {
         self.email = email
     }
 
-    /// The name to put in "Name in tasks": the nickname, else the given name, else the family
+    /// The name to put in "Names in tasks": the nickname, else the given name, else the family
     /// name, trimmed; empty when the contact has none.
     public var suggestedName: String {
         [nickname, givenName, familyName]
