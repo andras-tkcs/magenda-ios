@@ -22,7 +22,7 @@ Magenda files everything below with the `drive` scope (ADR 0051), and creates on
 
 | What | Name | Where |
 |---|---|---|
-| Folder | the folder named in Settings → Google Drive (`Magenda` unless changed), or the one whose link is pasted there | anywhere in the person's Drive; created in the root |
+| Folder | the folder picked under Settings → Google Drive → Folder, or `Magenda` when none is picked | anywhere in the person's Drive; `Magenda` is created in the root when missing |
 | PDF | `Magenda <YYYY-MM-DD>.pdf` | in the folder |
 | Doc | `Magenda <YYYY-MM-DD> notes` | in the folder |
 | PDF of a meeting sent early | `Magenda <YYYY-MM-DD> part <n>.pdf` | in the folder |

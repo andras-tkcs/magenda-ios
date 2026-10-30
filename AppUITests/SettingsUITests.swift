@@ -175,33 +175,69 @@ final class SettingsUITests: XCTestCase {
             error.waitForNonExistence(timeout: 30), "the error stayed after a valid hex")
     }
 
-    /// Naming the Drive folder: a name with a slash shows the error, a valid one clears it and the
-    /// footer names the new folder.
+    /// Choosing a Drive folder shows it in the Folder row; resetting brings back the default.
     @MainActor
-    func testAFolderNameIsSavedAndAnInvalidOneShowsAnError() {
+    func testChoosingADriveFolderShowsItInSettings() {
         let app = launchIntoSettings()
 
         let footer = app.element("driveFolderFooter")
         footer.reveal(in: settingsForm(app))
         XCTAssertTrue(footer.label.contains("“Magenda”"), "the footer did not name the default")
 
-        let field = app.element("driveFolderField")
-        enterHex(
-            app, field, "a/b", container: settingsForm(app), top: belowNavigationBar(app))
-        let error = app.element("driveFolderError")
-        XCTAssertTrue(error.waitForExistence(timeout: 30), "no error for a name with a slash")
+        let link = app.element("driveFolderLink")
+        link.reveal(in: settingsForm(app))
+        link.tap()
 
-        enterHex(
-            app, field, "Work notes", container: settingsForm(app), top: belowNavigationBar(app))
-        let saved = XCTWaiter().wait(
+        // The fixture's My Drive holds Magenda, then Work.
+        let work = app.element("driveFolderRow.1")
+        XCTAssertTrue(work.waitForExistence(timeout: 30), "the folders never listed")
+        work.tap()
+        let use = app.element("driveFolderUseButton")
+        XCTAssertTrue(use.waitForExistence(timeout: 30), "the Work level never opened")
+        use.tap()
+
+        let reset = app.element("driveFolderResetButton")
+        waitForLabel(link, containing: "Work")
+        XCTAssertTrue(reset.waitForExistence(timeout: 30), "no reset button for a picked folder")
+
+        reset.tap()
+        waitForLabel(link, containing: "Magenda")
+    }
+
+    /// Creating a folder inside a Drive folder picks it.
+    @MainActor
+    func testCreatingADriveFolderUsesIt() {
+        let app = launchIntoSettings()
+
+        let link = app.element("driveFolderLink")
+        link.reveal(in: settingsForm(app))
+        link.tap()
+        let work = app.element("driveFolderRow.1")
+        XCTAssertTrue(work.waitForExistence(timeout: 30), "the folders never listed")
+        work.tap()
+
+        let newButton = app.element("driveFolderNewButton")
+        XCTAssertTrue(newButton.waitForExistence(timeout: 30), "the Work level never opened")
+        newButton.tap()
+
+        // The alert's field is first responder as soon as it shows.
+        let field = app.alerts.firstMatch.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 30), "the new folder alert never showed")
+        app.typeText("Q4 notes")
+        app.alerts.buttons["Create"].tap()
+
+        waitForLabel(link, containing: "Q4 notes")
+    }
+
+    /// Waits until `element`'s label contains `text`.
+    @MainActor
+    private func waitForLabel(_ element: XCUIElement, containing text: String) {
+        let shown = XCTWaiter().wait(
             for: [
                 XCTNSPredicateExpectation(
-                    predicate: NSPredicate(format: "exists == false"), object: error),
-                XCTNSPredicateExpectation(
-                    predicate: NSPredicate(format: "label CONTAINS %@", "“Work notes”"),
-                    object: footer),
+                    predicate: NSPredicate(format: "label CONTAINS %@", text), object: element)
             ], timeout: 30)
-        XCTAssertEqual(saved, .completed, "the folder name was not saved")
+        XCTAssertEqual(shown, .completed, "the label never contained \(text): \(element.label)")
     }
 
     @MainActor

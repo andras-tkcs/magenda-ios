@@ -74,7 +74,7 @@ the shared PDFs can't be read while the device is locked (ADR 0022).
 On an iPad, **Finish Day** in the binder's toolbar sends the day to Google Drive and starts your
 end-of-day Claude routine (ADR 0027, ADR 0028). Magenda renders the day once, with the printed
 text kept as text and your handwriting on top, and uploads it as `Magenda <date>.pdf` to a
-folder in your Drive, `Magenda` unless you rename it in Settings → Google Drive (ADR 0036). Next to it, it creates a Google Doc named `Magenda <date> notes`
+folder in your Drive, `Magenda` unless you pick or create another under Settings → Google Drive → Folder (ADR 0051). Next to it, it creates a Google Doc named `Magenda <date> notes`
 whose first line is the day's status. Magenda sees only the files it created. A day finished
 without a connection waits and is sent the next time the app becomes active; finishing a day again
 before it was sent replaces its PDF. **Reset Hand-off**, after a confirmation, forgets that a day was sent so you can finish it again (ADR 0032); the earlier PDF and Doc stay in Drive.

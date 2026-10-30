@@ -16,9 +16,8 @@ struct SettingsView: View {
         static let clientIDLabel = "clientIDLabel"
         static let changeClientButton = "changeClientButton"
         static let forgetClientButton = "forgetClientButton"
-        static let driveFolderField = "driveFolderField"
-        static let driveFolderError = "driveFolderError"
-        static let driveFolderLinkField = "driveFolderLinkField"
+        static let driveFolderLink = "driveFolderLink"
+        static let driveFolderResetButton = "driveFolderResetButton"
         static let driveFolderFooter = "driveFolderFooter"
         static let routineURLField = "routineURLField"
         static let routineTokenField = "routineTokenField"
@@ -50,21 +49,19 @@ struct SettingsView: View {
         case rules
         case calendars
         case look
+        case driveFolder(DriveFolder?)
     }
 
     let appInfo: AppInfo
 
     @Environment(AgendaController.self) private var controller
     @Environment(HandoffController.self) private var handoff
+    @Environment(\.driveFolders) private var driveFolders
     @Environment(\.dismiss) private var dismiss
 
     @State private var showsClientSheet = false
     @State private var confirmsForget = false
     @State private var routineToForget: SummaryRoutine?
-    @State private var folderDraft = ""
-    @State private var folderInvalid = false
-    @State private var folderLinkDraft = ""
-    @State private var folderLinkInvalid = false
     @State private var routineURL = ""
     @State private var routineToken = ""
     @State private var routineSaveFailed = false
@@ -103,6 +100,13 @@ struct SettingsView: View {
                 case .rules: RulesView()
                 case .calendars: CalendarsView()
                 case .look: LookView()
+                case .driveFolder(let folder):
+                    if let driveFolders {
+                        DriveFolderPickerView(
+                            parent: folder, browser: driveFolders, choose: chooseFolder)
+                    } else {
+                        Text("Google Drive isn't available.")
+                    }
                 }
             }
             .navigationTitle("Settings")
@@ -112,10 +116,6 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                         .accessibilityIdentifier(ID.settingsDone)
                 }
-            }
-            .onAppear {
-                folderDraft = controller.settings.driveFolderName
-                folderLinkDraft = controller.settings.driveFolderID ?? ""
             }
             .sheet(isPresented: $showsClientSheet) {
                 SetupView(isSheet: true)
@@ -235,65 +235,45 @@ struct SettingsView: View {
     }
 
     private var driveSection: some View {
-        Section {
-            TextField("Folder name", text: $folderDraft)
-                .autocorrectionDisabled()
-                .submitLabel(.done)
-                .onSubmit(commitFolder)
-                .onChange(of: folderDraft) { folderInvalid = false }
-                .accessibilityIdentifier(ID.driveFolderField)
-            if folderInvalid {
-                Text(DriveFolderName.invalidMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier(ID.driveFolderError)
+        let name = controller.settings.driveFolderName
+        let isPicked = controller.settings.driveFolderID != nil
+        return Section {
+            NavigationLink(value: Route.driveFolder(nil)) {
+                LabeledContent("Folder", value: name)
+                    .accessibilityElement(children: .combine)
             }
-            TextField("Existing folder link (optional)", text: $folderLinkDraft)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .submitLabel(.done)
-                .onSubmit(commitFolderLink)
-                .onChange(of: folderLinkDraft) { folderLinkInvalid = false }
-                .accessibilityIdentifier(ID.driveFolderLinkField)
-            if folderLinkInvalid {
-                Text("That isn't a Google Drive folder link.")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+            .accessibilityIdentifier(ID.driveFolderLink)
+            if isPicked {
+                Button("Use the default “\(DriveFolderName.default)” folder") {
+                    Task {
+                        await controller.updateSettings {
+                            $0.driveFolderID = nil
+                            $0.driveFolderName = DriveFolderName.default
+                        }
+                    }
+                }
+                .accessibilityIdentifier(ID.driveFolderResetButton)
             }
         } header: {
             Text("Google Drive")
         } footer: {
             Text(
-                "Finished days upload to the “\(controller.settings.driveFolderName)” folder in your Google Drive, which Magenda creates. A new name makes a new folder; days already uploaded stay where they are. To use a folder that already exists, paste its link; the name is then ignored."
+                isPicked
+                    ? "Finished days upload to the “\(name)” folder in your Google Drive. Choose another folder, or make a new one, under Folder; days already uploaded stay where they are."
+                    : "Finished days upload to the “\(name)” folder in your Google Drive, which Magenda creates when it is missing. Choose another folder, or make a new one, under Folder; days already uploaded stay where they are."
             )
             .accessibilityIdentifier(ID.driveFolderFooter)
         }
     }
 
-    private func commitFolder() {
-        guard let name = DriveFolderName.validated(folderDraft) else {
-            folderInvalid = true
-            return
+    private func chooseFolder(_ folder: DriveFolder) {
+        path = []
+        Task {
+            await controller.updateSettings {
+                $0.driveFolderID = folder.id
+                $0.driveFolderName = folder.name
+            }
         }
-        folderInvalid = false
-        folderDraft = name
-        Task { await controller.updateSettings { $0.driveFolderName = name } }
-    }
-
-    private func commitFolderLink() {
-        let text = folderLinkDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
-            folderLinkInvalid = false
-            Task { await controller.updateSettings { $0.driveFolderID = nil } }
-            return
-        }
-        guard let id = DriveFolderName.folderID(from: text) else {
-            folderLinkInvalid = true
-            return
-        }
-        folderLinkInvalid = false
-        folderLinkDraft = id
-        Task { await controller.updateSettings { $0.driveFolderID = id } }
     }
 
     @ViewBuilder
@@ -471,6 +451,7 @@ struct SettingsView: View {
         SettingsView(appInfo: AppInfo(name: "Preview", version: "1.0.0", build: "1"))
             .environment(services.controller)
             .environment(services.handoff)
+            .environment(\.driveFolders, services.driveFolders)
             .task {
                 await services.controller.start()
                 services.handoff.start()
