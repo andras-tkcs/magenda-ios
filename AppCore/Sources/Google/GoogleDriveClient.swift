@@ -34,6 +34,7 @@ public struct GoogleDriveClient: DriveFiling {
             .replacingOccurrences(of: "'", with: "\\'")
         let query =
             "name = '\(escapedName)' and mimeType = '\(Self.folderType)' and trashed = false"
+            + " and 'me' in owners"
         let listURL = GoogleAPI.withQuery(
             [
                 (key: "q", value: query), (key: "spaces", value: "drive"),
@@ -160,6 +161,81 @@ public struct GoogleDriveClient: DriveFiling {
         // failure from needing a branch of its own.
         return [try? encoder.encode(value)].compactMap { $0 }.reduce(Data()) { $1 }
     }
+}
+
+extension GoogleDriveClient: DriveFolderBrowsing {
+    private static let maxFolderPages = 10
+
+    /// The folders directly inside `parentID`, following Drive's pages up to ten.
+    public func folders(in parentID: String) async throws -> [DriveFolder] {
+        try Self.checkParent(parentID)
+        let query =
+            "'\(parentID)' in parents and mimeType = '\(Self.folderType)' and trashed = false"
+        var found: [DriveFolder] = []
+        var pageToken: String?
+        for _ in 0..<Self.maxFolderPages {
+            var items = [
+                (key: "q", value: query), (key: "spaces", value: "drive"),
+                (key: "fields", value: "nextPageToken,files(id,name)"),
+                (key: "orderBy", value: "name_natural"), (key: "pageSize", value: "1000"),
+            ]
+            if let pageToken {
+                items.append((key: "pageToken", value: pageToken))
+            }
+            let response = try await sender.send(
+                HTTPRequest(
+                    method: .get, url: GoogleAPI.withQuery(items, on: Self.filesURL), headers: [:],
+                    body: nil))
+            let page = try decode(FolderPage.self, response)
+            found += page.files.filter { Self.isFolderID($0.id) }.map(\.folder)
+            guard let next = page.nextPageToken else {
+                break
+            }
+            pageToken = next
+        }
+        return found
+    }
+
+    /// Creates a folder called `name` inside `parentID`.
+    public func createFolder(named name: String, in parentID: String) async throws -> DriveFolder {
+        try Self.checkParent(parentID)
+        let body = encode(Metadata(mimeType: Self.folderType, name: name, parents: [parentID]))
+        let response = try await sender.send(
+            HTTPRequest(
+                method: .post,
+                url: GoogleAPI.withQuery([(key: "fields", value: "id,name")], on: Self.filesURL),
+                headers: ["Content-Type": Self.jsonType], body: body))
+        let folder = try decode(FolderEntry.self, response).folder
+        guard Self.isFolderID(folder.id) else {
+            throw GoogleAPIError.unexpectedResponse
+        }
+        return folder
+    }
+
+    private static func isFolderID(_ id: String) -> Bool {
+        DriveFolderName.folderID(from: id) == id
+    }
+
+    /// Keeps a malformed ID out of the query string.
+    private static func checkParent(_ parentID: String) throws {
+        guard parentID == DriveFolder.rootID || isFolderID(parentID) else {
+            throw GoogleAPIError.notFound
+        }
+    }
+}
+
+private struct FolderEntry: Decodable {
+    let id: String
+    let name: String
+
+    var folder: DriveFolder {
+        DriveFolder(id: id, name: name)
+    }
+}
+
+private struct FolderPage: Decodable {
+    let files: [FolderEntry]
+    let nextPageToken: String?
 }
 
 private struct Metadata: Encodable {

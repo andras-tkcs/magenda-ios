@@ -14,7 +14,8 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
     public var delegatedListTitle: String
     /// The binder rules.
     public var rules: BinderRules
-    /// The name of the Google Drive folder finished days are uploaded to.
+    /// The name of the Drive folder finished days are uploaded to: the picked folder's name when
+    /// `driveFolderID` is set, else the folder found or created by this name.
     public var driveFolderName: String
     /// The ID of an existing Drive folder to upload to instead of looking one up by name; nil
     /// means find or create `driveFolderName`.
@@ -54,6 +55,13 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
             try container.decodeIfPresent(T.self, forKey: key) ?? fallback
         }
         let fontPackName = try value(.fontPack, defaults.fontPack.rawValue)
+        let folderID = try container.decodeIfPresent(String.self, forKey: .driveFolderID)
+            .flatMap(DriveFolderName.folderID(from:))
+        let storedFolderName = try value(.driveFolderName, defaults.driveFolderName)
+        // A picked folder's name may contain "/", which `validated` refuses.
+        let trimmedFolderName = storedFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let folderName =
+            folderID == nil ? DriveFolderName.validated(storedFolderName) : trimmedFolderName
         self.init(
             fontPack: FontPack(rawValue: fontPackName) ?? defaults.fontPack,
             colors: try value(.colors, defaults.colors),
@@ -61,10 +69,9 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
             todoListTitle: try value(.todoListTitle, defaults.todoListTitle),
             delegatedListTitle: try value(.delegatedListTitle, defaults.delegatedListTitle),
             rules: try value(.rules, defaults.rules),
-            driveFolderName: DriveFolderName.validated(
-                try value(.driveFolderName, defaults.driveFolderName)) ?? defaults.driveFolderName,
-            driveFolderID: try container.decodeIfPresent(String.self, forKey: .driveFolderID)
-                .flatMap(DriveFolderName.folderID(from:)),
+            driveFolderName: folderName.flatMap { $0.isEmpty ? nil : $0 }
+                ?? defaults.driveFolderName,
+            driveFolderID: folderID,
             summaryRoutines: try value(.summaryRoutines, defaults.summaryRoutines))
     }
 

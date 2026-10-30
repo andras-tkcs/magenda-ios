@@ -1,0 +1,7 @@
+{
+  "nextPageToken": "page-2",
+  "files": [
+    { "id": "folder-alpha-01", "name": "Alpha" },
+    { "id": "folder-beta-002", "name": "Beta" }
+  ]
+}

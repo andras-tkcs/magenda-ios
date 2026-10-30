@@ -42,7 +42,7 @@ public struct GoogleOAuthConfiguration: Equatable, Sendable {
     public static let scopes = [
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/tasks.readonly",
-        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive",
     ]
 
     private static let clientIDSuffix = ".apps.googleusercontent.com"
