@@ -85,6 +85,8 @@ MODULE_FLOORS: dict[str, float] = {
     "AppCore/Sources/Handoff/HandoffFixtures.swift": 100.0,
     # Names, validates and looks up the summary routines a meeting asks for; a wrong match starts the wrong routine.
     "AppCore/Sources/Settings/SummaryRoutine.swift": 100.0,
+    # Turns typed names into People rules and groups them by email; a wrong split matches a task to the wrong person.
+    "AppCore/Sources/Settings/PersonAlias.swift": 100.0,
     # Matches meeting titles against summary-rule patterns; a wrong match starts the wrong routine.
     "AppCore/Sources/Settings/TitlePattern.swift": 100.0,
     # Fires a summary routine with its own token; a wrong branch sends one routine's summary with another's token.

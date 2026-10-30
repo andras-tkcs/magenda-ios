@@ -168,6 +168,25 @@ final class RulesUITests: XCTestCase {
     }
 
     @MainActor
+    func testAddingSeveralNamesForOneEmailShowsOneRow() {
+        let app = launchIntoRules()
+        enter(app, app.element("peopleName"), "Bob, Robert\n")
+        enter(app, app.element("peopleEmail"), "robert@example.com\n")
+        let add = app.buttons["peopleAdd"].firstMatch
+        add.reveal(in: rulesForm(app))
+        var taps = 0
+        let row = app.element("rulesRow.people.0")
+        while !row.exists && taps < 5 {
+            add.tap()
+            taps += 1
+            _ = row.waitForExistence(timeout: 10)
+        }
+        let text = "bob, robert → robert@example.com"
+        XCTAssertTrue(row.waitUntil(\.label, is: text), "\(row) never said \(text)")
+        XCTAssertFalse(app.element("rulesRow.people.1").exists, "the names got a row each")
+    }
+
+    @MainActor
     func testChoosingAContactFillsThePerson() {
         let app = launchIntoRules()
         let choose = app.buttons["peopleFromContacts"].firstMatch
