@@ -200,7 +200,9 @@ final class SettingsUITests: XCTestCase {
         waitForLabel(link, containing: "Work")
         XCTAssertTrue(reset.waitForExistence(timeout: 30), "no reset button for a picked folder")
 
+        reset.reveal(in: settingsForm(app))
         reset.tap()
+        link.reveal(in: settingsForm(app))
         waitForLabel(link, containing: "Magenda")
     }
 
