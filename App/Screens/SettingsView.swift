@@ -2,15 +2,16 @@ import AppCore
 import SwiftUI
 import UIKit
 
-/// The settings sheet: which calendars and task lists feed the agenda, how the PDF looks, the
-/// Google client and account, and the app's version.
+/// The settings sheet: which task lists feed the agenda, the Google client and account, and the
+/// app's version. The calendars and the look of the PDF are a row each that opens a screen of its
+/// own.
 struct SettingsView: View {
     /// The accessibility identifiers UI tests find elements by.
     enum ID {
         static let todoListPicker = "todoListPicker"
         static let delegatedListPicker = "delegatedListPicker"
-        static let colorError = "colorError"
-        static let resetColorsButton = "resetColorsButton"
+        static let calendarsLink = "calendarsLink"
+        static let lookLink = "lookLink"
         static let rulesLink = "rulesLink"
         static let clientIDLabel = "clientIDLabel"
         static let changeClientButton = "changeClientButton"
@@ -42,41 +43,13 @@ struct SettingsView: View {
         static func forgetSummaryRoutineButton(_ n: Int) -> String {
             "forgetSummaryRoutineButton.\(n)"
         }
-        static func calendarRow(_ n: Int) -> String { "calendarRow.\(n)" }
-        static func fontOption(_ pack: FontPack) -> String { "fontOption.\(pack.rawValue)" }
-        static func colorField(_ role: ColorRole) -> String { "colorField.\(role.rawValue)" }
-    }
-
-    /// The five colors the person can change.
-    enum ColorRole: String, CaseIterable, Identifiable {
-        case weekend, heading, label, accent, notes
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .weekend: "Weekend"
-            case .heading: "Date heading"
-            case .label: "Section labels"
-            case .accent: "Accent"
-            case .notes: "Notes heading"
-            }
-        }
-
-        var keyPath: WritableKeyPath<ThemeColors, RGBColor> {
-            switch self {
-            case .weekend: \.weekend
-            case .heading: \.heading
-            case .label: \.label
-            case .accent: \.accent
-            case .notes: \.notes
-            }
-        }
     }
 
     /// A screen pushed inside the settings sheet.
     enum Route: Hashable {
         case rules
+        case calendars
+        case look
     }
 
     let appInfo: AppInfo
@@ -85,8 +58,6 @@ struct SettingsView: View {
     @Environment(HandoffController.self) private var handoff
     @Environment(\.dismiss) private var dismiss
 
-    @State private var hexDrafts: [ColorRole: String] = [:]
-    @State private var invalidRoles: Set<ColorRole> = []
     @State private var showsClientSheet = false
     @State private var confirmsForget = false
     @State private var routineToForget: SummaryRoutine?
@@ -112,9 +83,9 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             Form {
-                calendarsSection
+                Section { calendarsLink }
                 taskListsSection
-                lookSection
+                Section { lookLink }
                 Section {
                     NavigationLink("Binder rules", value: Route.rules)
                         .accessibilityIdentifier(ID.rulesLink)
@@ -127,7 +98,13 @@ struct SettingsView: View {
                 aboutSection
             }
             .accessibilityIdentifier(ID.form)
-            .navigationDestination(for: Route.self) { _ in RulesView() }
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .rules: RulesView()
+                case .calendars: CalendarsView()
+                case .look: LookView()
+                }
+            }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -137,7 +114,6 @@ struct SettingsView: View {
                 }
             }
             .onAppear {
-                resetHexDrafts()
                 folderDraft = controller.settings.driveFolderName
                 folderLinkDraft = controller.settings.driveFolderID ?? ""
             }
@@ -167,47 +143,26 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Calendars
+    // MARK: Calendars and look
 
-    private var calendarsSection: some View {
-        Section {
-            ForEach(Array(controller.calendars.enumerated()), id: \.element.id) { index, calendar in
-                Button {
-                    toggleCalendar(calendar.id)
-                } label: {
-                    HStack {
-                        Text(calendar.title)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if isSelected(calendar) {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-                .accessibilityAddTraits(isSelected(calendar) ? .isSelected : [])
-                .accessibilityIdentifier(ID.calendarRow(index))
-            }
-        } header: {
-            Text("Calendars")
-        } footer: {
-            Text("None selected uses your primary calendar.")
+    private var calendarsLink: some View {
+        NavigationLink(value: Route.calendars) {
+            LabeledContent(
+                "Calendars",
+                value: CalendarSelection.summary(
+                    selectedIDs: controller.settings.calendarIDs, calendars: controller.calendars)
+            )
+            .accessibilityElement(children: .combine)
         }
+        .accessibilityIdentifier(ID.calendarsLink)
     }
 
-    private func isSelected(_ calendar: GoogleCalendar) -> Bool {
-        controller.settings.calendarIDs.contains(calendar.id)
-    }
-
-    private func toggleCalendar(_ id: String) {
-        Task {
-            await controller.updateSettings { settings in
-                if let index = settings.calendarIDs.firstIndex(of: id) {
-                    settings.calendarIDs.remove(at: index)
-                } else {
-                    settings.calendarIDs.append(id)
-                }
-            }
+    private var lookLink: some View {
+        NavigationLink(value: Route.look) {
+            LabeledContent("Look", value: controller.settings.fontPack.displayName)
+                .accessibilityElement(children: .combine)
         }
+        .accessibilityIdentifier(ID.lookLink)
     }
 
     // MARK: Task lists
@@ -261,100 +216,6 @@ struct SettingsView: View {
             set: { title in
                 Task { await controller.updateSettings { $0.delegatedListTitle = title } }
             })
-    }
-
-    // MARK: Look
-
-    private var lookSection: some View {
-        Section("Look") {
-            ForEach(FontPack.allCases, id: \.self) { pack in
-                Button {
-                    Task { await controller.updateSettings { $0.fontPack = pack } }
-                } label: {
-                    HStack {
-                        Text(pack.displayName)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if controller.settings.fontPack == pack {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-                .accessibilityAddTraits(controller.settings.fontPack == pack ? .isSelected : [])
-                .accessibilityIdentifier(ID.fontOption(pack))
-            }
-            ForEach(ColorRole.allCases) { role in
-                colorRow(role)
-            }
-            Button("Reset colors") {
-                invalidRoles = []
-                Task {
-                    await controller.updateSettings { $0.colors = .default }
-                    resetHexDrafts()
-                }
-            }
-            .accessibilityIdentifier(ID.resetColorsButton)
-        }
-    }
-
-    private func colorRow(_ role: ColorRole) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                let color = controller.settings.colors[keyPath: role.keyPath]
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Self.swatch(color))
-                    .frame(width: 24, height: 24)
-                    .accessibilityHidden(true)
-                Text(role.title)
-                Spacer()
-                TextField("215E99", text: hexBinding(role))
-                    .multilineTextAlignment(.trailing)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.asciiCapable)
-                    .submitLabel(.done)
-                    .frame(maxWidth: 120)
-                    .onSubmit { commitHex(role) }
-                    .accessibilityIdentifier(ID.colorField(role))
-            }
-            if invalidRoles.contains(role) {
-                Text("Use six hex digits, like 215E99.")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier(ID.colorError)
-            }
-        }
-    }
-
-    private static func swatch(_ color: RGBColor) -> Color {
-        Color(
-            red: Double(color.red) / 255, green: Double(color.green) / 255,
-            blue: Double(color.blue) / 255)
-    }
-
-    private func hexBinding(_ role: ColorRole) -> Binding<String> {
-        Binding(
-            get: { hexDrafts[role] ?? controller.settings.colors[keyPath: role.keyPath].hex },
-            set: { hexDrafts[role] = $0 })
-    }
-
-    private func commitHex(_ role: ColorRole) {
-        let text = hexDrafts[role] ?? ""
-        guard let color = RGBColor(hex: text) else {
-            invalidRoles.insert(role)
-            return
-        }
-        invalidRoles.remove(role)
-        hexDrafts[role] = color.hex
-        Task { await controller.updateSettings { $0.colors[keyPath: role.keyPath] = color } }
-    }
-
-    private func resetHexDrafts() {
-        var drafts: [ColorRole: String] = [:]
-        for role in ColorRole.allCases {
-            drafts[role] = controller.settings.colors[keyPath: role.keyPath].hex
-        }
-        hexDrafts = drafts
     }
 
     // MARK: Client, account, about

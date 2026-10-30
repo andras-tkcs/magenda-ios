@@ -64,6 +64,7 @@ CLASS_SECONDS: dict[str, int] = {
     "MagendaUITests/SettingsUITests/testResetColorsRestoresTheDefaults": 60,
     "MagendaUITests/SettingsUITests/testSavingAnExistingSummaryRoutineNameKeepsOneRow": 110,
     "MagendaUITests/SettingsUITests/testSigningOutReturnsToSignIn": 70,
+    "MagendaUITests/SettingsUITests/testTheCalendarsScreenChoosesACalendar": 60,
     "MagendaUITests/SettingsUITests/testTheClientIDIsShownAndChangeOpensTheSetupSheet": 40,
     "MagendaUITests/SettingsUITests/testTheRulesLinkAndTheVersionAreThere": 60,
     "MagendaUITests/SetupUITests": 20,
