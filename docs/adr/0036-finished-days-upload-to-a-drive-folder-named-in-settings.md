@@ -4,6 +4,7 @@
 
 Accepted — 2026-10-26. Implemented.
 Amends [ADR 0027](0027-finished-days-are-uploaded-to-google-drive-with-drive-file.md): the fixed folder name.
+Amended by [ADR 0051](0051-drive-folders-are-picked-with-the-full-drive-scope.md): the folder is picked from the person's Drive, not named.
 
 ## Context
 

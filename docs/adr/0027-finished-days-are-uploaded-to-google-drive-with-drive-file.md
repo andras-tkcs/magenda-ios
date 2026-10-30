@@ -7,6 +7,7 @@ Amends [ADR 0013](0013-google-sign-in-uses-pkce-with-aswebauthenticationsession.
 Amends [ADR 0014](0014-agenda-inputs-come-live-from-google-calendar-and-google-tasks.md): "No Drive upload".
 Amended by [ADR 0033](0033-a-meeting-can-be-sent-before-the-day-ends.md): a meeting sent early is its own PDF.
 Amended by [ADR 0036](0036-finished-days-upload-to-a-drive-folder-named-in-settings.md): the folder is named in Settings.
+Amended by [ADR 0051](0051-drive-folders-are-picked-with-the-full-drive-scope.md): the scope is `drive`.
 
 ## Context
 

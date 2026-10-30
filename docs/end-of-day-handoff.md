@@ -8,7 +8,8 @@ repository; adapt them to this page. The decisions behind it are in
 [ADR 0029](adr/0029-the-days-google-doc-is-the-review-record.md) (the Doc and the review),
 [ADR 0030](adr/0030-a-closed-days-handwriting-is-deleted-five-days-later.md) (deletion) and
 [ADR 0031](adr/0031-meeting-summaries-are-requested-by-skill.md) (task IDs),
-[ADR 0036](adr/0036-finished-days-upload-to-a-drive-folder-named-in-settings.md) (the Drive folder),
+[ADR 0036](adr/0036-finished-days-upload-to-a-drive-folder-named-in-settings.md) and
+[ADR 0051](adr/0051-drive-folders-are-picked-with-the-full-drive-scope.md) (the Drive folder),
 [ADR 0033](adr/0033-a-meeting-can-be-sent-before-the-day-ends.md) (meetings sent early) and
 [ADR 0034](adr/0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md) (schema 2),
 [ADR 0038](adr/0038-summaries-are-written-by-dedicated-summary-routines-that-magenda-starts.md) (summary routines),

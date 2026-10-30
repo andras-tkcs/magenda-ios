@@ -46,7 +46,8 @@ none is chosen)
 - A look-ahead task titled "Name – to be discussed" (or "TBD") is kept only when that person is
   invited to an included meeting that day. A name that differs from the attendee's first name is
   matched under Settings → Binder rules → People, where you can type a
-  name and email or choose them from Contacts. Otherwise it is listed unticked with the reason.
+  name and email or choose them from Contacts. One entry can hold several names for the same
+  person, separated by commas. Otherwise it is listed unticked with the reason.
 - A task's notes take one line; a task that does not fit the list is left off the PDF and listed in
   a banner under the preview (on iPad, under the binder's toolbar).
 
@@ -99,7 +100,7 @@ the summary routines append (ADR 0039).
 Each kind of summary is written by its own Claude routine (ADR 0038). Add each one under Settings →
 Summary routines with a name and the fire URL and token of its API trigger; the token stays in the
 Keychain. Then tick which meetings get it, by meeting title under Settings → Binder rules → Meeting
-summaries or for one meeting on its Edit sheet. The meeting page prints the ticked routines' names
+summaries (a rule can be a pattern, a regular expression like `delivery sync [0-9]+`, ADR 0052) or for one meeting on its Edit sheet. The meeting page prints the ticked routines' names
 after **Summary:**. Magenda starts each ticked routine once, when the notes are approved.
 
 Five days after Magenda first reads `Status: Closed`, it deletes that day's handwriting and its

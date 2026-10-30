@@ -32,6 +32,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Binder rules → Meeting summaries: a rule can be a pattern (a regular expression, like
+  `delivery sync [0-9]+`) that matches every meeting whose title fits it.
+- Binder rules → People: one entry can hold several names for the same person, separated by
+  commas.
+
+### Changed
+
+- Settings → Google Drive → Folder now opens your Drive: open folders, pick one, or make a new
+  one. Magenda now asks for access to your Google Drive, so sign in again once after updating.
+- Settings is shorter: the calendars and the font and colours each have a screen of their own,
+  reached from one row that shows the current choice.
+
 ## [0.2.0] — 2026-10-29
 
 ### Added
