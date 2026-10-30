@@ -29,6 +29,7 @@ public struct AgendaBuilder: Sendable {
             tasks: TaskSelection.draftTasks(
                 for: day, tasks: tasks, events: draftEvents, rules: rules),
             delegated: TaskSelection.draftDelegated(for: day, tasks: delegated),
-            summaryRules: rules.summaryRoutines, summaryRoutines: summaryRoutines)
+            summaryRules: rules.summaryRoutines, summaryPatterns: rules.summaryRoutinePatterns,
+            summaryRoutines: summaryRoutines)
     }
 }

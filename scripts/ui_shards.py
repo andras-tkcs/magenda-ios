@@ -45,6 +45,8 @@ CLASS_SECONDS: dict[str, int] = {
     "MagendaUITests/RulesUITests/testAddingAPersonShowsTheAlias": 90,
     "MagendaUITests/RulesUITests/testAddingAPersonalBlockLeavesMatchingEventsOffTheAgenda": 50,
     "MagendaUITests/RulesUITests/testAddingASummaryWithoutAChoiceShowsAnError": 60,
+    "MagendaUITests/RulesUITests/testAddingATitlePatternShowsItsRow": 110,
+    "MagendaUITests/RulesUITests/testAnInvalidPatternShowsAnError": 70,
     "MagendaUITests/RulesUITests/testChoosingAContactFillsThePerson": 60,
     "MagendaUITests/RulesUITests/testDeletingAPersonalBlockBringsItsEventsBack": 40,
     "MagendaUITests/RulesUITests/testEditTogglesTheRulesIntoEditing": 40,

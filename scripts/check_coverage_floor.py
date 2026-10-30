@@ -85,6 +85,8 @@ MODULE_FLOORS: dict[str, float] = {
     "AppCore/Sources/Handoff/HandoffFixtures.swift": 100.0,
     # Names, validates and looks up the summary routines a meeting asks for; a wrong match starts the wrong routine.
     "AppCore/Sources/Settings/SummaryRoutine.swift": 100.0,
+    # Matches meeting titles against summary-rule patterns; a wrong match starts the wrong routine.
+    "AppCore/Sources/Settings/TitlePattern.swift": 100.0,
     # Fires a summary routine with its own token; a wrong branch sends one routine's summary with another's token.
     "AppCore/Sources/Handoff/SummaryRoutineTrigger.swift": 100.0,
     # The Drive folder model and the protocol the picker lists and creates folders through.

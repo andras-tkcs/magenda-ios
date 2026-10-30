@@ -74,15 +74,20 @@ public struct SummaryRoutine: Equatable, Hashable, Codable, Identifiable, Sendab
 public enum SummaryRoutines {
     /// The routine IDs of the entry of `rules` whose `BinderText.fold`ed title equals the fold of
     /// `pageTitle` or of `originalTitle`; when several entries match, the one whose title sorts
-    /// first. IDs are returned as stored, a repeated ID only once. Empty when no entry matches.
+    /// first. Only when no entry matches, the first pattern of `patterns` (in sorted order) that
+    /// ``TitlePattern/matches(_:title:)`` `pageTitle` or `originalTitle` gives its IDs. IDs are
+    /// returned as stored, a repeated ID only once. Empty when nothing matches.
     public static func routineIDs(
-        pageTitle: String, originalTitle: String, rules: [String: [String]]
+        pageTitle: String, originalTitle: String, rules: [String: [String]],
+        patterns: [String: [String]] = [:]
     ) -> [String] {
         let wanted: Set<String> = [BinderText.fold(pageTitle), BinderText.fold(originalTitle)]
-        guard
-            let title = rules.keys.sorted().first(where: { wanted.contains(BinderText.fold($0)) }),
-            let ids = rules[title]
-        else {
+        let byTitle = rules.keys.sorted().first(where: { wanted.contains(BinderText.fold($0)) })
+        let byPattern = patterns.keys.sorted().first {
+            TitlePattern.matches($0, title: pageTitle)
+                || TitlePattern.matches($0, title: originalTitle)
+        }
+        guard let ids = byTitle.flatMap({ rules[$0] }) ?? byPattern.flatMap({ patterns[$0] }) else {
             return []
         }
         var seen: Set<String> = []
