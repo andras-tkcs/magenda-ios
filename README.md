@@ -139,7 +139,10 @@ repository never holds one (ADR 0013).
    **Testing** with your Google account added as a test user. Add exactly three scopes:
    `https://www.googleapis.com/auth/calendar.readonly`,
    `https://www.googleapis.com/auth/tasks.readonly` and
-   `https://www.googleapis.com/auth/drive.file` (Magenda sees only the files it creates in Drive; ADR 0027).
+   `https://www.googleapis.com/auth/drive` (Magenda lists your Drive's folders so you can pick one, and writes only the day's PDF
+   and Doc; ADR 0051). Google lists `drive` as a restricted scope: keep the client in Testing
+   or Internal, as above, because an External client in production needs Google's
+   verification.
    After an update that added a scope, Magenda asks you to sign in again.
 4. Under **Clients**, create an OAuth client of type **iOS** with the bundle ID `name.tkcs.magenda`.
 5. Open Magenda, enter the client ID (it looks like `123456789012-test.apps.googleusercontent.com`)

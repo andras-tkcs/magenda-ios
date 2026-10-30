@@ -18,7 +18,7 @@ repository; adapt them to this page. The decisions behind it are in
 
 ## Drive layout
 
-Magenda creates everything below with the `drive.file` scope, so it only ever sees files it made.
+Magenda files everything below with the `drive` scope (ADR 0051), and creates only the files and folders listed here.
 
 | What | Name | Where |
 |---|---|---|

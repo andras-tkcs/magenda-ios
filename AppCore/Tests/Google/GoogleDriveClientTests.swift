@@ -32,7 +32,7 @@ struct GoogleDriveClientTests {
         let request = try #require(sender.requests.first)
         let query =
             "name = 'It\\'s a\\\\b' and mimeType = 'application/vnd.google-apps.folder'"
-            + " and trashed = false"
+            + " and trashed = false and 'me' in owners"
         let components = try #require(
             URLComponents(url: request.url, resolvingAgainstBaseURL: false))
         #expect(components.queryItems?.first { $0.name == "q" }?.value == query)
@@ -208,5 +208,89 @@ struct GoogleDriveClientTests {
             try await GoogleDriveClient(sender: uploadSender)
                 .uploadPDF(pdf, name: "n", folderID: "f", replacing: nil)
         }
+    }
+
+    private let rootQuery =
+        "'root' in parents and mimeType = 'application/vnd.google-apps.folder'"
+        + " and trashed = false"
+
+    @Test("Folders are listed with the exact request, across pages, dropping a bad ID")
+    func listFolders() async throws {
+        let sender = FakeSender()
+        try sender.enqueue(fixture: "drive-folders-page1")
+        try sender.enqueue(fixture: "drive-folders-page2")
+        let folders = try await GoogleDriveClient(sender: sender).folders(in: "root")
+        #expect(
+            folders.map(\.name) == ["Alpha", "Beta", "Gamma"])
+        #expect(folders.map(\.id) == ["folder-alpha-01", "folder-beta-002", "folder-gamma-03"])
+        #expect(sender.requests.count == 2)
+        let first = try #require(sender.requests.first)
+        #expect(first.method == .get)
+        let components = try #require(
+            URLComponents(url: first.url, resolvingAgainstBaseURL: false))
+        #expect(components.path == "/drive/v3/files")
+        let items = components.queryItems?.map { [$0.name, $0.value ?? ""] }
+        #expect(
+            items == [
+                ["q", rootQuery], ["spaces", "drive"],
+                ["fields", "nextPageToken,files(id,name)"], ["orderBy", "name_natural"],
+                ["pageSize", "1000"],
+            ])
+        let second = try #require(
+            URLComponents(url: sender.requests[1].url, resolvingAgainstBaseURL: false))
+        #expect(
+            second.queryItems?.last.map { [$0.name, $0.value ?? ""] } == ["pageToken", "page-2"])
+    }
+
+    @Test("A listing that never ends stops after ten requests")
+    func listLimit() async throws {
+        let sender = FakeSender()
+        for _ in 0..<12 {
+            try sender.enqueue(fixture: "drive-folders-page1")
+        }
+        let folders = try await GoogleDriveClient(sender: sender).folders(in: "root")
+        #expect(sender.requests.count == 10)
+        #expect(folders.count == 20)
+    }
+
+    @Test("A folder is created with the exact request")
+    func createFolder() async throws {
+        let sender = FakeSender()
+        try sender.enqueue(fixture: "drive-folder-created")
+        let folder = try await GoogleDriveClient(sender: sender)
+            .createFolder(named: "Q4 notes", in: "folder-alpha-01")
+        #expect(folder == DriveFolder(id: "folder-created-01", name: "Q4 notes"))
+        let request = try #require(sender.requests.first)
+        #expect(request.method == .post)
+        #expect(
+            request.url.absoluteString
+                == "https://www.googleapis.com/drive/v3/files?fields=id%2Cname")
+        #expect(request.headers["Content-Type"] == "application/json; charset=UTF-8")
+        #expect(
+            text(request.body)
+                == #"{"mimeType":"application/vnd.google-apps.folder","name":"Q4 notes","parents":["folder-alpha-01"]}"#
+        )
+    }
+
+    @Test("A created folder with a bad ID is unexpected")
+    func createdBadID() async throws {
+        let sender = FakeSender()
+        sender.enqueue(json: #"{"id":"bad id","name":"x"}"#)
+        await #expect(throws: GoogleAPIError.unexpectedResponse) {
+            try await GoogleDriveClient(sender: sender).createFolder(named: "x", in: "root")
+        }
+    }
+
+    @Test("A malformed parent ID is not found and nothing is sent")
+    func malformedParent() async {
+        let sender = FakeSender()
+        let client = GoogleDriveClient(sender: sender)
+        await #expect(throws: GoogleAPIError.notFound) {
+            try await client.folders(in: "a' or 'b")
+        }
+        await #expect(throws: GoogleAPIError.notFound) {
+            try await client.createFolder(named: "x", in: "a' or 'b")
+        }
+        #expect(sender.requests.isEmpty)
     }
 }

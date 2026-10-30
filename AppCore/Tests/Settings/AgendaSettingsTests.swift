@@ -60,6 +60,18 @@ struct AgendaSettingsTests {
         #expect(try decode(#"{"driveFolderName":"a/b"}"#).driveFolderName == "Magenda")
     }
 
+    @Test("A picked folder keeps its name, even with a slash; a blank name decodes as Magenda")
+    func pickedFolderNameDecoding() throws {
+        let id = "1AbC_dEf-GhIjKlMnOp"
+        #expect(
+            try decode(#"{"driveFolderID":"\#(id)","driveFolderName":"Q4/2026"}"#).driveFolderName
+                == "Q4/2026")
+        #expect(
+            try decode(#"{"driveFolderID":"\#(id)","driveFolderName":"  "}"#).driveFolderName
+                == "Magenda")
+        #expect(try decode(#"{"driveFolderName":"a/b"}"#).driveFolderName == "Magenda")
+    }
+
     @Test("A saved Drive folder ID decodes; a missing or invalid one is nil")
     func driveFolderIDDecoding() throws {
         #expect(try decode("{}").driveFolderID == nil)
