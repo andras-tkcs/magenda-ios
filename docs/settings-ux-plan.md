@@ -38,7 +38,7 @@ The request came from the maintainer in a planning session; there is no issue.
   `tasks.readonly`, `drive.file`. A stored grant without all of them makes the token
   refresh throw `.missingScopes`, which deletes the tokens and sends the person to sign-in with
   `GoogleAPIError.missingScopes.userMessage` (`GoogleAPIError.swift:34`). Tests pin the scope
-  strings in `AppCore/Tests/Google/GoogleOAuthTests.swift:9`–`:12` and `:102`.
+  strings in `AppCore/Tests/Google/GoogleOAuthTests.swift:11`–`:12` and `:102`.
 - **Summary rules** (`BinderRules.summaryRoutines: [String: [String]]`, `BinderRules.swift:18`):
   meeting title as entered → routine IDs. `SummaryRoutines.routineIDs(pageTitle:originalTitle:rules:)`
   (`SummaryRoutine.swift:78`) matches by `BinderText.fold` equality, the title sorting first winning.
@@ -75,7 +75,7 @@ The request came from the maintainer in a planning session; there is no issue.
   `.navigationDestination(for: Route.self)` switches over it.
 - The first section of the settings form is one row, replacing `calendarsSection`:
   `NavigationLink(value: Route.calendars) { LabeledContent("Calendars", value: <summary>) }` with
-  identifier `calendarsLink`. The summary comes from AppCore:
+  identifier `calendarsLink` and `.accessibilityElement(children: .combine)` on the `LabeledContent`, so the value is part of the row's label (tests read the label). The summary comes from AppCore:
   ```swift
   /// What Settings shows for the chosen calendars.
   public enum CalendarSelection {
@@ -93,7 +93,7 @@ The request came from the maintainer in a planning session; there is no issue.
   `calendarRow(_:)`.
 - The look section is replaced, in the same place in the form, by one row:
   `NavigationLink(value: Route.look) { LabeledContent("Look", value: controller.settings.fontPack.displayName) }`
-  with identifier `lookLink`.
+  with identifier `lookLink` and the same `.accessibilityElement(children: .combine)`.
 - `App/Screens/LookView.swift`: `struct LookView: View`, navigation title "Look", a `Form`
   (identifier `lookForm`) with two sections: "Font" (the font rows) and "Colors" (the five colour
   rows and "Reset colors"). `ColorRole`, `hexDrafts`, `invalidRoles`, `colorRow`, `swatch`,
@@ -132,9 +132,11 @@ The request came from the maintainer in a planning session; there is no issue.
   Implementation: `NSRegularExpression` (Foundation, works on Linux; no `Regex` literal, so no
   availability question). The pattern is first folded with
   `.folding(options: [.diacriticInsensitive], locale: nil)` only (not lowercased, so `\D`
-  keeps its meaning). `validated` requires the folded pattern to compile alone; `matches` compiles
-  `"^(?:" + folded + ")$"` with `[.caseInsensitive]` and returns whether `firstMatch` over the
-  whole folded title (`NSRange(title.startIndex..., in: title)`) exists. Requiring the bare pattern
+  keeps its meaning). `validated` requires both the folded pattern and `"^(?:" + folded + ")$"` to compile (the
+  wrapped form catches things like an unterminated `\Q`); `matches` compiles the wrapped form with
+  `[.caseInsensitive]`, takes `let folded = BinderText.fold(title)` and returns whether
+  `firstMatch` over `NSRange(folded.startIndex..., in: folded)` exists. Compile on every call; no
+  `static let` cache of an `NSRegularExpression` (not `Sendable`, a Swift 6 error). Requiring the bare pattern
   to compile first means its parentheses balance, so it cannot escape the `(?:…)` wrapper.
 - `SummaryRoutines.routineIDs` gains a parameter, defaulted so other callers compile:
   ```swift
@@ -149,13 +151,17 @@ The request came from the maintainer in a planning session; there is no issue.
 - `AgendaDraft` gains `public let summaryPatterns: [String: [String]]` (doc: "The summary routine
   IDs per meeting-title pattern, see ``SummaryRoutines``."), an init parameter
   `summaryPatterns: [String: [String]] = [:]` right after `summaryRules`, and passes
-  `patterns: summaryPatterns` at both `routineIDs` calls (`setTitle`, `applyShortName`).
+  `patterns: summaryPatterns` at both `routineIDs` calls (`setTitle`, `applyShortName`). Like
+  `setTitle`'s `let rules = summaryRules`, copy it to a local first (`let patterns =
+  summaryPatterns`) before the mutating `update` closure, to avoid an overlapping access to `self`.
   `AgendaBuilder` passes `summaryPatterns: rules.summaryRoutinePatterns`. `EventSelection` passes
   `patterns: rules.summaryRoutinePatterns`.
 - `AgendaSettings.removeSummaryRoutine(id:)` prunes `rules.summaryRoutinePatterns` exactly as it
   prunes `rules.summaryRoutines`; its doc comment names both.
 - `RulesView`:
   - State `@State private var summaryIsPattern = false`.
+    - The "Meeting title" field (`summaryTitleField`) gets `.autocorrectionDisabled()` and
+    `.textInputAutocapitalization(.never)`, so a typed pattern is not rewritten.
   - Below the "Meeting title" field: `Toggle("Pattern", isOn: $summaryIsPattern)` with identifier
     `summaryPatternToggle`.
   - `addSummary`: after the "Choose at least one summary routine." check, when
@@ -264,6 +270,11 @@ Storage stays `personAliases: [String: String]`; nothing is migrated.
     folders, `nextPageToken: "page-2"`), `drive-folders-page2.json` (one folder, plus one entry with
     id `"bad id"` that must be dropped), `drive-folder-created.json`
     (`{"id":"folder-created-01","name":"Q4 notes"}`). All names and IDs are made up.
+- `GoogleDriveClient.folderID(named:)`'s query gains `and 'me' in owners`
+  (`name = '…' and mimeType = '…' and trashed = false and 'me' in owners`). Under `drive.file` only
+  Magenda's own folders were visible; under `drive` the lookup would also see a `Magenda` folder
+  someone shared with the person and could upload into another owner's folder. The exact-query
+  assertions in `GoogleDriveClientTests` are updated.
 - `AppCore/Sources/Controller/DriveFolderListing.swift`, the picker's model:
   ```swift
   /// One level of the Drive folder picker: the folders inside `parent` (My Drive when nil).
@@ -350,7 +361,7 @@ Storage stays `personAliases: [String: String]`; nothing is migrated.
   - `chooseFolder(_ folder: DriveFolder)`: `path = []`, then
     `Task { await controller.updateSettings { $0.driveFolderID = folder.id; $0.driveFolderName = folder.name } }`.
   - `driveSection` becomes: `NavigationLink(value: Route.driveFolder(nil)) { LabeledContent("Folder", value: controller.settings.driveFolderName) }`
-    (`driveFolderLink`). When `controller.settings.driveFolderID != nil`, it also shows
+    (`driveFolderLink`, with `.accessibilityElement(children: .combine)` on the `LabeledContent`). When `controller.settings.driveFolderID != nil`, it also shows
     `Button("Use the default “\(DriveFolderName.default)” folder")` (`driveFolderResetButton`),
     which sets `driveFolderID = nil` and `driveFolderName = DriveFolderName.default`. Footer
     (`driveFolderFooter`), when `driveFolderID` is nil: "Finished days upload to the
@@ -363,6 +374,9 @@ Storage stays `personAliases: [String: String]`; nothing is migrated.
     `driveFolderError`, `driveFolderLinkField`.
 - `HandoffController` is unchanged. A picked folder arrives through `existingFolderID` and the
   default through `folderName`, exactly as today.
+
+No new `-MagendaOpen` case is added (ADR 0044): the Calendars and Look rows are at the top of the
+form, and the Drive tests open Settings and scroll to `driveFolderLink`.
 
 ### Rejected alternatives
 
@@ -416,10 +430,9 @@ After the last merge, before the PR merges (see the
 - **`@Entry` and `@Observable` in `@State`.** p5 relies on `@State private var listing` created
   in `init` (`_listing = State(initialValue: …)`). If the app target warns (warnings are errors),
   stop with `status=blocked` and quote the warning.
-- **Alert text fields in UI tests.** p5's UI test types into an `.alert` `TextField` by
-  identifier. If the tests' `ui (ipad, newest, only)` run cannot find `driveFolderNewName`,
-  fall back to `app.alerts.firstMatch.textFields.firstMatch` and say so in the phase summary.
-  Do not drop the test.
+- **Alert text fields in UI tests.** p5's test types through
+  `app.alerts.firstMatch.textFields.firstMatch`. If the alert has no text field there, stop with
+  `status=blocked`; do not drop the test.
 - **Re-consent.** Changing the scope signs every user out once (this is intended, D4). If
   `GoogleSessionTests` or `AgendaControllerTests` assert the old message text or the
   `drive.file` string, update them to the new strings, and nothing else in them.
@@ -498,14 +511,24 @@ phases:
       6. AppUITests/SettingsUITests.swift: add a helper `openLook(_ app:)` that reveals and taps
          `lookLink` (retrying a dropped tap like `openSettings` does) and waits for `lookForm`. Add
          `lookForm(_ app:)` returning `app.element("lookForm")`. In
-         `testAnInvalidHexShowsAnErrorAndAValidOneClearsIt`, `testResetColorsRestoresTheDefaults` and
+                  `testAnInvalidHexShowsAnErrorAndAValidOneClearsIt`, `testResetColorsRestoresTheDefaults` and
          `testChoosingAFontAndRenderingReachesThePreview`, call `openLook(app)` right after launch and
-         reveal elements in `lookForm(app)` instead of `settingsForm(app)`. In the font test, after
-         tapping the option, go back (tap `app.navigationBars.buttons.firstMatch`, the back
-         button) before `closeSettings(app)`. Keep the method names. Add
+         reveal elements in `lookForm(app)` instead of `settingsForm(app)`. The private helper
+         `enterHex` hard-codes `settingsForm(app)` and `belowNavigationBar(app)`, which reads the
+         `settingsDone` button; that button is gone once Look is pushed. Give `enterHex` two
+         parameters, `container: XCUIElement` and `top: CGFloat`; the Look tests pass
+         `lookForm(app)` and `app.navigationBars["Look"].frame.maxY + 60`, and
+         `testAFolderNameIsSavedAndAnInvalidOneShowsAnError` passes `settingsForm(app)` and
+         `belowNavigationBar(app)` (p5 deletes it). Add a helper `goBack(_ app:, from title: String)`
+         that taps `app.navigationBars[title].buttons.firstMatch` until `settingsDone` exists (the
+         loop `RulesUITests.closeSettings` uses); never `app.navigationBars.buttons.firstMatch`,
+         which can be an agenda button. In the font test, after tapping the option, call
+         `goBack(app, from: "Look")` before `closeSettings(app)`. Add "the navigation back button"
+         to the file header's list of elements found by text. Keep the method names. Add
          `testTheCalendarsScreenChoosesACalendar`: launch into settings, assert `calendarsLink`'s
          label contains "Primary calendar", tap it, wait for `calendarsForm`, tap `calendarRow.1`
-         (the fixture's "Family"), go back, and wait until `calendarsLink`'s label contains "Family".
+         (the fixture's "Family"), `goBack(app, from: "Calendars")`, and wait until `calendarsLink`'s
+         label contains "Family".
       7. scripts/ui_shards.py: add
          `"MagendaUITests/SettingsUITests/testTheCalendarsScreenChoosesACalendar": 60,` in
          alphabetical position among the SettingsUITests entries. Run
@@ -524,7 +547,7 @@ phases:
       - grep -q 'case calendars' App/Screens/SettingsView.swift && grep -q 'case look' App/Screens/SettingsView.swift
       - python3 scripts/ui_shards.py --check exits 0
       - swift format lint --strict --parallel --recursive App AppTests AppUITests AppCore/Package.swift AppCore/Sources AppCore/Tests exits 0
-      - the dispatched tests.yml `ui (ipad, newest, only)` job for SettingsUITests and LaunchOptionsUITests is green
+            - the dispatched tests.yml `ui (ipad, newest, only)` job for SettingsUITests and LaunchOptionsUITests is green
 
   - id: p4-drive-scope-and-folder-browsing
     title: Ask for the full drive scope and list and create Drive folders in AppCore
@@ -559,18 +582,22 @@ phases:
          GoogleAPIError.swift: set `.missingScopes`' `userMessage` to the D4 string.
       2. Update the tests that pin the old strings: GoogleOAuthTests.swift (`driveScope` at the top
          and the test display name "The scopes are calendar, tasks and drive.file" -> "... and
-         drive"). Grep AppCore/Tests for `drive.file` and for "the files it creates in Google
-         Drive" and update every hit to the new scope or message, and nothing else in those
-         tests (the hits are in GoogleOAuthTests.swift, GoogleAPIErrorTests.swift,
-         GoogleDriveClientTests.swift and AgendaControllerTests.swift).
+         drive"). Run `grep -rnF 'auth/drive.file' AppCore/Tests` and `grep -rnF 'the files it creates in Google Drive'
+         AppCore/Tests` and update every hit to the new scope or message, and nothing else in those
+         tests (the hits are GoogleOAuthTests.swift:11 and :102, GoogleAPIErrorTests.swift:16 and
+         AgendaControllerTests.swift:528; do not use a regex `drive.file`, it matches the fixture
+         names `drive-files-list` and `drive-file-id`).
       3. Create AppCore/Sources/Google/DriveFolder.swift with `DriveFolder` and
          `DriveFolderBrowsing` as in D4.
       4. GoogleDriveClient.swift: add `extension GoogleDriveClient: DriveFolderBrowsing` with
          `folders(in:)` and `createFolder(named:in:)` exactly as D4 specifies (parent check,
          query items and their order, pagination limit of 10 pages, dropping bad IDs, POST body).
          Reuse `Self.filesURL`, `Self.folderType`, `Self.jsonType`, `GoogleAPI.withQuery`, `decode` and
-         `encode`. Change the `private` decode/encode helpers and static constants to `fileprivate`
-         only if the extension needs them; keep the extension in the same file.
+         `encode`. Leave the `private` helpers and constants `private`: an extension in the same file
+         sees them. The POST body is the file's existing private `Metadata` struct
+         (`Metadata(mimeType: Self.folderType, name: name, parents: [parentID])`). Also add
+         `and 'me' in owners` to `folderID(named:)`'s query and update its exact-query assertions
+         in GoogleDriveClientTests.swift (D4).
       5. Add the three JSON fixtures named in D4 under AppCore/Tests/Google/Fixtures/ (copy the
          shape of drive-files-list.json; add `"name"` and, on page 1, `"nextPageToken": "page-2"`).
       6. Extend AppCore/Tests/Google/GoogleDriveClientTests.swift (FakeSender, `enqueue(fixture:)`):
@@ -603,30 +630,35 @@ phases:
           that name; a stored ID with a blank name decodes as "Magenda"; no ID with "a/b" still
           decodes as "Magenda".
       11. scripts/check_coverage_floor.py: add 100.0 floors, each with a one-line comment in the
-          style of the others, for AppCore/Sources/Google/DriveFolder.swift (if it has executable
-          lines; skip it if coverage reports none), AppCore/Sources/Google/DriveFolderFixtures.swift and
+          style of the others, for AppCore/Sources/Google/DriveFolder.swift, AppCore/Sources/Google/DriveFolderFixtures.swift and
           AppCore/Sources/Controller/DriveFolderListing.swift.
       12. Docs: README.md "Google Cloud setup" step 3 lists
           `https://www.googleapis.com/auth/drive` instead of `drive.file`. Change the parenthesis to
           "(Magenda lists your Drive's folders so you can pick one, and writes only the day's PDF
-          and Doc; ADR 0051)". docs/end-of-day-handoff.md line "Magenda creates everything below
+          and Doc; ADR 0051). Google lists `drive` as a restricted scope: keep the client in Testing
+          or Internal, as above, because an External client in production needs Google's
+          verification". docs/end-of-day-handoff.md line "Magenda creates everything below
           with the `drive.file` scope, so it only ever sees files it made." becomes "Magenda files
           everything below with the `drive` scope (ADR 0051), and creates only the files and
           folders listed here." ADR 0051 is written by the last phase; the link may dangle until
           then.
       13. Run `swift test --package-path AppCore --enable-code-coverage`, then
           `python3 scripts/check_coverage_floor.py "$(swift test --package-path AppCore --show-codecov-path)"`,
-          then swift format lint --strict and `python3 -m unittest discover -s scripts/tests`.
+          then swift format lint --strict and `python3 -m unittest discover -s scripts/tests`, and
+          dispatch tests.yml with `only: MagendaUITests/LaunchOptionsUITests,MagendaUITests/HandoffUITests`
+          (steward: any AppCore change runs a simulator).
       Do not touch CHANGELOG.md. Stop with status=blocked if HandoffController or the hand-off
       tests need any change: D4 says they don't.
     acceptance:
       - swift test --package-path AppCore passes
       - python3 scripts/check_coverage_floor.py "$(swift test --package-path AppCore --show-codecov-path)" exits 0
       - grep -rn 'auth/drive.file' AppCore README.md docs/end-of-day-handoff.md prints nothing
-      - grep -q 'extension GoogleDriveClient: DriveFolderBrowsing' AppCore/Sources/Google/GoogleDriveClient.swift
+      - "grep -q 'extension GoogleDriveClient: DriveFolderBrowsing' AppCore/Sources/Google/GoogleDriveClient.swift"
+      - grep -q "'me' in owners" AppCore/Sources/Google/GoogleDriveClient.swift
       - swift test --package-path AppCore --filter 'DriveFolderListingTests|DriveFolderFixturesTests|GoogleDriveClientTests' passes
-      - python3 -m unittest discover -s scripts/tests passes
+            - python3 -m unittest discover -s scripts/tests passes
       - swift format lint --strict --parallel --recursive App AppTests AppUITests AppCore/Package.swift AppCore/Sources AppCore/Tests exits 0
+      - the dispatched tests.yml `ui (ipad, newest, only)` job for LaunchOptionsUITests and HandoffUITests is green
 
   - id: p2-summary-title-patterns
     title: Let a summary rule match meeting titles with a regular expression
@@ -701,8 +733,8 @@ phases:
     acceptance:
       - swift test --package-path AppCore --filter 'TitlePatternTests|SummaryRoutineTests|AgendaDraftTests|EventSelectionTests|AgendaBuilderTests|AgendaSettingsTests' passes
       - python3 scripts/check_coverage_floor.py "$(swift test --package-path AppCore --enable-code-coverage --show-codecov-path)" exits 0 after a coverage run
-      - grep -q 'summaryRoutinePatterns' AppCore/Sources/Settings/BinderRules.swift App/Screens/RulesView.swift AppCore/Sources/Settings/AgendaSettings.swift
-      - grep -q 'summaryPatternToggle' App/Screens/RulesView.swift AppUITests/RulesUITests.swift
+            - grep -q 'summaryRoutinePatterns' AppCore/Sources/Settings/BinderRules.swift && grep -q 'summaryRoutinePatterns' App/Screens/RulesView.swift && grep -q 'summaryRoutinePatterns' AppCore/Sources/Settings/AgendaSettings.swift
+      - grep -q 'summaryPatternToggle' App/Screens/RulesView.swift && grep -q 'summaryPatternToggle' AppUITests/RulesUITests.swift
       - python3 scripts/ui_shards.py --check exits 0
       - the dispatched tests.yml `ui (ipad, newest, only)` job for RulesUITests and LaunchOptionsUITests is green
 
@@ -727,6 +759,8 @@ phases:
          for names ", ,". `groups` of `["bob": "r@x.com", "robert": "r@x.com", "nora": "n@x.com"]`
          is `[PersonGroup(email: "n@x.com", names: ["nora"]), PersonGroup(email: "r@x.com",
          names: ["bob", "robert"])]`; of `[:]` is [].
+            2b. In the same file change `PickedContact.suggestedName`'s doc comment from "Name in tasks" to
+         "Names in tasks".
       3. App/Screens/RulesView.swift `peopleSection`, `deletePeople` and `addPerson`: as D3 says
          (grouped rows, delete by email, "Names in tasks", save every alias, new footer).
       4. AppUITests/RulesUITests.swift: add `testAddingSeveralNamesForOneEmailShowsOneRow`: enter
@@ -780,16 +814,18 @@ phases:
          (the visible text is enough); the folder icon is decorative.
       3. App/Screens/SettingsView.swift: add `case driveFolder(DriveFolder?)` to `Route`, the
          destination, `chooseFolder`, the new `driveSection` with the two footers and the reset
-         button, and remove the old fields, state, helpers and IDs, as D5 says. Add
-         `driveFolderLink` and `driveFolderResetButton` to `ID`.
+         button, and remove the old fields, state, helpers and IDs, as D5 says. Add `driveFolderLink` and `driveFolderResetButton` to `ID`. Add
+         `.environment(\.driveFolders, services.driveFolders)` to SettingsView's `#Preview`. The picker's
+         own `#Preview` cannot push rows (no destination for `Route`); that is acceptable.
       4. AppUITests/SettingsUITests.swift: delete `testAFolderNameIsSavedAndAnInvalidOneShowsAnError`.
          Add `testChoosingADriveFolderShowsItInSettings`: reveal `driveFolderFooter` and assert it
          contains "“Magenda”"; reveal and tap `driveFolderLink`; wait for `driveFolderRow.1` (Work)
          and tap it; wait for `driveFolderUseButton` and tap it; wait until `driveFolderLink`'s label
          contains "Work" and `driveFolderResetButton` exists; tap the reset button and wait until
          the link's label contains "Magenda". Add `testCreatingADriveFolderUsesIt`: tap
-         `driveFolderLink`, tap `driveFolderRow.1`, tap `driveFolderNewButton`, type "Q4 notes" into
-         `driveFolderNewName` (`focusForTyping` then `typeText`), tap
+         `driveFolderLink`, tap `driveFolderRow.1`, tap `driveFolderNewButton`, wait for
+         `app.alerts.firstMatch.textFields.firstMatch` (the alert's field is first responder as soon
+         as it shows; do not rely on the identifier), `app.typeText("Q4 notes")`, tap
          `app.alerts.buttons["Create"]`, and wait until `driveFolderLink`'s label contains
          "Q4 notes". Reuse the file's reveal/retry helpers; no sleeps.
       5. scripts/ui_shards.py: remove the
@@ -811,7 +847,7 @@ phases:
     acceptance:
       - grep -c 'driveFolderField\|driveFolderLinkField\|commitFolderLink' App/Screens/SettingsView.swift prints 0
       - grep -q 'case driveFolder(DriveFolder?)' App/Screens/SettingsView.swift
-      - grep -q 'driveFolders' App/AppEnvironment.swift App/MagendaApp.swift
+            - grep -q 'driveFolders' App/AppEnvironment.swift && grep -q 'driveFolders' App/MagendaApp.swift
       - python3 scripts/ui_shards.py --check exits 0
       - swift format lint --strict --parallel --recursive App AppTests AppUITests AppCore/Package.swift AppCore/Sources AppCore/Tests exits 0
       - the dispatched tests.yml `ui (ipad, newest, only)` job for SettingsUITests, LaunchOptionsUITests and HandoffUITests is green
@@ -846,7 +882,10 @@ phases:
          unchanged. Alternatives: the plan's "Rejected alternatives" bullets on
          drive.metadata.readonly, the Google Picker and the flat list. Consequences: everyone signs
          in again once; Magenda can now read the whole Drive, though it only lists folders and
-         writes its own files; the by-name lookup can now find a `Magenda` folder the person made.
+         writes its own files; the by-name lookup can now find a `Magenda` folder the person made, and is limited to folders
+         they own (`'me' in owners`) so a shared one is never used; `drive` is a restricted scope,
+         so an External client in production would need Google's verification (Testing and Internal
+         clients do not).
          Verification: the source and test files p4 and p5 created or changed.
       3. Write docs/adr/0052-summary-rules-can-match-titles-with-a-regular-expression.md: Status
          Accepted, "Amends [ADR 0038](…): rules match exact titles or patterns". Decision is D2:
@@ -873,12 +912,13 @@ phases:
          of their own, reached from one row that shows the current choice."
       7. Delete docs/settings-ux-plan.md and docs/settings-ux-plan-manual-steps.html, and check
          `grep -rn 'settings-ux-plan' .` prints nothing.
-      8. Run `python3 -m unittest discover -s scripts/tests` (the no-project-history guard).
+            8. docs/end-of-day-handoff.md: add ADR 0051 to the decision links at the top, next to ADR 0036.
+      9. Run `python3 -m unittest discover -s scripts/tests` (the no-project-history guard).
     acceptance:
       - test ! -e docs/settings-ux-plan.md && test ! -e docs/settings-ux-plan-manual-steps.html
       - grep -rn 'settings-ux-plan' . --exclude-dir=.git prints nothing
       - ls docs/adr/0051-*.md docs/adr/0052-*.md lists two files and both contain "Accepted"
       - grep -q '0051' docs/adr/README.md && grep -q '0052' docs/adr/README.md
-      - sed -n '/## \[Unreleased\]/,/## \[0.2.0\]/p' CHANGELOG.md contains the four entries
+            - sed -n '/## \[Unreleased\]/,/## \[0.2.0\]/p' CHANGELOG.md | grep -c 'delivery sync \[0-9\]+\|several names\|opens your Drive\|Settings is shorter' prints 4
       - python3 -m unittest discover -s scripts/tests passes
 ```
