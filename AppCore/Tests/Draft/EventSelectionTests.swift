@@ -321,5 +321,8 @@ struct EventSelectionTests {
         ]
         #expect(drafts(events, rules: custom).map(\.summaryRoutineIDs) == [["id-a", "id-b"], []])
         #expect(drafts(events).map(\.summaryRoutineIDs) == [[], []])
+        var patterned = BinderRules.default
+        patterned.summaryRoutinePatterns = ["team s.*": ["id-p"]]
+        #expect(drafts(events, rules: patterned).map(\.summaryRoutineIDs) == [["id-p"], []])
     }
 }

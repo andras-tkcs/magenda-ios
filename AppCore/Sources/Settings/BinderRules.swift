@@ -16,12 +16,15 @@ public struct BinderRules: Equatable, Codable, Sendable {
     public var lookAheadDays: Int
     /// The summary routine IDs per meeting title as entered, see ``SummaryRoutines``.
     public var summaryRoutines: [String: [String]]
+    /// The summary routine IDs per meeting-title pattern as entered, see ``TitlePattern``.
+    public var summaryRoutinePatterns: [String: [String]]
 
     /// Creates a set of rules.
     public init(
         personalBlocks: [String], titlePrefixes: [String], outOfOfficeWords: [String],
         shortNames: [String: String], personAliases: [String: String], lookAheadDays: Int,
-        summaryRoutines: [String: [String]] = [:]
+        summaryRoutines: [String: [String]] = [:],
+        summaryRoutinePatterns: [String: [String]] = [:]
     ) {
         self.personalBlocks = personalBlocks
         self.titlePrefixes = titlePrefixes
@@ -30,6 +33,7 @@ public struct BinderRules: Equatable, Codable, Sendable {
         self.personAliases = personAliases
         self.lookAheadDays = lookAheadDays
         self.summaryRoutines = summaryRoutines
+        self.summaryRoutinePatterns = summaryRoutinePatterns
     }
 
     /// The rules the app starts with.
@@ -42,11 +46,12 @@ public struct BinderRules: Equatable, Codable, Sendable {
         shortNames: [:],
         personAliases: [:],
         lookAheadDays: 5,
-        summaryRoutines: [:])
+        summaryRoutines: [:],
+        summaryRoutinePatterns: [:])
 
     private enum CodingKeys: String, CodingKey {
         case personalBlocks, titlePrefixes, outOfOfficeWords, shortNames, personAliases
-        case lookAheadDays, summaryRoutines
+        case lookAheadDays, summaryRoutines, summaryRoutinePatterns
     }
 
     /// Decodes rules written by any build; a missing field keeps its default.
@@ -63,6 +68,8 @@ public struct BinderRules: Equatable, Codable, Sendable {
             shortNames: try value(.shortNames, defaults.shortNames),
             personAliases: try value(.personAliases, defaults.personAliases),
             lookAheadDays: try value(.lookAheadDays, defaults.lookAheadDays),
-            summaryRoutines: try value(.summaryRoutines, defaults.summaryRoutines))
+            summaryRoutines: try value(.summaryRoutines, defaults.summaryRoutines),
+            summaryRoutinePatterns: try value(
+                .summaryRoutinePatterns, defaults.summaryRoutinePatterns))
     }
 }

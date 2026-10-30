@@ -109,6 +109,52 @@ struct SummaryRoutineTests {
                 == ["b", "a"])
     }
 
+    @Test("A pattern matches when no title rule does")
+    func patternMatches() {
+        let patterns = ["delivery sync [0-9]+": ["p"]]
+        #expect(
+            SummaryRoutines.routineIDs(
+                pageTitle: "Delivery Sync 2026", originalTitle: "x", rules: [:],
+                patterns: patterns) == ["p"])
+        #expect(
+            SummaryRoutines.routineIDs(
+                pageTitle: "Delivery Sync", originalTitle: "Delivery Sync", rules: [:],
+                patterns: patterns
+            ).isEmpty)
+    }
+
+    @Test("A title rule wins over a matching pattern")
+    func titleRuleWins() {
+        #expect(
+            SummaryRoutines.routineIDs(
+                pageTitle: "Sync 1", originalTitle: "Sync 1", rules: ["Sync 1": ["t"]],
+                patterns: ["sync [0-9]": ["p"]]) == ["t"])
+    }
+
+    @Test("With two matching patterns the one sorting first wins")
+    func firstPatternWins() {
+        #expect(
+            SummaryRoutines.routineIDs(
+                pageTitle: "Sync 1", originalTitle: "Sync 1", rules: [:],
+                patterns: ["sync .*": ["a"], "sync [0-9]": ["b"]]) == ["a"])
+    }
+
+    @Test("A pattern can match the original title when the page title differs")
+    func patternOnOriginal() {
+        #expect(
+            SummaryRoutines.routineIDs(
+                pageTitle: "Sync", originalTitle: "Delivery Sync 7", rules: [:],
+                patterns: ["delivery sync [0-9]+": ["p"]]) == ["p"])
+    }
+
+    @Test("A pattern's repeated IDs collapse")
+    func patternDeduplicated() {
+        #expect(
+            SummaryRoutines.routineIDs(
+                pageTitle: "Sync", originalTitle: "Sync", rules: [:],
+                patterns: ["sync": ["b", "a", "b"]]) == ["b", "a"])
+    }
+
     @Test("No matching entry gives no IDs")
     func noMatch() {
         let rules = ["Sync": ["a"]]

@@ -264,6 +264,18 @@ struct AgendaDraftTests {
         #expect(value.events[0].summaryRoutineIDs.isEmpty)
     }
 
+    @Test("A title that only a pattern matches gives the event the pattern's routine IDs")
+    func titlePatternRoutines() {
+        var value = AgendaDraft(
+            date: day, notices: [], titlePrefixes: [],
+            events: [event("a", "Team sync", slot: 2)], tasks: [], delegated: [],
+            summaryPatterns: ["sync [0-9]+": ["id-recap"]], summaryRoutines: [recap])
+        value.setTitle("Sync 12", forEvent: "primary|a")
+        #expect(value.events[0].summaryRoutineIDs == ["id-recap"])
+        value.setTitle("Sync", forEvent: "primary|a")
+        #expect(value.events[0].summaryRoutineIDs.isEmpty)
+    }
+
     @Test("Setting the routine IDs overrides the title's rule and drops unknown IDs")
     func setRoutineIDs() {
         var value = AgendaDraft(

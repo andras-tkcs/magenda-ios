@@ -81,11 +81,15 @@ public struct AgendaSettings: Equatable, Codable, Sendable {
         return summaryRoutines.first { BinderText.fold($0.name) == wanted }
     }
 
-    /// Removes the routine and its ID from every entry of `rules.summaryRoutines`; an entry left
-    /// with no ID is removed.
+    /// Removes the routine and its ID from every entry of `rules.summaryRoutines` and
+    /// `rules.summaryRoutinePatterns`; an entry left with no ID is removed.
     public mutating func removeSummaryRoutine(id: String) {
         summaryRoutines.removeAll { $0.id == id }
         rules.summaryRoutines = rules.summaryRoutines.compactMapValues { ids in
+            let kept = ids.filter { $0 != id }
+            return kept.isEmpty ? nil : kept
+        }
+        rules.summaryRoutinePatterns = rules.summaryRoutinePatterns.compactMapValues { ids in
             let kept = ids.filter { $0 != id }
             return kept.isEmpty ? nil : kept
         }

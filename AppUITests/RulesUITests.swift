@@ -190,19 +190,25 @@ final class RulesUITests: XCTestCase {
     }
 
     @MainActor
-    private func addSummary(_ app: XCUIApplication, title: String, tickFirst: Bool) {
-        enter(app, app.element("summaryTitleField"), title)
-        if tickFirst {
-            let choice = app.element("summaryChoice.0")
-            choice.reveal(in: rulesForm(app))
-            let toggle = choice.switches.firstMatch.exists ? choice.switches.firstMatch : choice
-            var taps = 0
-            while (toggle.value as? String) != "1" && taps < 5 {
-                toggle.tapSwitch(attempt: taps)
-                taps += 1
-            }
-            XCTAssertEqual(toggle.value as? String, "1", "the summary choice did not turn on")
+    private func turnOn(_ app: XCUIApplication, _ identifier: String) {
+        let element = app.element(identifier)
+        element.reveal(in: rulesForm(app))
+        let toggle = element.switches.firstMatch.exists ? element.switches.firstMatch : element
+        var taps = 0
+        while (toggle.value as? String) != "1" && taps < 5 {
+            toggle.tapSwitch(attempt: taps)
+            taps += 1
         }
+        XCTAssertEqual(toggle.value as? String, "1", "\(identifier) did not turn on")
+    }
+
+    @MainActor
+    private func addSummary(
+        _ app: XCUIApplication, title: String, tickFirst: Bool, pattern: Bool = false
+    ) {
+        enter(app, app.element("summaryTitleField"), title)
+        if tickFirst { turnOn(app, "summaryChoice.0") }
+        if pattern { turnOn(app, "summaryPatternToggle") }
         let add = app.buttons["summaryAdd"].firstMatch
         add.reveal(in: rulesForm(app))
         add.tap()
@@ -215,6 +221,23 @@ final class RulesUITests: XCTestCase {
         let row = app.element("rulesRow.summaries.0")
         XCTAssertTrue(row.waitForExistence(timeout: 30), "the summary never appeared")
         XCTAssertTrue(row.label.contains("Client memo"), "the row named no routine: \(row.label)")
+    }
+
+    @MainActor
+    func testAddingATitlePatternShowsItsRow() {
+        let app = launchIntoRules()
+        addSummary(app, title: "delivery sync [0-9]+", tickFirst: true, pattern: true)
+        let row = app.element("rulesRow.summaryPatterns.0")
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "the pattern never appeared")
+        XCTAssertTrue(row.label.contains("Client memo"), "the row named no routine: \(row.label)")
+    }
+
+    @MainActor
+    func testAnInvalidPatternShowsAnError() {
+        let app = launchIntoRules()
+        addSummary(app, title: "delivery sync [0-9", tickFirst: true, pattern: true)
+        let error = app.element("summaryError")
+        XCTAssertTrue(error.waitForExistence(timeout: 30), "summaryError never appeared")
     }
 
     @MainActor
