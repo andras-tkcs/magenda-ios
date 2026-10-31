@@ -117,10 +117,12 @@ struct AgendaBuilderTests {
     func summaryRoutines() {
         var rules = BinderRules.default
         rules.summaryRoutines = ["Sync": ["a"]]
+        rules.summaryRoutinePatterns = ["sync [0-9]+": ["a"]]
         let routines = [SummaryRoutine(id: "a", name: "Recap")]
         let draft = AgendaBuilder(timeZone: zone, rules: rules, summaryRoutines: routines).draft(
             for: day, events: [], tasks: [], delegated: [])
         #expect(draft.summaryRules == ["Sync": ["a"]])
+        #expect(draft.summaryPatterns == rules.summaryRoutinePatterns)
         #expect(draft.summaryRoutines == routines)
     }
 }

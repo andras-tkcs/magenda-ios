@@ -8,7 +8,7 @@ import Testing
 private let clientID = "123-abc.apps.googleusercontent.com"
 private let calendarScope = "https://www.googleapis.com/auth/calendar.readonly"
 private let tasksScope = "https://www.googleapis.com/auth/tasks.readonly"
-private let driveScope = "https://www.googleapis.com/auth/drive.file"
+private let driveScope = "https://www.googleapis.com/auth/drive"
 private let allScopes = [calendarScope, tasksScope, driveScope]
 private let redirect = "com.googleusercontent.apps.123-abc:/oauth2redirect"
 private let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
@@ -99,7 +99,7 @@ struct GoogleOAuthConfigurationTests {
         #expect(config.redirectURI == "com.googleusercontent.apps.123-abc:/oauth2redirect")
     }
 
-    @Test("The scopes are calendar, tasks and drive.file")
+    @Test("The scopes are calendar, tasks and drive")
     func scopes() {
         #expect(GoogleOAuthConfiguration.scopes == allScopes)
     }

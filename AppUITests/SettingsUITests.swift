@@ -1,8 +1,8 @@
 // The settings sheet, driven through the accessibility tree against fixtures.
 //
 // Layer 2 of docs/testing-policy.md. Elements are found by the identifiers in `SettingsView.ID`
-// and `AgendaView.ID`, never by their visible text, except for menu options and dialog buttons,
-// which have none.
+// and `AgendaView.ID`, never by their visible text, except for menu options, dialog buttons and
+// the navigation back button, which have none.
 
 import UIKit
 import XCTest
@@ -27,6 +27,12 @@ final class SettingsUITests: XCTestCase {
     @MainActor
     private func settingsForm(_ app: XCUIApplication) -> XCUIElement {
         app.element("settingsForm")
+    }
+
+    /// The Look screen's form, which the scroll helpers drag.
+    @MainActor
+    private func lookForm(_ app: XCUIApplication) -> XCUIElement {
+        app.element("lookForm")
     }
 
     /// The bottom limit for a field about to be typed into: the top half of the screen, clear of
@@ -60,6 +66,34 @@ final class SettingsUITests: XCTestCase {
             _ = done.waitForExistence(timeout: 10)
         }
         XCTAssertTrue(done.exists, "the settings sheet never opened after \(taps) taps")
+    }
+
+    /// Opens the Look screen from the settings form, retrying a dropped tap.
+    @MainActor
+    private func openLook(_ app: XCUIApplication) {
+        let link = app.element("lookLink")
+        link.reveal(in: settingsForm(app))
+        let form = lookForm(app)
+        var taps = 0
+        while !form.exists && taps < 5 {
+            link.tap()
+            taps += 1
+            _ = form.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(form.exists, "the Look screen never opened after \(taps) taps")
+    }
+
+    /// Goes back from the pushed screen titled `title` to the settings form.
+    @MainActor
+    private func goBack(_ app: XCUIApplication, from title: String) {
+        let done = app.buttons["settingsDone"].firstMatch
+        var taps = 0
+        while !done.exists && taps < 5 {
+            app.navigationBars[title].buttons.firstMatch.tap()
+            taps += 1
+            _ = done.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(done.exists, "the settings form never came back from \(title)")
     }
 
     /// Swipes the agenda list up until `target` exists (or, without one, `swipes` times). Rows are
@@ -113,8 +147,11 @@ final class SettingsUITests: XCTestCase {
     /// rather than to the field, which an iPad's form sheet may briefly drop from the accessibility
     /// tree while it makes room for the keyboard.
     @MainActor
-    private func enterHex(_ app: XCUIApplication, _ field: XCUIElement, _ text: String) {
-        field.reveal(in: settingsForm(app), top: belowNavigationBar(app), bottom: upperHalf(app))
+    private func enterHex(
+        _ app: XCUIApplication, _ field: XCUIElement, _ text: String,
+        container: XCUIElement, top: CGFloat
+    ) {
+        field.reveal(in: container, top: top, bottom: upperHalf(app))
         let current = field.value as? String ?? ""
         // A tap at the right edge puts the caret after the text, so the deletes clear all of it.
         field.focusForTyping(in: app)
@@ -125,67 +162,113 @@ final class SettingsUITests: XCTestCase {
     @MainActor
     func testAnInvalidHexShowsAnErrorAndAValidOneClearsIt() {
         let app = launchIntoSettings()
+        openLook(app)
 
         let field = app.element("colorField.heading")
-        enterHex(app, field, "XYZ")
+        let top = app.navigationBars["Look"].frame.maxY + 60
+        enterHex(app, field, "XYZ", container: lookForm(app), top: top)
         let error = app.element("colorError")
         XCTAssertTrue(error.waitForExistence(timeout: 30), "no error for a bad hex")
 
-        enterHex(app, field, "7C3AED")
+        enterHex(app, field, "7C3AED", container: lookForm(app), top: top)
         XCTAssertTrue(
             error.waitForNonExistence(timeout: 30), "the error stayed after a valid hex")
     }
 
-    /// Naming the Drive folder: a name with a slash shows the error, a valid one clears it and the
-    /// footer names the new folder.
+    /// Choosing a Drive folder shows it in the Folder row; resetting brings back the default.
     @MainActor
-    func testAFolderNameIsSavedAndAnInvalidOneShowsAnError() {
+    func testChoosingADriveFolderShowsItInSettings() {
         let app = launchIntoSettings()
 
         let footer = app.element("driveFolderFooter")
         footer.reveal(in: settingsForm(app))
         XCTAssertTrue(footer.label.contains("“Magenda”"), "the footer did not name the default")
 
-        let field = app.element("driveFolderField")
-        enterHex(app, field, "a/b")
-        let error = app.element("driveFolderError")
-        XCTAssertTrue(error.waitForExistence(timeout: 30), "no error for a name with a slash")
+        let link = app.element("driveFolderLink")
+        link.reveal(in: settingsForm(app))
+        link.tap()
 
-        enterHex(app, field, "Work notes")
-        let saved = XCTWaiter().wait(
+        // The fixture's My Drive holds Magenda, then Work.
+        let work = app.element("driveFolderRow.1")
+        XCTAssertTrue(work.waitForExistence(timeout: 30), "the folders never listed")
+        work.tap()
+        let use = app.element("driveFolderUseButton")
+        XCTAssertTrue(use.waitForExistence(timeout: 30), "the Work level never opened")
+        use.tap()
+
+        let reset = app.element("driveFolderResetButton")
+        waitForLabel(link, containing: "Work")
+        XCTAssertTrue(reset.waitForExistence(timeout: 30), "no reset button for a picked folder")
+
+        reset.reveal(in: settingsForm(app))
+        reset.tap()
+        link.reveal(in: settingsForm(app))
+        waitForLabel(link, containing: "Magenda")
+    }
+
+    /// Creating a folder inside a Drive folder picks it.
+    @MainActor
+    func testCreatingADriveFolderUsesIt() {
+        let app = launchIntoSettings()
+
+        let link = app.element("driveFolderLink")
+        link.reveal(in: settingsForm(app))
+        link.tap()
+        let work = app.element("driveFolderRow.1")
+        XCTAssertTrue(work.waitForExistence(timeout: 30), "the folders never listed")
+        work.tap()
+
+        let newButton = app.element("driveFolderNewButton")
+        XCTAssertTrue(newButton.waitForExistence(timeout: 30), "the Work level never opened")
+        newButton.tap()
+
+        // The alert's field is first responder as soon as it shows.
+        let field = app.alerts.firstMatch.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 30), "the new folder alert never showed")
+        app.typeText("Q4 notes")
+        app.alerts.buttons["Create"].tap()
+
+        waitForLabel(link, containing: "Q4 notes")
+    }
+
+    /// Waits until `element`'s label contains `text`.
+    @MainActor
+    private func waitForLabel(_ element: XCUIElement, containing text: String) {
+        let shown = XCTWaiter().wait(
             for: [
                 XCTNSPredicateExpectation(
-                    predicate: NSPredicate(format: "exists == false"), object: error),
-                XCTNSPredicateExpectation(
-                    predicate: NSPredicate(format: "label CONTAINS %@", "“Work notes”"),
-                    object: footer),
+                    predicate: NSPredicate(format: "label CONTAINS %@", text), object: element)
             ], timeout: 30)
-        XCTAssertEqual(saved, .completed, "the folder name was not saved")
+        XCTAssertEqual(shown, .completed, "the label never contained \(text): \(element.label)")
     }
 
     @MainActor
     func testResetColorsRestoresTheDefaults() {
         let app = launchIntoSettings()
+        openLook(app)
 
         let field = app.element("colorField.heading")
-        enterHex(app, field, "7C3AED")
-        field.reveal(in: settingsForm(app))
+        let top = app.navigationBars["Look"].frame.maxY + 60
+        enterHex(app, field, "7C3AED", container: lookForm(app), top: top)
+        field.reveal(in: lookForm(app))
         waitForValue(field, "7C3AED")
 
         let reset = app.buttons["resetColorsButton"].firstMatch
-        reset.reveal(in: settingsForm(app))
+        reset.reveal(in: lookForm(app))
         reset.tap()
-        field.reveal(in: settingsForm(app))
+        field.reveal(in: lookForm(app))
         waitForValue(field, "215E99")
     }
 
     @MainActor
     func testChoosingAFontAndRenderingReachesThePreview() {
         let app = launchIntoSettings()
+        openLook(app)
 
         let option = app.buttons["fontOption.jetbrains_mono"].firstMatch
-        option.reveal(in: settingsForm(app))
+        option.reveal(in: lookForm(app))
         option.tap()
+        goBack(app, from: "Look")
         closeSettings(app)
 
         let render = app.buttons["renderButton"].firstMatch
@@ -194,6 +277,30 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(
             app.element(Self.previewID).waitForExistence(timeout: 30),
             "the preview never appeared")
+    }
+
+    /// Choosing a calendar on its own screen shows in the settings row.
+    @MainActor
+    func testTheCalendarsScreenChoosesACalendar() {
+        let app = launchIntoSettings()
+
+        let link = app.element("calendarsLink")
+        XCTAssertTrue(
+            link.label.contains("Primary calendar"), "the row did not show the primary calendar")
+        link.tap()
+        XCTAssertTrue(
+            app.element("calendarsForm").waitForExistence(timeout: 30),
+            "the Calendars screen never opened")
+
+        // The fixture's second calendar is "Family".
+        app.buttons["calendarRow.1"].firstMatch.tap()
+        goBack(app, from: "Calendars")
+        let shown = XCTWaiter().wait(
+            for: [
+                XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "label CONTAINS %@", "Family"), object: link)
+            ], timeout: 30)
+        XCTAssertEqual(shown, .completed, "the row never showed Family: \(link.label)")
     }
 
     @MainActor

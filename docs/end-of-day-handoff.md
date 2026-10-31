@@ -8,7 +8,8 @@ repository; adapt them to this page. The decisions behind it are in
 [ADR 0029](adr/0029-the-days-google-doc-is-the-review-record.md) (the Doc and the review),
 [ADR 0030](adr/0030-a-closed-days-handwriting-is-deleted-five-days-later.md) (deletion) and
 [ADR 0031](adr/0031-meeting-summaries-are-requested-by-skill.md) (task IDs),
-[ADR 0036](adr/0036-finished-days-upload-to-a-drive-folder-named-in-settings.md) (the Drive folder),
+[ADR 0036](adr/0036-finished-days-upload-to-a-drive-folder-named-in-settings.md) and
+[ADR 0051](adr/0051-drive-folders-are-picked-with-the-full-drive-scope.md) (the Drive folder),
 [ADR 0033](adr/0033-a-meeting-can-be-sent-before-the-day-ends.md) (meetings sent early) and
 [ADR 0034](adr/0034-the-payload-moves-to-schema-2-and-marks-pages-sent-earlier.md) (schema 2),
 [ADR 0038](adr/0038-summaries-are-written-by-dedicated-summary-routines-that-magenda-starts.md) (summary routines),
@@ -18,11 +19,11 @@ repository; adapt them to this page. The decisions behind it are in
 
 ## Drive layout
 
-Magenda creates everything below with the `drive.file` scope, so it only ever sees files it made.
+Magenda files everything below with the `drive` scope (ADR 0051), and creates only the files and folders listed here.
 
 | What | Name | Where |
 |---|---|---|
-| Folder | the folder named in Settings → Google Drive (`Magenda` unless changed), or the one whose link is pasted there | anywhere in the person's Drive; created in the root |
+| Folder | the folder picked under Settings → Google Drive → Folder, or `Magenda` when none is picked | anywhere in the person's Drive; `Magenda` is created in the root when missing |
 | PDF | `Magenda <YYYY-MM-DD>.pdf` | in the folder |
 | Doc | `Magenda <YYYY-MM-DD> notes` | in the folder |
 | PDF of a meeting sent early | `Magenda <YYYY-MM-DD> part <n>.pdf` | in the folder |

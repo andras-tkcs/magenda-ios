@@ -60,6 +60,18 @@ struct AgendaSettingsTests {
         #expect(try decode(#"{"driveFolderName":"a/b"}"#).driveFolderName == "Magenda")
     }
 
+    @Test("A picked folder keeps its name, even with a slash; a blank name decodes as Magenda")
+    func pickedFolderNameDecoding() throws {
+        let id = "1AbC_dEf-GhIjKlMnOp"
+        #expect(
+            try decode(#"{"driveFolderID":"\#(id)","driveFolderName":"Q4/2026"}"#).driveFolderName
+                == "Q4/2026")
+        #expect(
+            try decode(#"{"driveFolderID":"\#(id)","driveFolderName":"  "}"#).driveFolderName
+                == "Magenda")
+        #expect(try decode(#"{"driveFolderName":"a/b"}"#).driveFolderName == "Magenda")
+    }
+
     @Test("A saved Drive folder ID decodes; a missing or invalid one is nil")
     func driveFolderIDDecoding() throws {
         #expect(try decode("{}").driveFolderID == nil)
@@ -136,6 +148,17 @@ struct AgendaSettingsTests {
         #expect(settings.rules.summaryRoutines == ["Sync": ["a"]])
     }
 
+    @Test("Rules without summary patterns decode with none, and patterns round-trip")
+    func summaryPatternsCoding() throws {
+        #expect(try decode(#"{"rules":{"lookAheadDays":3}}"#).rules.summaryRoutinePatterns == [:])
+        #expect(BinderRules.default.summaryRoutinePatterns == [:])
+        var settings = AgendaSettings()
+        settings.rules.summaryRoutinePatterns = ["sync [0-9]+": ["a"]]
+        let data = try JSONEncoder().encode(settings)
+        let back = try JSONDecoder().decode(AgendaSettings.self, from: data)
+        #expect(back.rules.summaryRoutinePatterns == ["sync [0-9]+": ["a"]])
+    }
+
     @Test("A routine is found by its folded name")
     func summaryRoutineNamed() {
         let recap = SummaryRoutine(id: "a", name: "Weekly Récap")
@@ -150,12 +173,14 @@ struct AgendaSettingsTests {
             rules: BinderRules(
                 personalBlocks: [], titlePrefixes: [], outOfOfficeWords: [], shortNames: [:],
                 personAliases: [:], lookAheadDays: 5,
-                summaryRoutines: ["Sync": ["a", "b"], "Retro": ["a"]]),
+                summaryRoutines: ["Sync": ["a", "b"], "Retro": ["a"]],
+                summaryRoutinePatterns: ["sync [0-9]+": ["a", "b"], "retro.*": ["a"]]),
             summaryRoutines: [
                 SummaryRoutine(id: "a", name: "A"), SummaryRoutine(id: "b", name: "B"),
             ])
         settings.removeSummaryRoutine(id: "a")
         #expect(settings.summaryRoutines == [SummaryRoutine(id: "b", name: "B")])
         #expect(settings.rules.summaryRoutines == ["Sync": ["b"]])
+        #expect(settings.rules.summaryRoutinePatterns == ["sync [0-9]+": ["b"]])
     }
 }

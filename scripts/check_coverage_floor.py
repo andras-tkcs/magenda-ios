@@ -85,8 +85,18 @@ MODULE_FLOORS: dict[str, float] = {
     "AppCore/Sources/Handoff/HandoffFixtures.swift": 100.0,
     # Names, validates and looks up the summary routines a meeting asks for; a wrong match starts the wrong routine.
     "AppCore/Sources/Settings/SummaryRoutine.swift": 100.0,
+    # Turns typed names into People rules and groups them by email; a wrong split matches a task to the wrong person.
+    "AppCore/Sources/Settings/PersonAlias.swift": 100.0,
+    # Matches meeting titles against summary-rule patterns; a wrong match starts the wrong routine.
+    "AppCore/Sources/Settings/TitlePattern.swift": 100.0,
     # Fires a summary routine with its own token; a wrong branch sends one routine's summary with another's token.
     "AppCore/Sources/Handoff/SummaryRoutineTrigger.swift": 100.0,
+    # The Drive folder model and the protocol the picker lists and creates folders through.
+    "AppCore/Sources/Google/DriveFolder.swift": 100.0,
+    # The fixture Drive folders behind the folder picker's UI tests and previews.
+    "AppCore/Sources/Google/DriveFolderFixtures.swift": 100.0,
+    # One level of the folder picker; a wrong state hides a folder or shows a stale error.
+    "AppCore/Sources/Controller/DriveFolderListing.swift": 100.0,
 }
 
 

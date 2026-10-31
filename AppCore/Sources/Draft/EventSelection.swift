@@ -77,7 +77,7 @@ public enum EventSelection {
                     includesMeetingPage: exclusion == nil && !others.isEmpty,
                     summaryRoutineIDs: SummaryRoutines.routineIDs(
                         pageTitle: title, originalTitle: candidate.title,
-                        rules: rules.summaryRoutines)))
+                        rules: rules.summaryRoutines, patterns: rules.summaryRoutinePatterns)))
         }
         return result
     }

@@ -43,6 +43,7 @@ struct RulesView: View {
         static let peopleAdd = "peopleAdd"
         static let peopleFromContacts = "peopleFromContacts"
         static let summaryTitleField = "summaryTitleField"
+        static let summaryPatternToggle = "summaryPatternToggle"
         static let summaryAdd = "summaryAdd"
         static let summaryError = "summaryError"
         static let summaryNoRoutines = "summaryNoRoutines"
@@ -66,6 +67,7 @@ struct RulesView: View {
     @State private var summaryTitle = ""
     @State private var summaryChoices: Set<String> = []
     @State private var summaryError: String?
+    @State private var summaryIsPattern = false
 
     private var rules: BinderRules { controller.settings.rules }
 
@@ -92,6 +94,7 @@ struct RulesView: View {
                             restored.shortNames = settings.rules.shortNames
                             restored.personAliases = settings.rules.personAliases
                             restored.summaryRoutines = settings.rules.summaryRoutines
+                            restored.summaryRoutinePatterns = settings.rules.summaryRoutinePatterns
                             settings.rules = restored
                         }
                     }
@@ -222,6 +225,12 @@ struct RulesView: View {
             .sorted { $0.title < $1.title }
     }
 
+    /// The summary patterns, sorted by pattern.
+    private var patternEntries: [(pattern: String, ids: [String])] {
+        rules.summaryRoutinePatterns.map { (pattern: $0.key, ids: $0.value) }
+            .sorted { $0.pattern < $1.pattern }
+    }
+
     /// The names of the routines `ids` name, in the settings list's order; an ID naming no routine
     /// is left out.
     private func routineNames(_ ids: [String]) -> String {
@@ -231,6 +240,7 @@ struct RulesView: View {
 
     private var summariesSection: some View {
         let entries = summaryEntries
+        let patterns = patternEntries
         let routines = controller.settings.summaryRoutines
         return Section {
             ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
@@ -241,8 +251,20 @@ struct RulesView: View {
                     .accessibilityIdentifier(ID.row("summaries", index))
             }
             .onDelete { deleteSummaries($0, in: entries) }
+            ForEach(Array(patterns.enumerated()), id: \.offset) { index, entry in
+                Text("Pattern: \(entry.pattern) → \(routineNames(entry.ids))")
+                    .contextMenu {
+                        deleteMenu { deletePatterns(IndexSet(integer: index), in: patterns) }
+                    }
+                    .accessibilityIdentifier(ID.row("summaryPatterns", index))
+            }
+            .onDelete { deletePatterns($0, in: patterns) }
             TextField("Meeting title", text: $summaryTitle)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
                 .accessibilityIdentifier(ID.summaryTitleField)
+            Toggle("Pattern", isOn: $summaryIsPattern)
+                .accessibilityIdentifier(ID.summaryPatternToggle)
             if routines.isEmpty {
                 Text("Add summary routines in Settings first.")
                     .foregroundStyle(.secondary)
@@ -265,7 +287,7 @@ struct RulesView: View {
             Text("Meeting summaries")
         } footer: {
             Text(
-                "A meeting whose title matches gets these summary routines. For one meeting, change them on its Edit sheet."
+                "A meeting whose title matches gets these summary routines. With Pattern on, the title is a regular expression that must match the whole meeting title, like delivery sync [0-9]+; a rule for the exact title wins over a pattern. For one meeting, change them on its Edit sheet."
             )
         }
     }
@@ -289,6 +311,17 @@ struct RulesView: View {
         }
     }
 
+    private func deletePatterns(
+        _ offsets: IndexSet, in entries: [(pattern: String, ids: [String])]
+    ) {
+        let patterns = offsets.map { entries[$0].pattern }
+        Task {
+            await controller.updateSettings { settings in
+                for pattern in patterns { settings.rules.summaryRoutinePatterns[pattern] = nil }
+            }
+        }
+    }
+
     private func addSummary() {
         let routines = controller.settings.summaryRoutines
         guard !routines.isEmpty else { return }
@@ -297,6 +330,24 @@ struct RulesView: View {
         let ids = routines.map(\.id).filter { summaryChoices.contains($0) }
         guard !ids.isEmpty else {
             summaryError = "Choose at least one summary routine."
+            return
+        }
+        if summaryIsPattern {
+            guard let pattern = TitlePattern.validated(summaryTitle) else {
+                summaryError = TitlePattern.invalidMessage
+                return
+            }
+            guard rules.summaryRoutinePatterns[pattern] == nil else {
+                summaryError = "There is already a summary rule for that pattern."
+                return
+            }
+            summaryError = nil
+            summaryTitle = ""
+            summaryChoices = []
+            summaryIsPattern = false
+            Task {
+                await controller.updateSettings { $0.rules.summaryRoutinePatterns[pattern] = ids }
+            }
             return
         }
         let folded = BinderText.fold(title)
@@ -312,23 +363,18 @@ struct RulesView: View {
 
     // MARK: People
 
-    /// The person aliases in a stable order.
-    private var peopleEntries: [(key: String, email: String)] {
-        rules.personAliases.map { (key: $0.key, email: $0.value) }.sorted { $0.key < $1.key }
-    }
-
     private var peopleSection: some View {
-        let entries = peopleEntries
+        let groups = PersonAlias.groups(rules.personAliases)
         return Section {
-            ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
-                Text("\(entry.key) → \(entry.email)")
+            ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                Text("\(group.names.joined(separator: ", ")) → \(group.email)")
                     .contextMenu {
-                        deleteMenu { deletePeople(IndexSet(integer: index), in: entries) }
+                        deleteMenu { deletePeople(IndexSet(integer: index), in: groups) }
                     }
                     .accessibilityIdentifier(ID.row("people", index))
             }
-            .onDelete { deletePeople($0, in: entries) }
-            TextField("Name in tasks", text: $personName)
+            .onDelete { deletePeople($0, in: groups) }
+            TextField("Names in tasks", text: $personName)
                 .accessibilityIdentifier(ID.peopleName)
             TextField("Email", text: $personEmail)
                 .keyboardType(.emailAddress)
@@ -351,25 +397,32 @@ struct RulesView: View {
             Text("People")
         } footer: {
             Text(
-                "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs. Choose from Contacts fills in a name and email you can still change."
+                "Matches “Name – to be discussed” tasks to meeting attendees whose first name differs. Separate several names for one person with commas. Choose from Contacts fills in a name and email you can still change."
             )
         }
     }
 
-    private func deletePeople(_ offsets: IndexSet, in entries: [(key: String, email: String)]) {
-        let keys = offsets.map { entries[$0].key }
+    private func deletePeople(_ offsets: IndexSet, in groups: [PersonGroup]) {
+        let emails = Set(offsets.map { groups[$0].email })
         Task {
             await controller.updateSettings { settings in
-                for key in keys { settings.rules.personAliases[key] = nil }
+                settings.rules.personAliases = settings.rules.personAliases.filter {
+                    !emails.contains($0.value)
+                }
             }
         }
     }
 
     private func addPerson() {
-        guard let alias = PersonAlias(name: personName, email: personEmail) else { return }
+        let aliases = PersonAlias.aliases(names: personName, email: personEmail)
+        guard !aliases.isEmpty else { return }
         personName = ""
         personEmail = ""
-        Task { await controller.updateSettings { $0.rules.personAliases[alias.key] = alias.email } }
+        Task {
+            await controller.updateSettings { settings in
+                for alias in aliases { settings.rules.personAliases[alias.key] = alias.email }
+            }
+        }
     }
 
     // MARK: Look-ahead

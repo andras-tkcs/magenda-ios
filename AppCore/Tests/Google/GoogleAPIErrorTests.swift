@@ -13,7 +13,7 @@ struct GoogleAPIErrorTests {
             (.authorizationFailed, "Google sign-in didn't complete. Try again."),
             (
                 .missingScopes,
-                "Magenda needs your calendars, your tasks and the files it creates in Google Drive. Sign in again and allow all three."
+                "Magenda needs your calendars, your tasks and your Google Drive. Sign in again and allow all three."
             ),
             (.signedOut, "Your Google sign-in expired. Sign in again."),
             (

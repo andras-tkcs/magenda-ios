@@ -59,7 +59,8 @@ With the release candidate installed from TestFlight on a real iPad:
       writes, and no stroke turns into a swipe or a swipe into a stroke.
 - [ ] With a real Google account and a real routine, on an iPad: sign in again if asked, enter the
       routine's fire URL and token in Settings, write on a day, tap Finish Day, and the PDF and the
-      notes Doc appear in the Drive folder `Magenda`. In Review, wait for "Notes ready for review",
+      notes Doc appear in the Drive folder `Magenda`, or in the folder you pick under Settings →
+      Google Drive → Folder (open folders, pick one, or make a new one; ADR 0051). In Review, wait for "Notes ready for review",
       open the Doc, tap Approve notes, then Approve summaries when a summary routine was ticked for a
       meeting (check that the Doc holds a `Summary ready:` marker section first), and the row ends
       as "Closed. Handwriting is deleted on …" (ADR 0027 to ADR 0030, ADR 0038 to ADR 0040).

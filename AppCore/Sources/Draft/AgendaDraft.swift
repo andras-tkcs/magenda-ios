@@ -16,6 +16,8 @@ public struct AgendaDraft: Equatable, Sendable {
     public var delegated: [DraftDelegated]
     /// The summary routine IDs per meeting title, see ``SummaryRoutines``.
     public let summaryRules: [String: [String]]
+    /// The summary routine IDs per meeting-title pattern, see ``SummaryRoutines``.
+    public let summaryPatterns: [String: [String]]
     /// The summary routines the person set up, in Settings order.
     public let summaryRoutines: [SummaryRoutine]
 
@@ -23,7 +25,7 @@ public struct AgendaDraft: Equatable, Sendable {
     public init(
         date: CalendarDay, notices: [String], titlePrefixes: [String], events: [DraftEvent],
         tasks: [DraftTask], delegated: [DraftDelegated], summaryRules: [String: [String]] = [:],
-        summaryRoutines: [SummaryRoutine] = []
+        summaryPatterns: [String: [String]] = [:], summaryRoutines: [SummaryRoutine] = []
     ) {
         self.date = date
         self.notices = notices
@@ -32,6 +34,7 @@ public struct AgendaDraft: Equatable, Sendable {
         self.tasks = tasks
         self.delegated = delegated
         self.summaryRules = summaryRules
+        self.summaryPatterns = summaryPatterns
         self.summaryRoutines = summaryRoutines
     }
 
@@ -39,10 +42,12 @@ public struct AgendaDraft: Equatable, Sendable {
     public mutating func setTitle(_ text: String, forEvent id: String) {
         let title = TextFitter.normalized(text)
         let rules = summaryRules
+        let patterns = summaryPatterns
         Self.update(&events, id: id) {
             $0.title = title.isEmpty ? $0.defaultTitle : title
             $0.summaryRoutineIDs = SummaryRoutines.routineIDs(
-                pageTitle: $0.title, originalTitle: $0.originalTitle, rules: rules)
+                pageTitle: $0.title, originalTitle: $0.originalTitle, rules: rules,
+                patterns: patterns)
         }
     }
 
@@ -67,7 +72,8 @@ public struct AgendaDraft: Equatable, Sendable {
             events[index].title = value
             events[index].defaultTitle = value
             events[index].summaryRoutineIDs = SummaryRoutines.routineIDs(
-                pageTitle: value, originalTitle: events[index].originalTitle, rules: summaryRules)
+                pageTitle: value, originalTitle: events[index].originalTitle, rules: summaryRules,
+                patterns: summaryPatterns)
         }
     }
 

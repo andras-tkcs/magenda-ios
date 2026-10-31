@@ -32,7 +32,7 @@ public enum GoogleAPIError: Error, Equatable, Sendable {
         case .authorizationFailed:
             "Google sign-in didn't complete. Try again."
         case .missingScopes:
-            "Magenda needs your calendars, your tasks and the files it creates in Google Drive. Sign in again and allow all three."
+            "Magenda needs your calendars, your tasks and your Google Drive. Sign in again and allow all three."
         case .signedOut:
             "Your Google sign-in expired. Sign in again."
         case .forbidden:

@@ -46,7 +46,8 @@ none is chosen)
 - A look-ahead task titled "Name – to be discussed" (or "TBD") is kept only when that person is
   invited to an included meeting that day. A name that differs from the attendee's first name is
   matched under Settings → Binder rules → People, where you can type a
-  name and email or choose them from Contacts. Otherwise it is listed unticked with the reason.
+  name and email or choose them from Contacts. One entry can hold several names for the same
+  person, separated by commas. Otherwise it is listed unticked with the reason.
 - A task's notes take one line; a task that does not fit the list is left off the PDF and listed in
   a banner under the preview (on iPad, under the binder's toolbar).
 
@@ -74,8 +75,8 @@ the shared PDFs can't be read while the device is locked (ADR 0022).
 On an iPad, **Finish Day** in the binder's toolbar sends the day to Google Drive and starts your
 end-of-day Claude routine (ADR 0027, ADR 0028). Magenda renders the day once, with the printed
 text kept as text and your handwriting on top, and uploads it as `Magenda <date>.pdf` to a
-folder in your Drive, `Magenda` unless you rename it in Settings → Google Drive (ADR 0036). Next to it, it creates a Google Doc named `Magenda <date> notes`
-whose first line is the day's status. Magenda sees only the files it created. A day finished
+folder in your Drive, `Magenda` unless you pick or create another under Settings → Google Drive → Folder (ADR 0051). Next to it, it creates a Google Doc named `Magenda <date> notes`
+whose first line is the day's status. Magenda can see your whole Drive; it only lists folders and writes its own PDFs and Docs (ADR 0051). A day finished
 without a connection waits and is sent the next time the app becomes active; finishing a day again
 before it was sent replaces its PDF. **Reset Hand-off**, after a confirmation, forgets that a day was sent so you can finish it again (ADR 0032); the earlier PDF and Doc stay in Drive.
 
@@ -99,7 +100,7 @@ the summary routines append (ADR 0039).
 Each kind of summary is written by its own Claude routine (ADR 0038). Add each one under Settings →
 Summary routines with a name and the fire URL and token of its API trigger; the token stays in the
 Keychain. Then tick which meetings get it, by meeting title under Settings → Binder rules → Meeting
-summaries or for one meeting on its Edit sheet. The meeting page prints the ticked routines' names
+summaries (a rule can be a pattern, a regular expression like `delivery sync [0-9]+`, ADR 0052) or for one meeting on its Edit sheet. The meeting page prints the ticked routines' names
 after **Summary:**. Magenda starts each ticked routine once, when the notes are approved.
 
 Five days after Magenda first reads `Status: Closed`, it deletes that day's handwriting and its
@@ -139,7 +140,10 @@ repository never holds one (ADR 0013).
    **Testing** with your Google account added as a test user. Add exactly three scopes:
    `https://www.googleapis.com/auth/calendar.readonly`,
    `https://www.googleapis.com/auth/tasks.readonly` and
-   `https://www.googleapis.com/auth/drive.file` (Magenda sees only the files it creates in Drive; ADR 0027).
+   `https://www.googleapis.com/auth/drive` (Magenda lists your Drive's folders so you can pick one, and writes only the day's PDF
+   and Doc; ADR 0051). Google lists `drive` as a restricted scope: keep the client in Testing
+   or Internal, as above, because an External client in production needs Google's
+   verification.
    After an update that added a scope, Magenda asks you to sign in again.
 4. Under **Clients**, create an OAuth client of type **iOS** with the bundle ID `name.tkcs.magenda`.
 5. Open Magenda, enter the client ID (it looks like `123456789012-test.apps.googleusercontent.com`)

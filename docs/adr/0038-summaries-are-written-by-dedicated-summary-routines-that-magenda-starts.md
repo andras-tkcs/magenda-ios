@@ -5,6 +5,7 @@
 Accepted — 2026-10-26. Implemented.
 Amends [ADR 0031](0031-meeting-summaries-are-requested-by-skill.md): decisions 1 to 4; decision 5 (task IDs) stays.
 Amends [ADR 0028](0028-the-end-of-day-routine-is-started-through-its-api-trigger.md): several routines, each with its own token.
+Amended by [ADR 0052](0052-summary-rules-can-match-titles-with-a-regular-expression.md): rules match exact titles or patterns.
 
 ## Context
 
